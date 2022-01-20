@@ -27,6 +27,9 @@ function run(argv) {
             if (body[0] == "node_modules") {
 
                 setModules(body[0], head == "compress");
+            } else {
+
+                console.log("Missing file path");
             }
             break;
         }

@@ -9,7 +9,7 @@ async function setModules(rep, compressFlag) {
 
     if (!rep) {
 
-        console.log("请输入文件路径");
+        console.log("Missing file path");
         return;
     }
 
@@ -19,13 +19,13 @@ async function setModules(rep, compressFlag) {
 
         if (!fs.existsSync(rep)) {
 
-            console.log("没有找到这个modules");
+            console.log("File path not found", rep);
             return;
         }
     }
 
     let list = fs.readdirSync(rep);
-    console.log("排除多余的node_modules");
+    console.log("Deleting redundant files");
     for (let item of list) {
 
         let p = path.join(rep, item, "node_modules");
@@ -39,13 +39,13 @@ async function setModules(rep, compressFlag) {
         fs.rmSync(zipPath);
     }
 
-    console.log("排除完成");
+    console.log("Finish deleting redundant files");
 
     if (compressFlag) {
-        console.log("正在压缩文件");
+        console.log("Compressing files");
         //压缩
         await utils.zipFile(rep, zipPath);
-        console.log("压缩完成");
+        console.log("finish Compress files");
     }
 }
 
