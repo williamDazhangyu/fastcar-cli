@@ -5,7 +5,7 @@ const fs = require("fs");
 const process = require("process");
 
 //过滤modules的工具
-async function setModules(rep) {
+async function setModules(rep, compressFlag) {
 
     if (!rep) {
 
@@ -39,10 +39,14 @@ async function setModules(rep) {
         fs.rmSync(zipPath);
     }
 
-    console.log("正在压缩文件");
-    //压缩
-    await utils.zipFile(rep, zipPath);
-    console.log("压缩完成");
+    console.log("排除完成");
+
+    if (compressFlag) {
+        console.log("正在压缩文件");
+        //压缩
+        await utils.zipFile(rep, zipPath);
+        console.log("压缩完成");
+    }
 }
 
 module.exports = setModules;

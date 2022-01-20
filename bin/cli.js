@@ -21,9 +21,13 @@ function run(argv) {
             init(body);
             break;
         }
-        case "modules": {
+        case "clean":
+        case "compress": {
 
-            setModules(body[0]);
+            if (body[0] == "node_modules") {
+
+                setModules(body[0], head == "compress");
+            }
             break;
         }
         default: {
@@ -31,7 +35,8 @@ function run(argv) {
             console.log('  usage:\n');
             console.log('  -v --version [show version]\n');
             console.log('  init web [init web template]\n');
-            console.log('  modules filepath [zip node_modules]\n');
+            console.log('  clean node_modules [Delete redundant modules]\n');
+            console.log('  compress node_modules [compress modules]\n');
         }
     }
 }
