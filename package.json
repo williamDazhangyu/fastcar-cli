@@ -1,0 +1,19 @@
+{
+  "name": "fastcar-cli",
+  "version": "1.0.0",
+  "description": "fastcar-cli 脚手架快速搭建",
+  "bin": {
+    "fastcar-cli": "./bin/cli.js"
+  },
+  "keywords": [
+    "node",
+    "fastcar-cli"
+  ],
+  "author": "william_zhong",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^8.3.0",
+    "compressing": "^1.5.1",
+    "inquirer": "^8.2.0"
+  }
+}
