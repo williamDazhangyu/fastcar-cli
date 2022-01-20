@@ -70,7 +70,6 @@ const Questions = async (defaultName) => {
                 default: true
             }
         ]).then(answers => {
-            console.log("答案---", answers);
             resolve(answers);
         });
     });

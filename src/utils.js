@@ -39,6 +39,13 @@ function delDirEctory(src) {
         return false;
     }
 
+    let srcstats = fs.statSync(src);
+    if (srcstats.isFile()) {
+
+        fs.rmSync(src);
+        return;
+    }
+
     let dirs = fs.readdirSync(src);
     dirs.forEach((item) => {
 
