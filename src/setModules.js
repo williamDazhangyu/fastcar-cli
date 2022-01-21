@@ -34,14 +34,15 @@ async function setModules(rep, compressFlag) {
         }
     }
 
-    let zipPath = path.join(rep, "../", "node_modules.zip");
-    if (fs.existsSync(zipPath)) {
-        fs.rmSync(zipPath);
-    }
-
     console.log("Finish deleting redundant files");
 
     if (compressFlag) {
+
+        let zipPath = path.join(rep, "../", "node_modules.zip");
+        if (fs.existsSync(zipPath)) {
+            fs.rmSync(zipPath);
+        }
+
         console.log("Compressing files");
         //压缩
         await utils.zipFile(rep, zipPath);

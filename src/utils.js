@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const compressing = require("compressing");
 const util = require("util");
+const yaml = require("yaml");
 
 //复制文件
 function copyDirectory(src, dest) {
@@ -74,9 +75,22 @@ async function zipFile(src, dest) {
     await compressing.zip.compressDir(src, dest);
 }
 
+function readYaml(fp) {
+
+    let content = fs.readFileSync(fp, "utf-8");
+    return yaml.parse(content);
+}
+
+function writeYaml(fp, obj) {
+
+    fs.writeFileSync(fp, yaml.stringify(obj));
+}
+
 module.exports = {
     copyDirectory,
     delDirEctory,
     unzipFile,
     zipFile,
+    readYaml,
+    writeYaml
 }

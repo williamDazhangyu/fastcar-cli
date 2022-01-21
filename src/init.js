@@ -75,7 +75,7 @@ const Questions = async (defaultName) => {
     });
 }
 
-async function init(args = ["--type=web"]) {
+async function init(args = ["web"]) {
 
     let currDir = process.cwd();
     let type = args[0];
@@ -240,6 +240,17 @@ async function init(args = ["--type=web"]) {
 
         console.log("wirte packageInfo");
         fs.writeFileSync(realPackagePath, JSON.stringify(packageInfo, null, "\t"));
+
+        //更改配置的文件名
+        let projectName = packageInfo.name;
+
+        let pm2RunPath = path.join(currDir, "ecosystem.config.yml");
+        if (fs.existsSync(pm2RunPath)) {
+
+            let pm2Config = utils.readYaml(pm2RunPath);
+            pm2Config.apps.name = projectName;
+            utils.writeYaml(pm2RunPath, pm2Config);
+        }
 
         console.log("clean files");
         utils.delDirEctory(templateDir);
