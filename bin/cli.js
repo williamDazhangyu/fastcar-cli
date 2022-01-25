@@ -24,6 +24,11 @@ function run(argv) {
         case "clean":
         case "compress": {
 
+            if (!body[0]) {
+
+                body[0] = "node_modules";
+            }
+
             if (body[0] == "node_modules") {
 
                 setModules(body[0], head == "compress");
