@@ -3,7 +3,6 @@ const fs = require("fs");
 const path = require("path");
 const exec = require("child_process").execSync;
 const inquirer = require('inquirer');
-const { url } = require("inspector");
 const utils = require("./utils");
 
 const WEBTEMPLATEURL = "https://e.coding.net/william_zhong/fast-car/fastcar-boot-web.git"; //web模板
