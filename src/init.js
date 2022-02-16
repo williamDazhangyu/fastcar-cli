@@ -6,7 +6,7 @@ const inquirer = require('inquirer');
 const utils = require("./utils");
 
 const WEBTEMPLATEURL = "https://e.coding.net/william_zhong/fast-car/fastcar-boot-web.git"; //web模板
-const optionComponent = ["mysql", "redis", "timer"];
+const optionComponent = ["mysql", "redis", "timer", "mongo"];
 
 const Questions = async (defaultName) => {
     return new Promise((resolve) => {
@@ -67,7 +67,13 @@ const Questions = async (defaultName) => {
                 name: 'timer',
                 message: "timer (true) :",
                 default: true
-            }
+            },
+            {
+                type: "confirm",
+                name: 'mongo',
+                message: "mongo (false) :",
+                default: true
+            },
         ]).then(answers => {
             resolve(answers);
         });
@@ -88,7 +94,8 @@ async function init(args = ["web"]) {
     let questionInfo = {
         mysql: false,
         redis: false,
-        timer: false
+        timer: false,
+        mongo: false,
     };
     let componentList = [];
     if (fs.existsSync(realPackagePath)) {
