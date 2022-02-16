@@ -72,7 +72,7 @@ const Questions = async (defaultName) => {
                 type: "confirm",
                 name: 'mongo',
                 message: "mongo (false) :",
-                default: true
+                default: false
             },
         ]).then(answers => {
             resolve(answers);
