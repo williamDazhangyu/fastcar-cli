@@ -183,9 +183,9 @@ async function init(args = ["web"]) {
         utils.copyDirectory(templateDir, currDir);
 
         //解压node_modules
-        console.log("unzip node_modules");
-        let nodeModulesPath = path.join(currDir, "node_modules.zip");
-        await utils.unzipFile(nodeModulesPath, currDir);
+        // console.log("unzip node_modules");
+        // let nodeModulesPath = path.join(currDir, "node_modules.zip");
+        // await utils.unzipFile(nodeModulesPath, currDir);
 
         //合并package.json文件
         let templatePackagePath = path.join(templateDir, "package.json");
@@ -260,7 +260,6 @@ async function init(args = ["web"]) {
 
         console.log("clean files");
         utils.delDirEctory(templateDir);
-        utils.delDirEctory(nodeModulesPath);
     }
 }
 

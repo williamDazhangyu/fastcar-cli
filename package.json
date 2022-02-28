@@ -1,14 +1,23 @@
 {
   "name": "fastcar-cli",
-  "version": "1.0.0",
+  "version": "0.0.1",
+  "homepage": "https://william_zhong.coding.net/public/fast-car/fastcar-cli/git/files",
   "description": "fastcar-cli 脚手架快速搭建",
   "bin": {
     "fastcar-cli": "./bin/cli.js"
   },
+  "files": [
+    "bin",
+    "src",
+    "node_modules"
+  ],
   "keywords": [
     "node",
     "fastcar-cli"
   ],
+  "engines": {
+    "node": ">=16"
+  },
   "author": "william_zhong",
   "license": "MIT",
   "dependencies": {
@@ -16,5 +25,9 @@
     "compressing": "^1.5.1",
     "inquirer": "^8.2.0",
     "yaml": "^1.10.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://e.coding.net/william_zhong/fast-car/fastcar-cli.git"
   }
 }
