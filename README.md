@@ -16,6 +16,8 @@ fastcar-cli -help //显示所有命令
 
 fastcar-cli  init web //初始化web模板
 
+fastcar-cli  init rpc //初始化rpc模板
+
 fastcar-cli  clean node_modules //清除多余依赖库(一般使用不到)
 
 fastcar-cli  compress node_modules //压缩依赖库(一般使用不到)

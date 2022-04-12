@@ -43,6 +43,7 @@ function run(argv) {
             console.log('  usage:\n');
             console.log('  -v --version [show version]\n');
             console.log('  init web [init web template]\n');
+            console.log('  init rpc [init rpc template]\n');
             console.log('  clean node_modules [Delete redundant modules]\n');
             console.log('  compress node_modules [compress modules]\n');
         }

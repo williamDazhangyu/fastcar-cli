@@ -6,7 +6,8 @@ const inquirer = require('inquirer');
 const utils = require("./utils");
 
 const WEBTEMPLATEURL = "https://e.coding.net/william_zhong/fast-car/fastcar-boot-web.git"; //web模板
-const optionComponent = ["mysql", "redis", "timer", "mongo"];
+const RPCTEMPLATEURL = "https://e.coding.net/william_zhong/fast-car/fastcar-boot-rpc.git"; //rpc模板
+const optionComponent = ["mysql", "redis", "mongo"];
 
 const Questions = async (defaultName) => {
     return new Promise((resolve) => {
@@ -64,12 +65,6 @@ const Questions = async (defaultName) => {
             },
             {
                 type: "confirm",
-                name: 'timer',
-                message: "timer (true) :",
-                default: true
-            },
-            {
-                type: "confirm",
                 name: 'mongo',
                 message: "mongo (false) :",
                 default: false
@@ -94,7 +89,6 @@ async function init(args = ["web"]) {
     let questionInfo = {
         mysql: false,
         redis: false,
-        timer: false,
         mongo: false,
     };
     let componentList = [];
@@ -150,7 +144,16 @@ async function init(args = ["web"]) {
     let downloadUrl = "";
     switch (type) {
 
-        case "web":
+        case "web": {
+
+            downloadUrl = WEBTEMPLATEURL;
+            break;
+        }
+        case "rpc": {
+
+            downloadUrl = RPCTEMPLATEURL;
+            break;
+        }
         default: {
 
             downloadUrl = WEBTEMPLATEURL;
@@ -192,6 +195,12 @@ async function init(args = ["web"]) {
         if (fs.existsSync(templatePackagePath)) {
 
             let templatePackage = require(templatePackagePath);
+            //替换本地包名
+            if (templatePackage.scripts) {
+
+                templatePackage.scripts = JSON.stringify(templatePackage.scripts).replace(/\$npm_package_name/g, packageInfo.name);
+                templatePackage.scripts = JSON.parse(templatePackage.scripts);
+            }
             if (templatePackage.dependencies) {
 
                 if (!packageInfo.dependencies) {
@@ -200,26 +209,32 @@ async function init(args = ["web"]) {
                 }
 
                 let tmpDep = {};
-                Object.keys(templatePackage.dependencies).forEach((tmpKey) => {
+                // Object.keys(templatePackage.dependencies).forEach((tmpKey) => {
 
-                    let flag = optionComponent.some((o) => {
+                //     let flag = optionComponent.some((o) => {
 
-                        return tmpKey.indexOf(o) != -1;
-                    });
+                //         return tmpKey.indexOf(o) != -1;
+                //     });
 
-                    //如果是可选组件则看有没有被包含进来
-                    if (flag) {
+                //     //如果是可选组件则看有没有被包含进来
+                //     if (flag) {
 
-                        if (!componentList.includes(tmpKey)) {
+                //         if (!componentList.includes(tmpKey)) {
 
-                            return;
-                        }
+                //             return;
+                //         }
+                //     }
+
+                //     Reflect.set(tmpDep, tmpKey, templatePackage.dependencies[tmpKey]);
+                // });
+                componentList.forEach((item) => {
+
+                    if (!packageInfo.dependencies[item]) {
+                        Reflect.set(tmpDep, item, `latest`);
                     }
-
-                    Reflect.set(tmpDep, tmpKey, templatePackage.dependencies[tmpKey]);
                 });
 
-                packageInfo.dependencies = Object.assign(packageInfo.dependencies, tmpDep);
+                packageInfo.dependencies = Object.assign(packageInfo.dependencies, tmpDep, templatePackage.dependencies);
             }
 
             if (!packageInfo.scripts) {
