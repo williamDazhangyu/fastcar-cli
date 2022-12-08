@@ -131,10 +131,10 @@ async function init(args = ["web"]) {
         if (questionInfo[key]) {
             if (optionComponent.includes(key)) {
 
-                componentList.push(`fastcar-${key}`);
+                componentList.push(`@fastcar/${key}`);
                 if (key == "mysql") {
 
-                    componentList.push(`fastcar-${key}-tool`);
+                    componentList.push(`@fastcar/${key}-tool`);
                 }
             }
         }
