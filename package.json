@@ -1,5 +1,5 @@
 {
-  "name": "fastcar-cli",
+  "name": "@fastcar/cli",
   "version": "0.0.2",
   "homepage": "https://william_zhong.coding.net/public/fast-car/fastcar-cli/git/files",
   "description": "fastcar-cli 脚手架快速搭建",
