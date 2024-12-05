@@ -176,11 +176,6 @@ async function init(args = ["web"]) {
     //复制至项目文件下
     utils.copyDirectory(templateDir, currDir);
 
-    //解压node_modules
-    // console.log("unzip node_modules");
-    // let nodeModulesPath = path.join(currDir, "node_modules.zip");
-    // await utils.unzipFile(nodeModulesPath, currDir);
-
     //合并package.json文件
     let templatePackagePath = path.join(templateDir, "package.json");
     if (fs.existsSync(templatePackagePath)) {
@@ -255,8 +250,8 @@ async function init(args = ["web"]) {
 
     //更改配置的文件名
     let projectName = packageInfo.name;
-
     let pm2RunPath = path.join(currDir, "ecosystem.config.yml");
+
     if (fs.existsSync(pm2RunPath)) {
       let pm2Config = utils.readYaml(pm2RunPath);
       pm2Config.apps.name = projectName;
@@ -266,6 +261,7 @@ async function init(args = ["web"]) {
     console.log("clean files");
     setTimeout(() => {
       utils.delDirEctory(templateDir);
+      console.log("Please execute npm install before starting");
     }, 1000);
   }
 }
