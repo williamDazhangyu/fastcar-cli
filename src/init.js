@@ -9,7 +9,8 @@ const WEBTEMPLATEURL =
   "https://e.coding.net/william_zhong/fast-car/fastcar-boot-web.git"; //web模板
 const RPCTEMPLATEURL =
   "https://e.coding.net/william_zhong/fast-car/fastcar-boot-rpc.git"; //rpc模板
-
+const COSTEMPLATEURL =
+  "https://e.coding.net/william_zhong/fast-car/fastcar-cos.git"; //cos模板
 const optionComponent = ["mysql", "redis", "mongo"];
 
 const Questions = async (defaultName) => {
@@ -146,6 +147,10 @@ async function init(args = ["web"]) {
     }
     case "rpc": {
       downloadUrl = RPCTEMPLATEURL;
+      break;
+    }
+    case "cos": {
+      downloadUrl = COSTEMPLATEURL;
       break;
     }
     default: {
