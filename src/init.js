@@ -13,6 +13,8 @@ const COSTEMPLATEURL =
   "https://e.coding.net/william_zhong/fast-car/fastcar-cos.git"; //cos模板
 const MICROTEMPLATE =
   "https://e.coding.net/william_zhong/fast-car/fastcar-microservices.git"; //微服务模板
+const STATICURL =
+  "https://e.coding.net/william_zhong/fast-car/fastcar-static.git"; //静态资源模板
 const optionComponent = ["mysql", "redis", "mongo"];
 
 const Questions = async (defaultName) => {
@@ -157,6 +159,10 @@ async function init(args = ["web"]) {
     }
     case "micro": {
       downloadUrl = MICROTEMPLATE;
+      break;
+    }
+    case "static": {
+      down = STATICURL;
       break;
     }
     default: {
