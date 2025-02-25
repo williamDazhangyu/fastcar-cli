@@ -162,7 +162,7 @@ async function init(args = ["web"]) {
       break;
     }
     case "static": {
-      down = STATICURL;
+      downloadUrl = STATICURL;
       break;
     }
     default: {
