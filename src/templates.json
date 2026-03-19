@@ -1,0 +1,32 @@
+{
+  "web": {
+    "name": "web",
+    "description": "Web 应用模板 - 适用于构建 Web 服务端应用",
+    "package": "@fastcar/template-web",
+    "tags": ["web", "server", "http"]
+  },
+  "rpc": {
+    "name": "rpc",
+    "description": "RPC 服务模板 - 适用于构建微服务 RPC 节点",
+    "package": "@fastcar/template-rpc",
+    "tags": ["rpc", "microservice"]
+  },
+  "cos": {
+    "name": "cos",
+    "description": "COS 存储模板 - 适用于对象存储服务",
+    "package": "@fastcar/template-cos",
+    "tags": ["cos", "storage"]
+  },
+  "micro": {
+    "name": "micro",
+    "description": "微服务模板 - 适用于构建完整的微服务架构",
+    "package": "@fastcar/template-microservices",
+    "tags": ["microservices", "fullstack"]
+  },
+  "static": {
+    "name": "static",
+    "description": "静态资源模板 - 适用于静态网站或资源服务",
+    "package": "@fastcar/template-static",
+    "tags": ["static", "assets"]
+  }
+}

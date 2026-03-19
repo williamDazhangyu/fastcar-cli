@@ -1,6 +1,6 @@
 {
   "name": "@fastcar/cli",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "homepage": "https://william_zhong.coding.net/public/fast-car/fastcar-cli/git/files",
   "description": "fastcar-cli 脚手架快速搭建",
   "bin": {
@@ -8,8 +8,7 @@
   },
   "files": [
     "bin",
-    "src",
-    "node_modules"
+    "src"
   ],
   "keywords": [
     "node",
@@ -28,6 +27,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://e.coding.net/william_zhong/fast-car/fastcar-cli.git"
+    "url": "https://github.com/williamDazhangyu/fastcar-cli.git"
   }
 }
