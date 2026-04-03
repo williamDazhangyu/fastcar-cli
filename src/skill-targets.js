@@ -9,9 +9,9 @@ const TARGETS = {
     name: 'Kimi Code CLI',
     description: 'Kimi Code extension for VS Code',
     globalPaths: {
-      win32: path.join(os.homedir(), 'AppData/Roaming/Code/User/globalStorage/moonshot-ai.kimi-code/skills'),
-      darwin: path.join(os.homedir(), '.config/agents/skills'),
-      linux: path.join(os.homedir(), '.config/agents/skills')
+      win32: path.join(os.homedir(), '.kimi/skills'),
+      darwin: path.join(os.homedir(), '.kimi/skills'),
+      linux: path.join(os.homedir(), '.kimi/skills')
     },
     localPath: '.agents/skills'
   },

@@ -197,9 +197,11 @@ async function installSkill(skillName, options = {}) {
       console.log(`✅ 成功 ${modeText} 安装 ${skillName}`);
       console.log(`   位置: ${destPath}`);
       console.log();
-      console.log('提示:');
-      console.log('  1. 重启你的 AI agent 以使用 skill');
-      console.log(`  2. 在对话中询问关于 "${skillName}" 的内容`);
+      console.log('⚠️  重要: 请重启你的 AI agent 以加载新安装的 skill！');
+      console.log();
+      console.log('重启后，你可以在对话中:');
+      console.log(`  • 直接询问关于 "${skillName}" 的内容`);
+      console.log(`  • 使用 /skill:${skillName} 强制加载该 skill`);
     } else {
       console.log('❌ 安装验证失败');
     }
