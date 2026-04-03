@@ -10,6 +10,7 @@ Fastcar 脚手架工具，用于快速初始化项目模板。
 - ⚡ 自动合并依赖和配置
 - 🗜️ 项目打包（自动排除 devDependencies、日志文件）
 - 🔄 数据库表逆向生成
+- 🤖 AI Agent Skill 管理（支持 Kimi、Claude、Cursor）
 
 ## 安装
 
@@ -107,6 +108,63 @@ fastcar-cli reverse
   },
   "ignoreCamelcase": false
 }
+```
+
+### Skill 管理
+
+将 FastCar skill 安装到支持的 AI Agent 中，让 AI 在对话时掌握 FastCar 框架知识。
+
+#### 列出可用的 skills
+
+```bash
+fastcar-cli skill list
+```
+
+#### 列出支持的 AI Agents
+
+```bash
+fastcar-cli skill targets
+```
+
+#### 安装 skill
+
+```bash
+# 交互式选择安装位置（全局/本地）
+fastcar-cli skill install fastcar-framework
+
+# 全局安装（默认）
+fastcar-cli skill install fastcar-framework --global
+fastcar-cli skill install fastcar-framework -g
+
+# 本地安装（仅当前项目可用）
+fastcar-cli skill install fastcar-framework --local
+fastcar-cli skill install fastcar-framework -l
+
+# 指定目标 agent
+fastcar-cli skill install fastcar-framework --target kimi
+fastcar-cli skill install fastcar-framework -t claude
+```
+
+#### 可用的 FastCar Skills
+
+| Skill 名称 | 适用场景 | 安装命令 |
+|-----------|---------|---------|
+| fastcar-framework | IoC 核心、Koa Web、项目模板、基础配置 | `fastcar-cli skill install fastcar-framework` |
+| fastcar-database | MySQL/PGSQL/MongoDB/Redis ORM、逆向生成 | `fastcar-cli skill install fastcar-database` |
+| fastcar-rpc-microservices | RPC 通信、微服务架构、Socket/gRPC | `fastcar-cli skill install fastcar-rpc-microservices` |
+| fastcar-serverless | 阿里云 FC / 腾讯云 SCF / AWS Lambda | `fastcar-cli skill install fastcar-serverless` |
+| fastcar-toolkit | 缓存、定时任务、时间轮、工作线程池、COS SDK | `fastcar-cli skill install fastcar-toolkit` |
+
+#### 卸载 skill
+
+```bash
+fastcar-cli skill uninstall fastcar-framework
+```
+
+#### 初始化项目级 agent 配置
+
+```bash
+fastcar-cli skill init
 ```
 
 ### 其他命令

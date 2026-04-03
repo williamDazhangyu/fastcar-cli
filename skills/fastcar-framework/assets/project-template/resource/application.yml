@@ -1,0 +1,14 @@
+application:
+  name: my-fastcar-app
+  version: 1.0.0
+  env: dev
+
+server:
+  port: 8080
+  host: "0.0.0.0"
+
+settings:
+  log:
+    level: debug
+    maxFiles: 5
+    maxSize: 10m

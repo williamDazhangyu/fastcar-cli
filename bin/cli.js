@@ -4,6 +4,13 @@ const init = require("../src/init");
 const setModules = require("../src/setModules");
 const { reverseGenerate, initReverseConfig } = require("../src/reverse");
 const { packProject } = require("../src/pack");
+const {
+  installSkill,
+  uninstallSkill,
+  listSkills,
+  listTargets,
+  initSkill,
+} = require("../src/skill");
 const packageINFO = require("../package.json");
 const templates = require("../src/templates.json");
 
@@ -22,6 +29,15 @@ Commands:
   reverse:init             生成 reverse.config.json 配置文件
   pack [pm]                打包项目（排除 devDependencies）
                            pm: 包管理器 (npm/yarn/pnpm)，可选，默认自动检测
+
+  skill install <name>     安装 FastCar skill 到本地 AI Agent
+                           -g, --global   安装到全局（默认）
+                           -l, --local    安装到项目级
+                           -t, --target   目标 agent (kimi/claude/cursor)
+  skill uninstall <name>   卸载 FastCar skill
+  skill list               列出可用的 skills
+  skill targets            列出支持的 AI Agents
+  skill init               初始化项目级 agent 配置
 
 Options:
   -v, --version           显示版本号
@@ -42,6 +58,13 @@ Examples:
   $ fastcar-cli pack           # 打包项目（自动检测包管理器）
   $ fastcar-cli pack yarn      # 使用 yarn 安装依赖
   $ fastcar-cli pack pnpm      # 使用 pnpm 安装依赖
+
+  $ fastcar-cli skill install fastcar-framework       # 交互式安装
+  $ fastcar-cli skill install fastcar-framework -g    # 全局安装
+  $ fastcar-cli skill install fastcar-framework -l    # 本地安装
+  $ fastcar-cli skill install fastcar-framework -t kimi # 安装到 Kimi
+  $ fastcar-cli skill list                            # 列出可用 skills
+  $ fastcar-cli skill targets                         # 列出支持的 agents
 
 Reverse 命令参数说明:
   通过配置文件传入参数，在项目根目录创建 reverse.config.json：
@@ -126,6 +149,68 @@ function run(argv) {
     case "pack": {
       const pm = body[0]; // 可选的包管理器参数
       packProject(null, null, pm);
+      break;
+    }
+    case "skill": {
+      const subCmd = body[0];
+      const args = body.slice(1);
+
+      // 解析参数
+      const options = {
+        global: args.includes("-g") || args.includes("--global"),
+        local: args.includes("-l") || args.includes("--local"),
+        target: null,
+      };
+
+      // 解析 --target 或 -t
+      const targetIdx = args.findIndex((a) => a === "-t" || a === "--target");
+      if (targetIdx !== -1 && args[targetIdx + 1]) {
+        options.target = args[targetIdx + 1];
+      }
+
+      // 移除参数，保留 skill name
+      const skillName = args.find((a) => !a.startsWith("-"));
+
+      switch (subCmd) {
+        case "install": {
+          if (!skillName) {
+            console.log("❌ 请指定 skill 名称");
+            console.log(
+              "用法: fastcar-cli skill install <skill-name> [options]",
+            );
+            return;
+          }
+          installSkill(skillName, options);
+          break;
+        }
+        case "uninstall": {
+          if (!skillName) {
+            console.log("❌ 请指定 skill 名称");
+            console.log(
+              "用法: fastcar-cli skill uninstall <skill-name> [options]",
+            );
+            return;
+          }
+          uninstallSkill(skillName, options);
+          break;
+        }
+        case "list": {
+          listSkills();
+          break;
+        }
+        case "targets": {
+          listTargets();
+          break;
+        }
+        case "init": {
+          initSkill(options);
+          break;
+        }
+        default: {
+          console.log("❌ 未知的 skill 命令");
+          console.log("可用的子命令: install, uninstall, list, targets, init");
+        }
+      }
       break;
     }
     default: {
