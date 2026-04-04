@@ -26,7 +26,7 @@ export default new APP();
 #### 定义实体模型
 
 ```typescript
-import { Table, Field, DBType, PrimaryKey, NotNull, Size, CustomType } from "@fastcar/core/annotation";
+import { Table, Field, DBType, PrimaryKey, NotNull, Size } from "@fastcar/core/annotation";
 
 @Table("users")
 class User {
@@ -43,11 +43,25 @@ class User {
 
   @Field("profile")
   @DBType("json")
-  @CustomType("json")
-  profile: any;
+  profile!: any;
 
-  constructor(...args: any) {
-    Object.assign(this, ...args);
+  @Field("created_at")
+  @DBType("datetime")
+  createdAt!: Date;
+
+  constructor(args?: Partial<User>) {
+    if (args) {
+      Object.assign(this, args);
+    }
+  }
+
+  toObject() {
+    return {
+      id: this.id,
+      name: this.name,
+      profile: this.profile,
+      createdAt: this.createdAt,
+    };
   }
 }
 ```
@@ -66,11 +80,11 @@ class UserMapper extends MysqlMapper<User> {}
 export default UserMapper;
 ```
 
-#### Service 中使用
+#### MysqlMapper 完整 API 参考
 
 ```typescript
 import { Service, Autowired } from "@fastcar/core/annotation";
-import { OrderEnum } from "@fastcar/core/db";
+import { OrderEnum, OperatorEnum } from "@fastcar/core/db";
 import UserMapper from "./UserMapper";
 import User from "./User";
 
@@ -79,73 +93,232 @@ class UserService {
   @Autowired
   private userMapper!: UserMapper;
 
-  // 查询单条
-  async getUser(id: number) {
-    return this.userMapper.selectOne({ where: { id } });
+  // ==================== 查询方法 ====================
+
+  // 1. select(conditions) - 查询列表
+  // 返回: T[] - 实体对象数组
+  async getAllUsers() {
+    return this.userMapper.select({});
   }
 
-  // 条件查询
-  async queryUsers(name: string) {
+  // 2. selectOne(conditions) - 查询单个
+  // 返回: T | null
+  async getUserById(id: number) {
+    return this.userMapper.selectOne({
+      where: { id }
+    });
+  }
+
+  // 3. selectByPrimaryKey(row) - 根据主键查询
+  // 参数: 包含主键字段的对象
+  // 返回: T | null
+  async getUserByPK(id: number) {
+    return this.userMapper.selectByPrimaryKey({ id } as User);
+  }
+
+  // 4. count(where) - 统计记录数
+  // 返回: number
+  async countUsers() {
+    return this.userMapper.count({ status: 1 });
+  }
+
+  // 5. exist(where) - 判断是否存在
+  // 返回: boolean
+  async checkUserExists(name: string) {
+    return this.userMapper.exist({ name });
+  }
+
+  // ==================== 条件查询详解 ====================
+
+  // 简单等于条件
+  async queryByStatus(status: number) {
+    return this.userMapper.select({
+      where: { status }
+    });
+  }
+
+  // 多条件 AND
+  async queryByConditions(name: string, status: number) {
     return this.userMapper.select({
       where: {
-        name: { value: name },
-        createdAt: { ">=": "2024-01-01", "<=": "2024-12-31" },
-      },
-      orders: { createdAt: OrderEnum.desc },
-      limit: 10,
+        name,
+        status,
+        delStatus: false
+      }
     });
   }
 
-  // 数组 IN 查询
+  // 比较运算符
+  async queryByAgeRange(minAge: number, maxAge: number) {
+    return this.userMapper.select({
+      where: {
+        age: { $gte: minAge, $lte: maxAge }
+      }
+    });
+  }
+
+  // 支持的运算符:
+  // $eq - 等于 (默认)
+  // $gt / $gte - 大于 / 大于等于
+  // $lt / $lte - 小于 / 小于等于
+  // $ne - 不等于
+  // $in - IN 查询 (数组)
+  // $nin - NOT IN 查询
+  // $isNull - IS NULL
+  // $isNotNull - IS NOT NULL
+
+  // IN 查询
   async queryByIds(ids: number[]) {
     return this.userMapper.select({
-      where: { id: { IN: ids } },
+      where: { id: { $in: ids } }
     });
   }
 
-  // 新增
-  async createUser(name: string) {
-    const user = new User({ name, createdAt: new Date() });
-    return this.userMapper.saveOne(user);
+  // IS NULL 查询
+  async queryDeletedUsers() {
+    return this.userMapper.select({
+      where: { deletedAt: { $isNull: true } }
+    });
   }
 
-  // 批量新增
+  // ==================== 排序和分页 ====================
+
+  // 排序 - 必须使用 OrderEnum
+  async getUsersOrdered() {
+    return this.userMapper.select({
+      where: { status: 1 },
+      orders: { createdAt: OrderEnum.desc }  // 正确: 使用 OrderEnum.desc
+      // 错误: orders: { createdAt: "DESC" }
+    });
+  }
+
+  // OrderEnum 定义:
+  // OrderEnum.asc = "ASC"
+  // OrderEnum.desc = "DESC"
+
+  // 多字段排序
+  async getUsersMultiOrder() {
+    return this.userMapper.select({
+      orders: {
+        status: OrderEnum.asc,
+        createdAt: OrderEnum.desc
+      }
+    });
+  }
+
+  // 分页
+  async getUsersPaged(page: number, pageSize: number) {
+    return this.userMapper.select({
+      orders: { id: OrderEnum.desc },
+      offest: (page - 1) * pageSize,
+      limit: pageSize
+    });
+  }
+
+  // 只取前N条
+  async getTopUsers(limit: number) {
+    return this.userMapper.select({
+      orders: { score: OrderEnum.desc },
+      limit
+    });
+  }
+
+  // ==================== 插入方法 ====================
+
+  // 1. saveOne(row) - 插入单条
+  // 返回: number - 插入的主键ID
+  async createUser(name: string) {
+    const user = new User({ name, createdAt: new Date() });
+    const insertId = await this.userMapper.saveOne(user);
+    return insertId;
+  }
+
+  // 2. saveList(rows) - 批量插入
+  // 返回: boolean
   async createUsers(users: User[]) {
     return this.userMapper.saveList(users);
   }
 
-  // 更新
-  async updateName(id: number, name: string) {
-    return this.userMapper.update({ where: { id }, row: { name } });
+  // 3. saveORUpdate(rows) - 插入或更新 (UPSERT)
+  // 主键冲突时更新，否则插入
+  // 返回: number - 主键ID
+  async saveOrUpdateUser(user: User) {
+    return this.userMapper.saveORUpdate(user);
   }
 
-  // 按主键更新
+  // ==================== 更新方法 ====================
+
+  // 1. update({ row, where, limit }) - 条件更新
+  // 返回: boolean
+  async updateUserName(id: number, name: string) {
+    return this.userMapper.update({
+      where: { id },
+      row: { name, updatedAt: new Date() }
+    });
+  }
+
+  // 2. updateOne({ row, where }) - 更新单条
+  // 自动限制 limit: 1
+  async updateOneUser(where: any, row: any) {
+    return this.userMapper.updateOne({ where, row });
+  }
+
+  // 3. updateByPrimaryKey(row) - 根据主键更新
+  // 根据实体对象的主键字段更新
+  // 返回: boolean
   async updateById(user: User) {
     return this.userMapper.updateByPrimaryKey(user);
   }
 
-  // 删除
+  // 更新示例：软删除
+  async softDeleteUser(id: number) {
+    return this.userMapper.update({
+      where: { id },
+      row: { delStatus: true, deletedAt: new Date() }
+    });
+  }
+
+  // ==================== 删除方法 ====================
+
+  // 1. delete({ where, limit }) - 条件删除
+  // 返回: boolean
   async deleteUser(id: number) {
-    return this.userMapper.delete({ where: { id } });
+    return this.userMapper.delete({
+      where: { id }
+    });
   }
 
-  // 判断存在
-  async exists(name: string) {
-    return this.userMapper.exist({ name });
+  // 2. deleteOne(where) - 删除单条
+  async deleteOneUser(where: any) {
+    return this.userMapper.deleteOne(where);
   }
 
-  // 统计
-  async count() {
-    return this.userMapper.count({});
+  // 3. deleteByPrimaryKey(row) - 根据主键删除
+  async deleteById(id: number) {
+    return this.userMapper.deleteByPrimaryKey({ id } as User);
   }
 
-  // 执行原生 SQL
-  async executeSql() {
-    return this.userMapper.execute("SELECT * FROM users WHERE id = 1");
+  // ==================== 高级查询 ====================
+
+  // 自定义 SQL 查询
+  // query(sql, args) - 执行查询 SQL
+  async customQuery() {
+    return this.userMapper.query(
+      "SELECT * FROM users WHERE status = ? AND created_at > ?",
+      [1, "2024-01-01"]
+    );
   }
 
-  // 左连接查询
-  async leftJoin() {
+  // execute(sql, args) - 执行任意 SQL
+  async customExecute() {
+    return this.userMapper.execute(
+      "UPDATE users SET login_count = login_count + 1 WHERE id = ?",
+      [1]
+    );
+  }
+
+  // 左连接查询 - 使用 selectByCustom
+  async leftJoinQuery() {
     return this.userMapper.selectByCustom({
       join: [
         {
@@ -155,34 +328,133 @@ class UserService {
         },
       ],
       tableAlias: "t",
+      where: { "t.status": 1 }
     });
   }
 
   // 强制索引
-  async forceIndex() {
+  async forceIndexQuery() {
     return this.userMapper.select({
       forceIndex: ["idx_name"],
-      orders: { name: OrderEnum.desc },
-      limit: 1,
+      where: { status: 1 }
     });
   }
 
-  // 使用函数
-  async formatDate() {
+  // 指定查询字段
+  async selectFields() {
     return this.userMapper.select({
-      fields: ['DATE_FORMAT(created_at, "%Y-%m-%d %H:%i:%s") as createdAt'],
+      fields: ["id", "name", "email"],
+      where: { status: 1 }
+    });
+  }
+
+  // 分组查询
+  async groupByStatus() {
+    return this.userMapper.selectByCustom({
+      fields: ["status", "COUNT(*) as count"],
+      groups: ["status"]
+    });
+  }
+
+  // 使用数据库函数
+  async useDbFunction() {
+    return this.userMapper.selectByCustom({
+      fields: [
+        'id',
+        'name',
+        'DATE_FORMAT(created_at, "%Y-%m-%d") as createdDate'
+      ]
     });
   }
 }
 ```
 
-#### 多数据源
+#### 常用查询条件速查表
 
-在 `application.yml` 中配置多个数据源，Service 中通过指定数据源名称切换。
+```typescript
+// 等于 (默认)
+{ where: { status: 1 } }
 
-#### 事务
+// 不等于
+{ where: { status: { $ne: 1 } } }
 
-使用 `@Transactional`（如果框架提供）或手动通过 `SqlSession` 控制事务边界。
+// 大于 / 大于等于
+{ where: { age: { $gt: 18 } } }
+{ where: { age: { $gte: 18 } } }
+
+// 小于 / 小于等于
+{ where: { age: { $lt: 60 } } }
+{ where: { age: { $lte: 60 } } }
+
+// 范围查询
+{ where: { age: { $gte: 18, $lte: 60 } } }
+
+// IN 查询
+{ where: { id: { $in: [1, 2, 3] } } }
+
+// NOT IN 查询
+{ where: { id: { $nin: [1, 2, 3] } } }
+
+// IS NULL
+{ where: { deletedAt: { $isNull: true } } }
+
+// IS NOT NULL
+{ where: { deletedAt: { $isNotNull: true } } }
+
+// 多条件 AND (默认)
+{ where: { status: 1, delStatus: false } }
+
+// 排序 (必须使用 OrderEnum)
+import { OrderEnum } from "@fastcar/core/db";
+{ orders: { createdAt: OrderEnum.desc } }
+{ orders: { createdAt: OrderEnum.asc } }
+
+// 分页
+{ offest: 0, limit: 10 }
+```
+
+#### 事务处理
+
+```typescript
+import { SqlSession } from "@fastcar/core/annotation";
+import { MysqlDataSourceManager } from "@fastcar/mysql";
+
+@Service
+class OrderService {
+  @Autowired
+  private dsm!: MysqlDataSourceManager;
+
+  @Autowired
+  private orderMapper!: OrderMapper;
+
+  @Autowired
+  private inventoryMapper!: InventoryMapper;
+
+  async createOrderWithTransaction(order: Order, inventoryUpdate: any) {
+    const sessionId = await this.dsm.beginTransaction();
+    
+    try {
+      // 插入订单
+      await this.orderMapper.saveOne(order, undefined, sessionId);
+      
+      // 更新库存
+      await this.inventoryMapper.update({
+        where: { id: inventoryUpdate.id },
+        row: { quantity: inventoryUpdate.quantity }
+      }, undefined, sessionId);
+      
+      // 提交事务
+      await this.dsm.commit(sessionId);
+      
+      return true;
+    } catch (error) {
+      // 回滚事务
+      await this.dsm.rollback(sessionId);
+      throw error;
+    }
+  }
+}
+```
 
 ### PostgreSQL (@fastcar/pgsql)
 
@@ -208,6 +480,8 @@ import User from "./User";
 @Entity(User)
 @Repository
 class UserMapper extends PgsqlMapper<User> {}
+
+export default UserMapper;
 ```
 
 用法与 `MysqlMapper` 基本一致，支持相同的查询条件和 CRUD 操作。
@@ -236,6 +510,8 @@ import User from "./User";
 @Entity(User)
 @Repository
 class UserMapper extends MongoMapper<User> {}
+
+export default UserMapper;
 ```
 
 ### Redis (@fastcar/redis)
@@ -252,7 +528,7 @@ class APP {}
 export default new APP();
 ```
 
-#### 使用 RedisTemplate
+#### 使用 RedisClient
 
 ```typescript
 import { Service, Autowired } from "@fastcar/core/annotation";
@@ -273,6 +549,28 @@ class CacheService {
 
   async del(key: string) {
     await this.redis.del(key);
+  }
+
+  async expire(key: string, seconds: number) {
+    await this.redis.expire(key, seconds);
+  }
+
+  // Hash 操作
+  async hset(key: string, field: string, value: string) {
+    await this.redis.hset(key, field, value);
+  }
+
+  async hget(key: string, field: string) {
+    return this.redis.hget(key, field);
+  }
+
+  // List 操作
+  async lpush(key: string, value: string) {
+    await this.redis.lpush(key, value);
+  }
+
+  async rpop(key: string) {
+    return this.redis.rpop(key);
   }
 }
 ```
@@ -329,6 +627,10 @@ mysql:
   database: mydb
   username: root
   password: password
+  # 连接池配置
+  connectionLimit: 10
+  # 是否使用预处理语句
+  useServerPrepStmts: true
 
 pgsql:
   host: localhost
@@ -372,3 +674,11 @@ npm i @fastcar/core @fastcar/mysql @fastcar/redis
 # 4. 启动应用
 npm run debug
 ```
+
+## 注意事项
+
+1. **排序必须使用 OrderEnum**：`orders: { createdAt: OrderEnum.desc }`，不能使用字符串 `"DESC"`
+2. **主键查询**：`selectByPrimaryKey` 和 `updateByPrimaryKey` 需要传入包含主键字段的对象
+3. **时间范围查询**：使用 `$gte` 和 `$lte` 运算符
+4. **批量插入**：`saveList` 会自动分批处理（每批1000条）
+5. **软删除**：建议使用 `update` 方法更新 `delStatus` 字段，而不是物理删除

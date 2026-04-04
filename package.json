@@ -1,6 +1,6 @@
 {
   "name": "@fastcar/cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "homepage": "https://william_zhong.coding.net/public/fast-car/fastcar-cli/git/files",
   "description": "fastcar-cli 脚手架快速搭建",
   "bin": {
@@ -24,7 +24,7 @@
     "commander": "^8.3.0",
     "compressing": "^1.5.1",
     "inquirer": "^8.2.0",
-    "yaml": "^1.10.2"
+    "yaml": "^2.8.3"
   },
   "repository": {
     "type": "git",

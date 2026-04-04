@@ -26,7 +26,7 @@ Commands:
   clean node_modules       删除冗余的 node_modules 目录
   compress node_modules    压缩 node_modules 目录
   reverse                  数据库表逆向生成
-  reverse:init             生成 reverse.config.json 配置文件
+  reverse:init             生成 reverse.config.yml/json 配置文件
   pack [pm]                打包项目（排除 devDependencies）
                            pm: 包管理器 (npm/yarn/pnpm)，可选，默认自动检测
 
@@ -54,7 +54,7 @@ Examples:
   $ fastcar-cli init web my-project   # 使用 web 模板创建 my-project
   $ fastcar-cli clean node_modules
   $ fastcar-cli reverse        # 数据库表逆向生成
-  $ fastcar-cli reverse:init   # 生成默认配置文件
+  $ fastcar-cli reverse:init   # 生成默认配置文件（默认 YAML 格式）
   $ fastcar-cli pack           # 打包项目（自动检测包管理器）
   $ fastcar-cli pack yarn      # 使用 yarn 安装依赖
   $ fastcar-cli pack pnpm      # 使用 pnpm 安装依赖
@@ -67,7 +67,7 @@ Examples:
   $ fastcar-cli skill targets                         # 列出支持的 agents
 
 Reverse 命令参数说明:
-  通过配置文件传入参数，在项目根目录创建 reverse.config.json：
+  通过配置文件传入参数，在项目根目录创建 reverse.config.yml 或 reverse.config.json：
 
   {
     "tables": ["test"],               // 要逆向生成的表名数组（必填）
@@ -100,7 +100,7 @@ function showVersion() {
   console.log(`fastcar-cli version ${packageINFO.version}`);
 }
 
-function run(argv) {
+async function run(argv) {
   // 命令入口
   if (!argv || argv.length === 0) {
     showHelp();
@@ -122,7 +122,7 @@ function run(argv) {
       break;
     }
     case "init": {
-      init(body);
+      await init(body);
       break;
     }
     case "clean":
@@ -139,11 +139,11 @@ function run(argv) {
       break;
     }
     case "reverse": {
-      reverseGenerate(body);
+      await reverseGenerate(body);
       break;
     }
     case "reverse:init": {
-      initReverseConfig();
+      await initReverseConfig();
       break;
     }
     case "pack": {
@@ -220,4 +220,7 @@ function run(argv) {
   }
 }
 
-run(process.argv.slice(2));
+run(process.argv.slice(2)).catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

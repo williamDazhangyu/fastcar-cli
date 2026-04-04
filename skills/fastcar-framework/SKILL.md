@@ -26,23 +26,36 @@ FastCar 是基于 TypeScript 的 Node.js 企业级应用开发框架，灵感来
 import { FastCarApplication } from "@fastcar/core";
 import { Application, Autowired, Component, Service } from "@fastcar/core/annotation";
 
+// 服务层
 @Service
 class UserService {
-  getUsers() { return [{ id: 1, name: "Alice" }]; }
+  getUsers() {
+    return [{ id: 1, name: "Alice" }];
+  }
 }
 
+// 控制器层
 @Controller
 class UserController {
-  @Autowired private userService!: UserService;
-  getUsers() { return this.userService.getUsers(); }
+  @Autowired
+  private userService!: UserService;
+  
+  getUsers() {
+    return this.userService.getUsers();
+  }
 }
 
+// 应用入口
 @Application
 class App {
   app!: FastCarApplication;
-  async start() { console.log("应用启动成功!"); }
+  
+  async start() {
+    console.log("应用启动成功!");
+  }
 }
 
+// 启动
 const app = new App();
 app.start();
 ```
@@ -51,44 +64,221 @@ app.start();
 
 ### Web 开发 (@fastcar/koa)
 
-```typescript
-import { GET, POST, REQUEST, Body, Param } from "@fastcar/koa/annotation";
+**正确的路由装饰器使用方式：**
 
-@Controller @REQUEST("/api/users")
+```typescript
+import { GET, POST, REQUEST } from "@fastcar/koa/annotation";
+
+@Controller
+@REQUEST("/api/users")
 class UserController {
-  @GET async list() { return { data: [] }; }
-  @GET("/:id") async getById(@Param("id") id: string) { return { id }; }
-  @POST async create(@Body user: UserDTO) { return { created: true }; }
+  // GET 请求 - 无路径参数时必须有括号
+  @GET()
+  async list() {
+    return { data: [] };
+  }
+  
+  // GET 请求 - 有路径参数
+  @GET("/:id")
+  async getById(id: string) {
+    return { id };
+  }
+  
+  // POST 请求
+  @POST()
+  async create(body: UserDTO) {
+    return { created: true };
+  }
 }
 ```
 
+**⚠️ 重要：FastCar 没有 `@Body`, `@Param`, `@Query` 装饰器**
+
+- 请求参数直接作为方法参数传入
+- GET 请求参数通过方法参数直接获取
+- POST 请求体通过 `body` 参数获取
+- 路径参数通过方法参数直接获取
+
 ### 数据库 (@fastcar/mysql)
 
+**实体定义：**
+
 ```typescript
-import { Repository, Table, Field, PrimaryKey, SqlSession } from "@fastcar/mysql/annotation";
+import { Table, Field, DBType, PrimaryKey, NotNull, Size } from "@fastcar/core/annotation";
 
 @Table("users")
 class User {
-  @PrimaryKey @Field("id") id!: number;
-  @Field("name") name!: string;
+  @Field("id")
+  @DBType("int")
+  @PrimaryKey
+  id!: number;
+  
+  @Field("name")
+  @DBType("varchar")
+  @NotNull
+  @Size({ maxSize: 50 })
+  name!: string;
+}
+```
+
+**Mapper 定义：**
+
+```typescript
+import { Entity, Repository } from "@fastcar/core/annotation";
+import { MysqlMapper } from "@fastcar/mysql";
+
+@Entity(User)
+@Repository
+class UserMapper extends MysqlMapper<User> {}
+
+export default UserMapper;
+```
+
+**Service 中使用：**
+
+```typescript
+import { Service, Autowired } from "@fastcar/core/annotation";
+import { OrderEnum } from "@fastcar/core/db";
+import UserMapper from "./UserMapper";
+
+@Service
+class UserService {
+  @Autowired
+  private userMapper!: UserMapper;
+
+  // 查询列表
+  async getUsers() {
+    return this.userMapper.select({
+      where: { status: 1 },
+      orders: { createTime: OrderEnum.desc },
+      limit: 10
+    });
+  }
+
+  // 查询单个
+  async getUser(id: number) {
+    return this.userMapper.selectOne({ where: { id } });
+  }
+
+  // 根据主键查询
+  async getUserById(id: number) {
+    return this.userMapper.selectByPrimaryKey({ id } as User);
+  }
+
+  // 插入
+  async createUser(user: User) {
+    return this.userMapper.saveOne(user);
+  }
+
+  // 更新
+  async updateUser(id: number, data: Partial<User>) {
+    return this.userMapper.update({ where: { id }, row: data });
+  }
+
+  // 根据主键更新
+  async updateById(user: User) {
+    return this.userMapper.updateByPrimaryKey(user);
+  }
+
+  // 删除
+  async deleteUser(id: number) {
+    return this.userMapper.delete({ where: { id } });
+  }
+
+  // 统计
+  async count() {
+    return this.userMapper.count({});
+  }
+}
+```
+
+### 表单验证 (@fastcar/core)
+
+**正确的表单验证方式：**
+
+```typescript
+import { ValidForm, NotNull, Size, Rule } from "@fastcar/core/annotation";
+
+// DTO 类定义在单独的文件中，如 dto/UserDTO.ts
+class UserDTO {
+  @NotNull
+  name!: string;
+  
+  @Size({ minSize: 1, maxSize: 150 })
+  age!: number;
 }
 
-@Repository
-class UserRepository {
-  @SqlSession private session!: SqlSession;
-  async findById(id: number) { return this.session.findById(User, id); }
+@Controller
+@REQUEST("/api/users")
+class UserController {
+  
+  // GET 请求 - 无需表单验证
+  @GET()
+  async list(page: number = 1, pageSize: number = 10) {
+    return { page, pageSize, data: [] };
+  }
+
+  // POST 请求 - 使用 @ValidForm + @Rule 进行表单验证
+  @ValidForm
+  @POST()
+  async create(@Rule() body: UserDTO) {
+    // 参数会自动校验，如果校验失败会抛出异常
+    const { name, age } = body;
+    return this.userService.create({ name, age });
+  }
 }
+```
+
+**表单验证规则：**
+
+| 装饰器 | 用途 | 示例 |
+|--------|------|------|
+| `@ValidForm` | 开启方法参数校验 | 放在方法上 |
+| `@Rule()` | 标记校验对象 | 放在 DTO 参数前 |
+| `@NotNull` | 参数不能为空 | 放在 DTO 字段上 |
+| `@Size({min, max})` | 大小限制 | 放在 DTO 字段上 |
+
+**⚠️ 常见错误：**
+
+❌ **错误** - 使用不存在的装饰器：
+```typescript
+// 这些装饰器在 FastCar 中不存在！
+import { Body, Param, Query } from "@fastcar/koa/annotation"; // ❌ 错误
+
+@GET("/:id")
+async getById(@Param("id") id: string) { ... } // ❌ 错误
+
+@POST()
+async create(@Body body: UserDTO) { ... } // ❌ 错误
+```
+
+✅ **正确** - 直接使用方法参数：
+```typescript
+@GET("/:id")
+async getById(id: string) { ... } // ✅ 正确
+
+@POST()
+async create(body: UserDTO) { ... } // ✅ 正确
+
+@GET()
+async list(page: number = 1) { ... } // ✅ 正确
 ```
 
 ### Redis (@fastcar/redis)
 
 ```typescript
+import { Service, Autowired } from "@fastcar/core/annotation";
 import { RedisClient } from "@fastcar/redis/annotation";
 
 @Service
 class CacheService {
-  @RedisClient private redis!: RedisClient;
-  async get(key: string) { return this.redis.get(key); }
+  @RedisClient
+  private redis!: RedisClient;
+  
+  async get(key: string) {
+    return this.redis.get(key);
+  }
+  
   async set(key: string, value: string, ttl?: number) {
     await this.redis.set(key, value, ttl);
   }
@@ -102,8 +292,17 @@ import { Scheduled, Cron } from "@fastcar/timer/annotation";
 
 @Component
 class TaskService {
-  @Scheduled(60000) async intervalTask() { console.log("每分钟执行"); }
-  @Cron("0 0 * * * *") async hourlyTask() { console.log("每小时执行"); }
+  // 间隔执行（毫秒）
+  @Scheduled(60000)
+  async intervalTask() {
+    console.log("每分钟执行");
+  }
+  
+  // Cron 表达式
+  @Cron("0 0 * * * *")
+  async hourlyTask() {
+    console.log("每小时执行");
+  }
 }
 ```
 
@@ -114,15 +313,20 @@ import { WorkerPool, WorkerTask } from "@fastcar/workerpool/annotation";
 
 @Component
 class ComputeService {
-  @WorkerPool({ minWorkers: 2, maxWorkers: 4 }) private pool!: WorkerPool;
+  @WorkerPool({ minWorkers: 2, maxWorkers: 4 })
+  private pool!: WorkerPool;
+  
   @WorkerTask
   heavyComputation(data: number[]): number {
+    // 在 worker 线程中执行
     return data.reduce((a, b) => a + b, 0);
   }
 }
 ```
 
 ## 项目模板速查
+
+FastCar CLI 提供 5 种项目模板，分别适用于不同的业务场景。
 
 ### 模板选择指南
 
@@ -136,56 +340,64 @@ class ComputeService {
 
 ### 各模板入口示例
 
-**Web 模板**
+#### Web 模板
 ```typescript
 import { FastCarApplication } from "@fastcar/core";
 import { Application } from "@fastcar/core/annotation";
 import { EnableKoa, KoaMiddleware } from "@fastcar/koa/annotation";
 import { ExceptionGlobalHandler, KoaBodyParser } from "@fastcar/koa";
 
-@Application @EnableKoa
+@Application
+@EnableKoa
 @KoaMiddleware(ExceptionGlobalHandler)
 @KoaMiddleware(KoaBodyParser)
-class APP { app!: FastCarApplication; }
+class APP {
+  app!: FastCarApplication;
+}
 export default new APP();
 ```
 
-**Static 模板**
+#### Static 模板
 ```typescript
 import { Application } from "@fastcar/core/annotation";
 import { EnableKoa, KoaMiddleware } from "@fastcar/koa/annotation";
 import { ExceptionGlobalHandler, KoaStatic } from "@fastcar/koa";
 
-@Application @EnableKoa
+@Application
+@EnableKoa
 @KoaMiddleware(ExceptionGlobalHandler)
 @KoaMiddleware(KoaStatic)
-class APP { app!: any; }
+class APP {
+  app!: any;
+}
 export default new APP();
 ```
 
-**RPC 模板**
+#### RPC 模板
 ```typescript
 import { Application } from "@fastcar/core/annotation";
 import { EnableRPC } from "@fastcar/rpc/annotation";
 
-@Application @EnableRPC
+@Application
+@EnableRPC
 class APP {}
 export default new APP();
 ```
 
-**COS 模板**
+#### COS 模板
 ```typescript
 import { Application } from "@fastcar/core/annotation";
 import { EnableKoa, KoaMiddleware } from "@fastcar/koa/annotation";
 import { ExceptionGlobalHandler, KoaBody, KoaBodyParser, KoaCors } from "@fastcar/koa";
 
-@Application @EnableKoa
+@EnableKoa
+@Application
 @KoaMiddleware(ExceptionGlobalHandler, KoaBody, KoaBodyParser, KoaCors)
 class APP {}
 export default new APP();
 ```
 
-**Microservices 模板**
+#### Microservices 模板
 微服务模板采用多服务架构，包含 `app-node.ts`（子进程启动多服务）和 `app-pm2.ts`（PM2 启动入口）。服务模块分为：
 - **center**：服务中心，提供服务注册与发现
 - **connector**：连接器服务，处理客户端连接
@@ -202,6 +414,7 @@ export default new APP();
 template/
 ├── src/
 │   ├── controller/       # 控制器（web/cos）
+│   ├── dto/              # DTO 类（表单验证）
 │   ├── middleware/       # 中间件（web/cos）
 │   ├── model/            # 数据模型
 │   └── app.ts            # 应用入口
@@ -220,10 +433,15 @@ template/
 │   ├── annotation/       # 注解定义
 │   ├── common/           # 公共代码
 │   ├── middleware/       # 中间件
-│   ├── servers/          # 服务目录（base/center/chat/connector/web）
+│   ├── servers/          # 服务目录
+│   │   ├── base/         # 基础服务
+│   │   ├── center/       # 服务中心
+│   │   ├── chat/         # 聊天服务
+│   │   ├── connector/    # 连接器服务
+│   │   └── web/          # Web 服务
 │   ├── types/            # 类型定义
 │   ├── utils/            # 工具函数
-│   ├── app-node.ts       # 单节点入口
+│   ├── app-node.ts       # 单节点入口（子进程启动）
 │   └── app-pm2.ts        # PM2 入口
 ├── resource/
 │   ├── application.yml
@@ -281,14 +499,17 @@ import { Configure, Value } from "@fastcar/core/annotation";
 
 @Configure
 class AppConfig {
-  @Value("server.port") port!: number;
-  @Value("mysql.host") dbHost!: string;
+  @Value("server.port")
+  port!: number;
+
+  @Value("mysql.host")
+  dbHost!: string;
 }
 ```
 
-### 各模板 application.yml 配置
+### 各模板 application.yml 详解
 
-#### Web / Static / COS 通用配置
+#### Web / Static / COS 通用 Koa 配置
 
 ```yaml
 application:
@@ -298,16 +519,18 @@ settings:
   koa:
     server:
       - { port: 8080, host: "0.0.0.0" }
-      # HTTPS: { port: 443, host: "0.0.0.0", protocol: https, ssl: { key: "./ssl/server.key", cert: "./ssl/server.pem" } }
-    koaStatic: { "public": "public" }  # 静态资源映射
-    koaBodyParser:
+      # HTTPS 示例：
+      # - { port: 443, host: "0.0.0.0", protocol: https, ssl: { key: "./ssl/server.key", cert: "./ssl/server.pem" } }
+    koaStatic: # 静态资源映射
+      { "public": "public" } # 别名: 路径（相对 resource 目录或绝对路径）
+    koaBodyParser: # 请求体解析
       enableTypes: ["json", "form", "text"]
       extendTypes: { text: ["text/xml", "application/xml"] }
 ```
 
-- `settings.koa.server`：服务器监听配置数组，支持 `http`/`https`/`http2`
-- `settings.koa.koaStatic`：静态资源访问映射，格式 `{ "别名": "路径" }`
-- `settings.koa.koaBodyParser`：请求体解析配置
+- `settings.koa.server`：服务器监听配置数组。支持 `http`（默认）、`http2`、`https`；启用 HTTPS 时需额外指定 `protocol: https` 和 `ssl.key / ssl.cert`。
+- `settings.koa.koaStatic`：静态资源访问映射，格式为 `{ "别名": "路径" }`。
+- `settings.koa.koaBodyParser`：Koa Body 解析器配置，`enableTypes` 控制允许的请求体类型，`extendTypes` 可扩展 XML 等特殊类型。
 
 #### RPC 模板配置
 
@@ -319,53 +542,122 @@ settings:
   rpc:
     list:
       - id: "server-1"
-        type: "ws"              # 协议：ws / http / grpc / mqtt
+        type: "ws"              # 通信协议：ws / http / grpc / mqtt
         server: { port: 1235 }
+        extra: {}
         serviceType: "base"     # 服务类型分类
-        secure: { username: "user", password: "123456" }
+        secure:
+          username: "user"
+          password: "123456"
 ```
 
-- `settings.rpc.list`：RPC 服务端点数组
-- `type`：通信协议；`serviceType`：服务分组；`secure`：安全认证
+- `settings.rpc.list`：RPC 服务端点数组。
+  - `id`：节点唯一标识。
+  - `type`：通信协议，常见取值 `ws`、`http`、`grpc`、`mqtt`。
+  - `server`：监听配置，通常只写 `{ port }`。
+  - `extra`：协议扩展参数。
+  - `serviceType`：服务类型，用于服务分组或路由。
+  - `secure`：安全认证信息，包含 `username` 和 `password`。
+
+#### COS 模板特有配置
+
+```yaml
+application:
+  env: "prod"
+
+settings:
+  hotterSysConfig: true # 启用系统配置热更新监听
+```
+
+- `settings.hotterSysConfig`：设为 `true` 时，框架会监听配置变更并自动热更新。
 
 #### Microservices 模板配置
 
-主配置声明环境，详细集群配置放在 `application-dev.yml`：
+主配置通常只声明环境：
+
+```yaml
+application:
+  env: "dev"
+```
+
+详细集群配置放在 `application-dev.yml`：
 
 ```yaml
 settings:
-  hotterSysConfig: true  # 监听配置变更
+  hotterSysConfig: true # 监听系统配置变更
+
   microservices:
-    center:              # 服务中心
-      token: "xxx"
+    center: # 服务中心
+      token: "nW0tT4bZ6qM7mF7wD2rT2pR9dT7gK3hZ"
       servers:
         - host: "localhost"
-          clusters: 1    # 实例数
+          clusters: 1 # 实例数，serviceId 和端口号自动递增
           list:
             - type: "ws"
               server: { port: 60000 }
-              timeout: 0
+              timeout: 0 # 0 表示永不超时
               connectionLimit: 1
-              retry: { retryCount: 3, retryInterval: 3000 }
+              disconnectInterval: 1000 # 断线重连间隔（毫秒）
+              retry:
+                retryCount: 3
+                retryInterval: 3000
+                timeout: 30000
+                maxMsgNum: 10000
+                increase: true
 
-    connector:           # 连接器服务
-      token: "xxx"
+    connector: # 连接器服务
+      token: "x3TGsWC9uloZu235LA07eAiJ61nQ1A5f"
       servers:
         - host: "localhost"
           clusters: 1
           list:
-            - front: true   # 面向客户端的前置节点
+            - front: true # 标记为面向客户端的前置节点
               type: "ws"
               server: { port: 60100 }
 
-    chat: { ... }         # 聊天服务
-    web: { ... }          # Web 服务（支持 http/ws 混合）
+    chat: # 聊天服务
+      token: "go0kbkNM3wQ4e2Vgo0kbkNM3wQ4e2V"
+      servers:
+        - host: "localhost"
+          clusters: 1
+          list:
+            - type: "ws"
+              server: { port: 60200 }
+
+    web: # Web 服务
+      token: "go0kbkNM3wQ4e2Vgo0kbkNM3wQ4e2V"
+      koa:
+        koaBodyParser:
+          enableTypes: ["json", "form", "text"]
+          extendTypes: { text: ["text/xml", "application/xml"] }
+      servers:
+        - host: "localhost"
+          clusters: 1
+          list:
+            - type: "http"
+              server: { port: 8080 }
+            - type: "ws"
+              server: { port: 60300 }
 ```
 
-- `settings.microservices.<服务名>`：各微服务模块配置
-- `token`：服务间通信鉴权令牌；`clusters`：集群实例数（自动递增端口号）
-- `front: true`：标记为面向客户端的前置节点
-- `retry`：消息重试策略（retryCount/retryInterval/timeout/maxMsgNum/increase）
+- `settings.microservices.<服务名>`：定义各微服务模块的集群配置。
+  - `token`：服务间通信鉴权令牌，防止非法节点接入。
+  - `servers`：服务器集群列表。
+    - `host`：主机地址。
+    - `clusters`：集群实例数量。若大于 1，框架会自动递增 `serviceId` 和端口号生成多个实例。
+    - `list`：该集群对外暴露的协议端点列表。
+      - `type`：协议类型，如 `ws`、`http`。
+      - `server`：端口配置 `{ port }`。
+      - `front: true`：仅 connector 等前置服务需要，表示该节点直接面向客户端。
+      - `timeout`：连接超时时间（毫秒），`0` 表示永不超时。
+      - `connectionLimit`：最大连接数限制。
+      - `disconnectInterval`：断线后重连间隔（毫秒）。
+      - `retry`：消息重试策略。
+        - `retryCount`：最大重试次数。
+        - `retryInterval`：重试间隔。
+        - `timeout`：重试总超时。
+        - `maxMsgNum`：消息队列最大长度。
+        - `increase`：是否递增重试间隔。
 
 ## 生命周期钩子
 
@@ -374,27 +666,22 @@ import { ApplicationStart, ApplicationStop, ApplicationInit } from "@fastcar/cor
 
 @Component
 class LifecycleService {
-  @ApplicationStart async onStart() { console.log("应用启动"); }
-  @ApplicationStop async onStop() { console.log("应用停止"); }
-  @ApplicationInit async init() { console.log("初始化完成"); }
-}
-```
-
-## 表单验证
-
-```typescript
-import { ValidForm, NotNull, Size, Rule } from "@fastcar/core/annotation";
-
-class UserDTO {
-  @NotNull name!: string;
-  @Size({ minSize: 1, maxSize: 150 }) age!: number;
-}
-
-@Controller
-class UserController {
-  @ValidForm
-  createUser(@Rule() @NotNull user: UserDTO) {
-    return this.userService.create(user);
+  // 应用启动时执行
+  @ApplicationStart
+  async onStart() {
+    console.log("应用启动");
+  }
+  
+  // 应用停止前执行
+  @ApplicationStop
+  async onStop() {
+    console.log("应用停止");
+  }
+  
+  // 初始化（配合 @ApplicationRunner）
+  @ApplicationInit
+  async init() {
+    console.log("初始化完成");
   }
 }
 ```
@@ -446,36 +733,121 @@ TypeUtil.isClass(MyClass);       // true
 ```bash
 # Web 项目
 mkdir my-web-app && cd my-web-app
-fastcar-cli init web && npm install && npm run debug
+fastcar-cli init web
+npm install
+npm run debug
 
 # Static 项目
 mkdir my-static-app && cd my-static-app
-fastcar-cli init static && npm install && npm run debug
+fastcar-cli init static
+npm install
+npm run debug
 
 # RPC 项目
 mkdir my-rpc-app && cd my-rpc-app
-fastcar-cli init rpc && npm install && npm run debug
+fastcar-cli init rpc
+npm install
+npm run debug
 
 # COS 项目
 mkdir my-cos-app && cd my-cos-app
-fastcar-cli init cos && npm install && npm run debug
+fastcar-cli init cos
+npm install
+npm run debug
 
 # Microservices 项目
 mkdir my-ms-app && cd my-ms-app
-fastcar-cli init microservices && npm install
-npm run start-node   # 单节点模式
-# 或 npm run start-pm2    # PM2 模式
+fastcar-cli init microservices
+npm install
+npm run start-node   # 单节点模式（子进程启动全部服务）
+# 或
+npm run start-pm2    # PM2 模式
 ```
 
 ### 手动创建项目
 
 ```bash
+# 1. 创建项目
 mkdir my-fastcar-app && cd my-fastcar-app
 npm init -y
+
+# 2. 安装依赖
 npm i @fastcar/core @fastcar/koa @fastcar/server
 npm i -D typescript ts-node @types/node
+
+# 3. 初始化 TypeScript
 npx tsc --init
-# 启用装饰器（tsconfig.json）: experimentalDecorators, emitDecoratorMetadata
+
+# 4. 启用装饰器（tsconfig.json）
+# "experimentalDecorators": true
+# "emitDecoratorMetadata": true
+
+# 5. 创建入口文件和配置文件，开始开发
+```
+
+## 常见错误与注意事项
+
+### 1. 路由装饰器必须有括号
+
+❌ **错误：**
+```typescript
+@GET
+async list() { }
+```
+
+✅ **正确：**
+```typescript
+@GET()
+async list() { }
+```
+
+### 2. 不要使用不存在的装饰器
+
+❌ **错误：**
+```typescript
+import { Body, Param, Query } from "@fastcar/koa/annotation";
+
+@GET("/:id")
+async getById(@Param("id") id: string) { }
+
+@POST()
+async create(@Body body: UserDTO) { }
+```
+
+✅ **正确：**
+```typescript
+@GET("/:id")
+async getById(id: string) { }
+
+@POST()
+async create(body: UserDTO) { }
+```
+
+### 3. 表单验证使用 @ValidForm + @Rule
+
+❌ **错误：**
+```typescript
+@POST()
+async create(@Body body: UserDTO) { }
+```
+
+✅ **正确：**
+```typescript
+@ValidForm
+@POST()
+async create(@Rule() body: UserDTO) { }
+```
+
+### 4. DTO 类放在单独文件夹
+
+推荐项目结构：
+```
+src/
+├── controller/     # 控制器
+├── dto/            # DTO 类（表单验证）
+├── service/        # 服务层
+├── model/          # 数据模型
+└── app.ts
 ```
 
 ## 参考资源

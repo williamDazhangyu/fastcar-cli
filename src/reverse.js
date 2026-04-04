@@ -1,6 +1,8 @@
 const path = require("path");
 const fs = require("fs");
 const process = require("process");
+const yaml = require("yaml");
+const inquirer = require("inquirer");
 
 // 默认配置文件模板
 const defaultConfig = {
@@ -25,17 +27,69 @@ const defaultConfig = {
   ignoreCamelcase: false,
 };
 
-// 生成默认配置文件
-function initReverseConfig() {
-  const cwd = process.cwd();
-  const configPath = path.join(cwd, "reverse.config.json");
+// 支持的配置文件名
+const CONFIG_FILES = {
+  json: "reverse.config.json",
+  yml: "reverse.config.yml",
+};
 
-  // 检查是否已存在
-  if (fs.existsSync(configPath)) {
-    console.log("⚠️  reverse.config.json 配置文件已存在");
+// 查找已存在的配置文件
+function findExistingConfig(cwd) {
+  for (const ext of ["yml", "json"]) {
+    const configPath = path.join(cwd, CONFIG_FILES[ext]);
+    if (fs.existsSync(configPath)) {
+      return { ext, configPath };
+    }
+  }
+  return null;
+}
+
+// 读取配置文件
+function readConfig(configPath, ext) {
+  const content = fs.readFileSync(configPath, "utf-8");
+  if (ext === "yml") {
+    return yaml.parse(content);
+  }
+  return JSON.parse(content);
+}
+
+// 写入配置文件
+function writeConfig(configPath, ext, config) {
+  if (ext === "yml") {
+    fs.writeFileSync(configPath, yaml.stringify(config));
+  } else {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  }
+}
+
+// 生成默认配置文件
+async function initReverseConfig() {
+  const cwd = process.cwd();
+
+  // 检查是否已存在任何格式的配置文件
+  const existing = findExistingConfig(cwd);
+  if (existing) {
+    console.log(`⚠️  ${path.basename(existing.configPath)} 配置文件已存在`);
     console.log("   如需重新生成，请先删除现有文件");
     return;
   }
+
+  // 交互式选择配置格式
+  const answer = await inquirer.prompt([
+    {
+      type: "list",
+      name: "format",
+      message: "选择配置文件格式:",
+      choices: [
+        { name: "YAML (reverse.config.yml)", value: "yml" },
+        { name: "JSON (reverse.config.json)", value: "json" },
+      ],
+      default: "yml",
+    },
+  ]);
+
+  const ext = answer.format;
+  const configPath = path.join(cwd, CONFIG_FILES[ext]);
 
   // 填充默认路径
   const config = {
@@ -45,8 +99,8 @@ function initReverseConfig() {
   };
 
   try {
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    console.log("✅ 已生成 reverse.config.json 配置文件");
+    writeConfig(configPath, ext, config);
+    console.log(`✅ 已生成 ${CONFIG_FILES[ext]} 配置文件`);
     console.log("📁 文件路径:", configPath);
     console.log("\n💡 请根据需要修改以下配置:");
     console.log("   • tables: 要逆向生成的表名数组");
@@ -72,11 +126,31 @@ async function reverseGenerate(args = []) {
   }
 
   // 读取配置文件
-  const configPath = path.join(cwd, "reverse.config.json");
-  if (!fs.existsSync(configPath)) {
-    console.log("❌ 未找到 reverse.config.json 配置文件");
+  const existing = findExistingConfig(cwd);
+  if (!existing) {
+    console.log("❌ 未找到 reverse.config.yml 或 reverse.config.json 配置文件");
     console.log("   请在项目根目录创建该文件，格式如下：");
     console.log(`
+YAML 格式 (reverse.config.yml):
+  tables: [test]
+  modelDir: ${cwd.replace(/\\/g, "/")}/src/models
+  mapperDir: ${cwd.replace(/\\/g, "/")}/src/mappers
+  dbConfig:
+    host: localhost
+    port: 3306
+    user: root
+    password: password
+    database: test_db
+  style:
+    tabWidth: 4
+    printWidth: 200
+    trailingComma: es5
+    useTabs: true
+    parser: typescript
+    endOfLine: crlf
+  ignoreCamelcase: false
+
+JSON 格式 (reverse.config.json):
 {
   "tables": ["test"],
   "modelDir": "${cwd.replace(/\\/g, "/")}/src/models",
@@ -104,9 +178,9 @@ async function reverseGenerate(args = []) {
 
   let config;
   try {
-    config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    config = readConfig(existing.configPath, existing.ext);
   } catch (error) {
-    console.log("❌ 配置文件解析失败:", error.message);
+    console.log(`❌ 配置文件 ${path.basename(existing.configPath)} 解析失败:`, error.message);
     return;
   }
 
