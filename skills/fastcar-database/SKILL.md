@@ -152,32 +152,32 @@ class UserService {
   async queryByAgeRange(minAge: number, maxAge: number) {
     return this.userMapper.select({
       where: {
-        age: { $gte: minAge, $lte: maxAge }
+        age: { [OperatorEnum.gte]: minAge, [OperatorEnum.lte]: maxAge }
       }
     });
   }
 
   // 支持的运算符:
-  // $eq - 等于 (默认)
-  // $gt / $gte - 大于 / 大于等于
-  // $lt / $lte - 小于 / 小于等于
-  // $ne - 不等于
-  // $in - IN 查询 (数组)
-  // $nin - NOT IN 查询
-  // $isNull - IS NULL
-  // $isNotNull - IS NOT NULL
+  // OperatorEnum.eq - 等于 (默认)
+  // OperatorEnum.gt / OperatorEnum.gte - 大于 / 大于等于
+  // OperatorEnum.lt / OperatorEnum.lte - 小于 / 小于等于
+  // OperatorEnum.neq - 不等于
+  // OperatorEnum.in - IN 查询 (数组)
+  // OperatorEnum.notin - NOT IN 查询
+  // OperatorEnum.isNUll - IS NULL
+  // OperatorEnum.isNotNull - IS NOT NULL
 
   // IN 查询
   async queryByIds(ids: number[]) {
     return this.userMapper.select({
-      where: { id: { $in: ids } }
+      where: { id: { [OperatorEnum.in]: ids } }
     });
   }
 
   // IS NULL 查询
   async queryDeletedUsers() {
     return this.userMapper.select({
-      where: { deletedAt: { $isNull: true } }
+      where: { deletedAt: { [OperatorEnum.isNUll]: true } }
     });
   }
 
@@ -210,7 +210,7 @@ class UserService {
   async getUsersPaged(page: number, pageSize: number) {
     return this.userMapper.select({
       orders: { id: OrderEnum.desc },
-      offest: (page - 1) * pageSize,
+      offset: (page - 1) * pageSize,
       limit: pageSize
     });
   }
@@ -300,6 +300,172 @@ class UserService {
 
   // ==================== 高级查询 ====================
 
+  // selectByCustom 完整参数说明
+  // selectByCustom 支持更灵活的查询配置，包括 JOIN、分组、聚合、子查询等
+  async selectByCustomExamples() {
+    // 基础参数结构
+    interface SelectByCustomParams {
+      // 指定查询字段，默认为实体所有字段
+      fields?: string[];
+      // 查询条件，与 select 相同
+      where?: Record<string, any>;
+      // 排序，与 select 相同，使用 OrderEnum
+      orders?: Record<string, OrderEnum>;
+      // 分页偏移量
+      offset?: number;
+      // 分页大小
+      limit?: number;
+      // 表别名，用于 JOIN 查询
+      tableAlias?: string;
+      // JOIN 配置数组
+      join?: Array<{
+        type: "LEFT" | "RIGHT" | "INNER" | "OUTER";
+        table: string;  // 表名，可带别名如 "orders o"
+        on: string;     // 连接条件，如 "o.user_id = t.id"
+      }>;
+      // 分组字段
+      groups?: string[];
+      // 分组后的过滤条件（HAVING）
+      having?: Record<string, any>;
+      // 强制使用索引
+      forceIndex?: string[];
+      // 去重
+      distinct?: boolean;
+      // 子查询或 UNION
+      union?: Array<{ query: string; all?: boolean }>;
+    }
+
+    // 1. 指定查询字段
+    async selectFields() {
+      return this.userMapper.selectByCustom({
+        fields: ["id", "name", "email", "created_at"],
+        where: { status: 1 }
+      });
+    }
+
+    // 2. 使用聚合函数和分组
+    async groupByExample() {
+      return this.userMapper.selectByCustom({
+        fields: [
+          "status",
+          "COUNT(*) as totalCount",
+          "MAX(created_at) as lastCreated",
+          "MIN(created_at) as firstCreated",
+          "AVG(age) as avgAge"
+        ],
+        groups: ["status"],
+        orders: { totalCount: OrderEnum.desc }
+      });
+    }
+
+    // 3. 多表 JOIN 查询
+    async multiJoinQuery() {
+      return this.userMapper.selectByCustom({
+        tableAlias: "u",
+        fields: [
+          "u.id",
+          "u.name",
+          "o.id as orderId",
+          "o.amount",
+          "p.name as productName"
+        ],
+        join: [
+          {
+            type: "LEFT",
+            table: "orders o",
+            on: "o.user_id = u.id"
+          },
+          {
+            type: "LEFT",
+            table: "products p",
+            on: "p.id = o.product_id"
+          }
+        ],
+        where: {
+          "u.status": 1,
+          "o.created_at": { [OperatorEnum.gte]: "2024-01-01" }
+        },
+        orders: { "o.created_at": OrderEnum.desc },
+        limit: 100
+      });
+    }
+
+    // 4. INNER JOIN（只返回有匹配的记录）
+    async innerJoinQuery() {
+      return this.userMapper.selectByCustom({
+        tableAlias: "u",
+        fields: ["u.id", "u.name", "COUNT(o.id) as orderCount"],
+        join: [
+          {
+            type: "INNER",
+            table: "orders o",
+            on: "o.user_id = u.id"
+          }
+        ],
+        groups: ["u.id", "u.name"],
+        having: { orderCount: { [OperatorEnum.gte]: 5 } }
+      });
+    }
+
+    // 5. 使用数据库函数
+    async useDbFunctions() {
+      return this.userMapper.selectByCustom({
+        fields: [
+          "id",
+          "name",
+          'DATE_FORMAT(created_at, "%Y-%m-%d") as createdDate',
+          'CONCAT(first_name, " ", last_name) as fullName',
+          "YEAR(birth_date) as birthYear"
+        ],
+        where: { status: 1 }
+      });
+    }
+
+    // 6. 去重查询
+    async distinctQuery() {
+      return this.userMapper.selectByCustom({
+        distinct: true,
+        fields: ["city", "province"],
+        where: { status: 1 }
+      });
+    }
+
+    // 7. 强制索引
+    async forceIndexQuery() {
+      return this.userMapper.selectByCustom({
+        forceIndex: ["idx_status_created"],
+        where: { status: 1 },
+        orders: { created_at: OrderEnum.desc }
+      });
+    }
+
+    // 8. 复杂条件 + 分页
+    async complexQueryWithPaging() {
+      return this.userMapper.selectByCustom({
+        tableAlias: "u",
+        fields: ["u.*", "d.department_name"],
+        join: [
+          {
+            type: "LEFT",
+            table: "departments d",
+            on: "d.id = u.department_id"
+          }
+        ],
+        where: {
+          "u.status": 1,
+          "u.age": { [OperatorEnum.gte]: 18, [OperatorEnum.lte]: 60 },
+          "u.name": { [OperatorEnum.like]: "%张%" }
+        },
+        orders: {
+          "u.created_at": OrderEnum.desc,
+          "u.id": OrderEnum.asc
+        },
+        offset: 0,
+        limit: 20
+      });
+    }
+  }
+
   // 自定义 SQL 查询
   // query(sql, args) - 执行查询 SQL
   async customQuery() {
@@ -316,90 +482,42 @@ class UserService {
       [1]
     );
   }
-
-  // 左连接查询 - 使用 selectByCustom
-  async leftJoinQuery() {
-    return this.userMapper.selectByCustom({
-      join: [
-        {
-          type: "LEFT",
-          table: "orders o",
-          on: "o.user_id = t.id",
-        },
-      ],
-      tableAlias: "t",
-      where: { "t.status": 1 }
-    });
-  }
-
-  // 强制索引
-  async forceIndexQuery() {
-    return this.userMapper.select({
-      forceIndex: ["idx_name"],
-      where: { status: 1 }
-    });
-  }
-
-  // 指定查询字段
-  async selectFields() {
-    return this.userMapper.select({
-      fields: ["id", "name", "email"],
-      where: { status: 1 }
-    });
-  }
-
-  // 分组查询
-  async groupByStatus() {
-    return this.userMapper.selectByCustom({
-      fields: ["status", "COUNT(*) as count"],
-      groups: ["status"]
-    });
-  }
-
-  // 使用数据库函数
-  async useDbFunction() {
-    return this.userMapper.selectByCustom({
-      fields: [
-        'id',
-        'name',
-        'DATE_FORMAT(created_at, "%Y-%m-%d") as createdDate'
-      ]
-    });
-  }
 }
 ```
 
 #### 常用查询条件速查表
 
 ```typescript
+import { OperatorEnum } from "@fastcar/core/db";
+
 // 等于 (默认)
 { where: { status: 1 } }
 
 // 不等于
-{ where: { status: { $ne: 1 } } }
+{ where: { status: { [OperatorEnum.neq]: 1 } } }
 
 // 大于 / 大于等于
-{ where: { age: { $gt: 18 } } }
-{ where: { age: { $gte: 18 } } }
+{ where: { age: { [OperatorEnum.gt]: 18 } } }
+{ where: { age: { [OperatorEnum.gte]: 18 } } }
 
 // 小于 / 小于等于
-{ where: { age: { $lt: 60 } } }
-{ where: { age: { $lte: 60 } } }
+{ where: { age: { [OperatorEnum.lt]: 60 } } }
+{ where: { age: { [OperatorEnum.lte]: 60 } } }
 
 // 范围查询
-{ where: { age: { $gte: 18, $lte: 60 } } }
+{ where: { age: { [OperatorEnum.gte]: 18, [OperatorEnum.lte]: 60 } } }
 
 // IN 查询
-{ where: { id: { $in: [1, 2, 3] } } }
+{ where: { id: { [OperatorEnum.in]: [1, 2, 3] } } }
 
 // NOT IN 查询
-{ where: { id: { $nin: [1, 2, 3] } } }
+{ where: { id: { [OperatorEnum.notin]: [1, 2, 3] } } }
 
 // IS NULL
-{ where: { deletedAt: { $isNull: true } } }
+{ where: { deletedAt: { [OperatorEnum.isNUll]: true } } }
 
 // IS NOT NULL
-{ where: { deletedAt: { $isNotNull: true } } }
+{ where: { deletedAt: { [OperatorEnum.isNotNull]: true } } }
 
 // 多条件 AND (默认)
 { where: { status: 1, delStatus: false } }
@@ -410,7 +528,7 @@ import { OrderEnum } from "@fastcar/core/db";
 { orders: { createdAt: OrderEnum.asc } }
 
 // 分页
-{ offest: 0, limit: 10 }
+{ offset: 0, limit: 10 }
 ```
 
 #### 事务处理
@@ -679,6 +797,6 @@ npm run debug
 
 1. **排序必须使用 OrderEnum**：`orders: { createdAt: OrderEnum.desc }`，不能使用字符串 `"DESC"`
 2. **主键查询**：`selectByPrimaryKey` 和 `updateByPrimaryKey` 需要传入包含主键字段的对象
-3. **时间范围查询**：使用 `$gte` 和 `$lte` 运算符
+3. **时间范围查询**：使用 `OperatorEnum.gte` 和 `OperatorEnum.lte` 运算符
 4. **批量插入**：`saveList` 会自动分批处理（每批1000条）
 5. **软删除**：建议使用 `update` 方法更新 `delStatus` 字段，而不是物理删除
