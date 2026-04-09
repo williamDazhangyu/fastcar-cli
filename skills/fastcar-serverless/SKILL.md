@@ -17,58 +17,58 @@ FastCar Serverless 框架支持将 FastCar 应用部署到阿里云函数计算�
 import { ServerlessApp, Service, Handler, HttpTrigger, TimerTrigger, EventTrigger } from "@fastcar/serverless";
 
 @Service
-class OrderService {
-  async createOrder(data: any) {
-    return { orderId: Date.now(), ...data };
+class BizService {
+  async process(data: any) {
+    return { id: Date.now(), ...data };
   }
 }
 
 @ServerlessApp({
-  name: "order-service",
+  name: "example-service",
   version: "1.0.0",
-  components: [OrderService],
+  components: [BizService],
   init: async (app) => {
-    console.log("Order service initializing...");
+    console.log("Service initializing...");
   },
 })
-class OrderApp {
-  @HttpTrigger({ path: "/orders", method: "POST" })
+class ExampleApp {
+  @HttpTrigger({ path: "/items", method: "POST" })
   @Handler()
-  async createOrder(event: any, context: any) {
-    const orderService = (this as any).app.getFastCarApp().getComponentByName("OrderService") as OrderService;
-    const order = await orderService.createOrder(event.body);
+  async createItem(event: any, context: any) {
+    const service = (this as any).app.getFastCarApp().getComponentByName("BizService") as BizService;
+    const result = await service.process(event.body);
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: { success: true, data: order },
+      body: { success: true, data: result },
     };
   }
 
-  @HttpTrigger({ path: "/orders/:id", method: "GET" })
+  @HttpTrigger({ path: "/items/:id", method: "GET" })
   @Handler()
-  async getOrder(event: any, context: any) {
+  async getItem(event: any, context: any) {
     return {
       statusCode: 200,
-      body: { orderId: event.params?.id },
+      body: { id: event.params?.id },
     };
   }
 
   @TimerTrigger({ cron: "0 0 * * * *" })
   @Handler()
-  async hourlyReport(event: any, context: any) {
-    console.log(`[${context.requestId}] Generating hourly report`);
+  async hourlyTask(event: any, context: any) {
+    console.log(`[${context.requestId}] Running scheduled task`);
     return { success: true };
   }
 
   @EventTrigger({ eventSource: "oss" })
   @Handler()
-  async handleFileUpload(event: any, context: any) {
-    console.log(`[${context.requestId}] Processing file upload event`);
+  async handleEvent(event: any, context: any) {
+    console.log(`[${context.requestId}] Processing event`);
     return { success: true };
   }
 }
 
-const orderApp = new OrderApp();
+const app = new ExampleApp();
 ```
 
 ### 触发器类型
@@ -100,51 +100,51 @@ import {
 import { startLocalDev } from "@fastcar/serverless/local";
 
 @Service
-class UserService {
-  private users = [
-    { id: "1", name: "张三" },
-    { id: "2", name: "李四" },
+class DataService {
+  private data = [
+    { id: "1", name: "示例1" },
+    { id: "2", name: "示例2" },
   ];
-  findAll() { return this.users; }
-  findById(id: string) { return this.users.find(u => u.id === id); }
-  create(user: any) {
-    const newUser = { id: String(Date.now()), ...user };
-    this.users.push(newUser);
-    return newUser;
+  findAll() { return this.data; }
+  findById(id: string) { return this.data.find(d => d.id === id); }
+  create(item: any) {
+    const newItem = { id: String(Date.now()), ...item };
+    this.data.push(newItem);
+    return newItem;
   }
 }
 
 @Controller
-class UserController {
+class ApiController {
   @Autowired
-  private userService!: UserService;
+  private service!: DataService;
 
-  @HttpTrigger({ path: "/users", method: "GET" })
+  @HttpTrigger({ path: "/items", method: "GET" })
   @Handler()
-  async listUsers(ctx: ServerlessContext) {
-    ctx.json({ code: 0, data: this.userService.findAll(), requestId: ctx.requestId });
+  async list(ctx: ServerlessContext) {
+    ctx.json({ code: 0, data: this.service.findAll(), requestId: ctx.requestId });
   }
 
-  @HttpTrigger({ path: "/users/:id", method: "GET" })
+  @HttpTrigger({ path: "/items/:id", method: "GET" })
   @Handler()
-  async getUser(ctx: ServerlessContext) {
-    const user = this.userService.findById(ctx.params.id);
-    if (!user) ctx.throw(404, "User not found");
-    ctx.json({ code: 0, data: user });
+  async getOne(ctx: ServerlessContext) {
+    const item = this.service.findById(ctx.params.id);
+    if (!item) ctx.throw(404, "Not found");
+    ctx.json({ code: 0, data: item });
   }
 
-  @HttpTrigger({ path: "/users", method: "POST" })
+  @HttpTrigger({ path: "/items", method: "POST" })
   @Handler()
-  async createUser(ctx: ServerlessContext) {
-    const user = this.userService.create(ctx.bodyData);
+  async create(ctx: ServerlessContext) {
+    const item = this.service.create(ctx.bodyData);
     ctx.status = 201;
-    ctx.json({ code: 0, data: user });
+    ctx.json({ code: 0, data: item });
   }
 }
 
 async function main() {
   const app = new ServerlessApplication();
-  app.register(UserController, UserService);
+  app.register(ApiController, DataService);
   app.use(ErrorMiddleware({ includeStack: true }));
   app.use(LoggerMiddleware({ logQuery: true }));
   app.use(CorsMiddleware({ origin: "*" }));
@@ -167,21 +167,21 @@ main().catch(console.error);
 
 ```typescript
 import { createFCAdapter } from "@fastcar/serverless";
-export const handler = createFCAdapter((orderApp as any).app);
+export const handler = createFCAdapter((app as any).app);
 ```
 
 ### 腾讯云 SCF
 
 ```typescript
 import { createSCFAdapter } from "@fastcar/serverless";
-export const main_handler = createSCFAdapter((orderApp as any).app);
+export const main_handler = createSCFAdapter((app as any).app);
 ```
 
 ### AWS Lambda
 
 ```typescript
 import { createLambdaAdapter } from "@fastcar/serverless";
-export const handler = createLambdaAdapter((orderApp as any).app);
+export const handler = createLambdaAdapter((app as any).app);
 ```
 
 ## 常用中间件

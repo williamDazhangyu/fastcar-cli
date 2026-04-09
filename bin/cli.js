@@ -11,6 +11,7 @@ const {
   listTargets,
   initSkill,
 } = require("../src/skill");
+const { updateCosTemplate } = require("../src/update");
 const packageINFO = require("../package.json");
 const templates = require("../src/templates.json");
 
@@ -29,6 +30,8 @@ Commands:
   reverse:init             生成 reverse.config.yml/json 配置文件
   pack [pm]                打包项目（排除 devDependencies）
                            pm: 包管理器 (npm/yarn/pnpm)，可选，默认自动检测
+
+  update:cos               更新 @fastcar/template-cos 的 target 文件夹
 
   skill install <name>     安装 FastCar skill 到本地 AI Agent
                            -g, --global   安装到全局（默认）
@@ -58,6 +61,8 @@ Examples:
   $ fastcar-cli pack           # 打包项目（自动检测包管理器）
   $ fastcar-cli pack yarn      # 使用 yarn 安装依赖
   $ fastcar-cli pack pnpm      # 使用 pnpm 安装依赖
+
+  $ fastcar-cli update:cos     # 更新 cos 模板的 target 文件夹
 
   $ fastcar-cli skill install fastcar-framework       # 交互式安装
   $ fastcar-cli skill install fastcar-framework -g    # 全局安装
@@ -149,6 +154,10 @@ async function run(argv) {
     case "pack": {
       const pm = body[0]; // 可选的包管理器参数
       packProject(null, null, pm);
+      break;
+    }
+    case "update:cos": {
+      await updateCosTemplate(body);
       break;
     }
     case "skill": {

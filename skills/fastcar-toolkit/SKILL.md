@@ -28,40 +28,34 @@ import { Service, Autowired } from "@fastcar/core/annotation";
 import { CacheApplication } from "@fastcar/cache";
 
 @Service
-class UserCacheService {
+class CacheService {
   @Autowired
   private cache!: CacheApplication;
 
-  setUser(id: string, user: any) {
+  setItem(id: string, data: any) {
     // ttl 单位秒，0 为不过期
-    this.cache.set("userStore", id, user, { ttl: 60 });
+    this.cache.set("dataStore", id, data, { ttl: 60 });
   }
 
-  getUser(id: string) {
-    return this.cache.get("userStore", id);
+  getItem(id: string) {
+    return this.cache.get("dataStore", id);
   }
 
-  hasUser(id: string) {
-    return this.cache.has("userStore", id);
+  hasItem(id: string) {
+    return this.cache.has("dataStore", id);
   }
 
-  deleteUser(id: string) {
-    return this.cache.delete("userStore", id);
+  deleteItem(id: string) {
+    return this.cache.delete("dataStore", id);
   }
 
-  getTTL(id: string) {
-    return this.cache.getTTL("userStore", id);
-  }
-
-  getAllUsers() {
-    return this.cache.getDictionary("userStore");
+  getAll() {
+    return this.cache.getDictionary("dataStore");
   }
 }
 ```
 
 ### 持久化缓存配置
-
-通过 `@CacheMapping` 配置缓存节点，支持文件持久化或数据库持久化：
 
 ```typescript
 import { CacheMapping } from "@fastcar/cache";
@@ -80,11 +74,13 @@ class CacheConfig {}
 
 ## 定时任务 (@fastcar/timer)
 
+> **推荐使用 `@fastcar/timer/scheduling2` 模块**
+
 ### 开启定时任务
 
 ```typescript
 import { Application } from "@fastcar/core/annotation";
-import { EnableScheduling } from "@fastcar/timer";
+import { EnableScheduling } from "@fastcar/timer/scheduling2";
 
 @Application
 @EnableScheduling
@@ -94,7 +90,7 @@ class APP {}
 ### 间隔任务
 
 ```typescript
-import { ScheduledInterval } from "@fastcar/timer";
+import { ScheduledInterval } from "@fastcar/timer/scheduling2";
 import { Component } from "@fastcar/core/annotation";
 
 @Component
@@ -109,7 +105,7 @@ class HeartbeatTask {
 ### Cron 任务
 
 ```typescript
-import { ScheduledCron } from "@fastcar/timer";
+import { ScheduledCron } from "@fastcar/timer/scheduling2";
 import { Component } from "@fastcar/core/annotation";
 
 @Component
@@ -123,7 +119,7 @@ class ReportTask {
 
 ## 时间轮 (@fastcar/timewheel)
 
-适用于需要大量延时任务的场景（如订单超时取消、消息延时投递）。
+适用于需要大量延时任务的场景（如超时取消、消息延时投递）。
 
 ```typescript
 import { HashedWheelTimer } from "@fastcar/timewheel";
@@ -135,7 +131,7 @@ const timer = new HashedWheelTimer<string>({
 });
 
 // 添加一个 5 秒后触发的任务
-timer.addId("order-123", 5000);
+timer.addId("job-123", 5000);
 
 // 配合心跳循环处理
 setInterval(() => {
@@ -148,7 +144,7 @@ setInterval(() => {
 }, 100);
 
 // 取消任务
-timer.removeId("order-123", slotId);
+timer.removeId("job-123", slotId);
 ```
 
 ## 工作线程池 (@fastcar/workerpool)
@@ -156,7 +152,7 @@ timer.removeId("order-123", slotId);
 将 CPU 密集型操作卸载到 worker 线程执行，避免阻塞主线程。
 
 ```typescript
-import { WorkerPool, TaskType, TaskSyncType } from "@fastcar/workerpool";
+import { WorkerPool } from "@fastcar/workerpool";
 
 const pool = new WorkerPool({
   minWorkers: 2,
@@ -167,7 +163,7 @@ const pool = new WorkerPool({
 const result = await pool.exec("heavyComputation", [1, 2, 3, 4, 5]);
 ```
 
-在 FastCar 应用中通常通过 `@fastcar/core` 的 `@WorkerPool` / `@WorkerTask` 注解使用（参考 fastcar-framework skill）。
+在 FastCar 应用中通过 `@WorkerPool` / `@WorkerTask` 注解使用（参考 fastcar-framework skill）。
 
 ## 文件监听 (@fastcar/watchfile)
 
@@ -206,7 +202,7 @@ const sign = getSign(
   {
     appid: account.appid,
     expireTime: Math.floor((Date.now() + 5 * 60 * 1000) / 1000),
-    dir_path: "/", // 授权路径
+    dir_path: "/",
     mode: 7, // 1可读 2可写 4可查
   },
   account.serectkey
@@ -232,7 +228,6 @@ await cos.uploadfile("/test/text.txt", file);
 
 // 下载文件
 const res = await cos.getFile("/test/hello/test.txt");
-console.log(res.data);
 
 // 带鉴权下载
 await cos.getFile("/test.txt", true);
@@ -256,10 +251,6 @@ await cos.rename("/test/old.txt", "/test/new.txt");
 
 // 设置重定向
 await cos.setRedirect({ redirectUrl: "/test/hello.txt", flag: false, bucket: "test" });
-
-// 查询重定向
-await cos.getRedirect();
-await cos.queryRedirect({ bucketUrl: "http://xxx" });
 ```
 
 ## 完整模块列表

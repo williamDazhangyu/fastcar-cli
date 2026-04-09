@@ -101,8 +101,8 @@ async function packProject(projectPath, outputPath, packageManager) {
   const version = packageJson.version || "0.0.0";
   const folderName = path.basename(cwd);
   const defaultOutputDir = outputPath || path.join(cwd, "dist");
-  const zipFileName = `${projectName}-${version}.zip`;
-  const zipFilePath = path.join(defaultOutputDir, zipFileName);
+  const tgzFileName = `${projectName}-${version}.tgz`;
+  const tgzFilePath = path.join(defaultOutputDir, tgzFileName);
 
   // 创建临时目录，使用项目文件夹名作为根目录名
   const tempDir = path.join(cwd, `.pack-temp-${Date.now()}`);
@@ -143,17 +143,17 @@ async function packProject(projectPath, outputPath, packageManager) {
 
     // 打包
     console.log("📦 正在生成压缩包...");
-    if (fs.existsSync(zipFilePath)) {
-      fs.rmSync(zipFilePath);
+    if (fs.existsSync(tgzFilePath)) {
+      fs.rmSync(tgzFilePath);
     }
-    await utils.zipFile(rootDir, zipFilePath);
+    await utils.zipFile(rootDir, tgzFilePath);
 
     console.log("✅ 打包完成!");
-    console.log(`   输出文件: ${zipFilePath}`);
+    console.log(`   输出文件: ${tgzFilePath}`);
     console.log(`   解压目录: ${folderName}/`);
 
     // 计算文件大小
-    const stats = fs.statSync(zipFilePath);
+    const stats = fs.statSync(tgzFilePath);
     const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
     console.log(`   文件大小: ${sizeMB} MB`);
   } catch (error) {

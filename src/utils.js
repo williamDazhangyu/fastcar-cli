@@ -55,11 +55,11 @@ function delDirEctory(src) {
 }
 
 async function unzipFile(src, dest) {
-  await compressing.zip.uncompress(src, dest);
+  await compressing.tgz.uncompress(src, dest);
 }
 
 async function zipFile(src, dest) {
-  await compressing.zip.compressDir(src, dest);
+  await compressing.tgz.compressDir(src, dest);
 }
 
 function readYaml(fp) {
