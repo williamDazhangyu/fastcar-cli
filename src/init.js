@@ -638,6 +638,14 @@ async function init(args = []) {
     console.log("📝 写入 package.json...");
     fs.writeFileSync(realPackagePath, JSON.stringify(packageInfo, null, "\t"));
 
+    // 复制 AGENTS.md 到项目根目录（如果模板没有自带）
+    const agentsSourcePath = path.join(__dirname, "..", "skills", "AGENTS.md");
+    const agentsTargetPath = path.join(currDir, "AGENTS.md");
+    if (fs.existsSync(agentsSourcePath) && !fs.existsSync(agentsTargetPath)) {
+      console.log("📝 复制 AGENTS.md 到项目根目录...");
+      fs.copyFileSync(agentsSourcePath, agentsTargetPath);
+    }
+
     // 更改配置的文件名
     const pm2RunPath = path.join(currDir, "ecosystem.config.yml");
 

@@ -124,10 +124,166 @@ async function promptMode(action = 'install') {
 }
 
 /**
+ * 执行单个 skill 安装
+ * @param {boolean|null} overwrite - true/false 直接覆盖/跳过，null 则询问
+ */
+async function installSingleSkill(skillName, skillDir, targetPath, mode, overwrite = null) {
+  // 检查是否已存在
+  const destPath = path.join(targetPath, skillName);
+  const exists = await pathExists(destPath);
+
+  if (exists) {
+    let shouldOverwrite = overwrite;
+    if (shouldOverwrite === null) {
+      const answer = await inquirer.prompt([{
+        type: 'confirm',
+        name: 'overwrite',
+        message: `Skill "${skillName}" 已存在，是否覆盖?`,
+        default: false
+      }]);
+      shouldOverwrite = answer.overwrite;
+    }
+
+    if (!shouldOverwrite) {
+      console.log(`⚠️ 跳过 ${skillName}`);
+      return false;
+    }
+
+    // 删除旧的
+    await removeDir(destPath);
+  }
+
+  // 复制 skill 文件
+  console.log(`📦 正在安装 ${skillName}...`);
+  await copyDir(skillDir, destPath);
+
+  // 验证安装
+  if (await pathExists(destPath)) {
+    const modeText = mode === 'global' ? '全局' : '本地';
+    console.log(`✅ 成功 ${modeText} 安装 ${skillName}`);
+    return true;
+  } else {
+    console.log(`❌ ${skillName} 安装验证失败`);
+    return false;
+  }
+}
+
+/**
  * 安装 skill
  */
 async function installSkill(skillName, options = {}) {
   try {
+    // 处理安装全部
+    const isAll = skillName === 'all' || options.all;
+    if (isAll) {
+      const availableSkills = await listAvailableSkills();
+      if (availableSkills.length === 0) {
+        console.log('⚠️ 没有可用的 skills');
+        return;
+      }
+
+      // 确定安装模式
+      let mode = 'global';
+      if (options.local) {
+        mode = 'local';
+      } else if (options.global) {
+        mode = 'global';
+      } else {
+        mode = await promptMode('install');
+      }
+
+      // 确定目标
+      const target = options.target || 'kimi';
+      let targetPath;
+      if (mode === 'local') {
+        targetPath = getLocalPath(target);
+      } else {
+        targetPath = getGlobalPath(target);
+      }
+
+      if (!targetPath) {
+        console.log('❌ 无法确定安装路径');
+        return;
+      }
+
+      await fsPromises.mkdir(targetPath, { recursive: true });
+
+      // 先确认覆盖策略
+      const overwriteMap = new Map();
+      const existingSkills = [];
+      for (const name of availableSkills) {
+        const destPath = path.join(targetPath, name);
+        if (await pathExists(destPath)) {
+          existingSkills.push(name);
+        } else {
+          overwriteMap.set(name, true);
+        }
+      }
+
+      let globalOverwrite = null; // null = 逐个确认, true = 全部覆盖, false = 全部跳过
+      if (existingSkills.length > 0) {
+        const { action } = await inquirer.prompt([{
+          type: 'list',
+          name: 'action',
+          message: `检测到 ${existingSkills.length} 个 skill 已存在，覆盖策略:`,
+          choices: [
+            { name: '全部覆盖', value: 'all' },
+            { name: '逐个确认', value: 'one-by-one' },
+            { name: '全部跳过', value: 'skip' }
+          ],
+          default: 'one-by-one'
+        }]);
+
+        if (action === 'all') {
+          globalOverwrite = true;
+        } else if (action === 'skip') {
+          globalOverwrite = false;
+        }
+      }
+
+      for (const name of existingSkills) {
+        if (globalOverwrite === true) {
+          overwriteMap.set(name, true);
+        } else if (globalOverwrite === false) {
+          overwriteMap.set(name, false);
+        } else {
+          const { overwrite } = await inquirer.prompt([{
+            type: 'confirm',
+            name: 'overwrite',
+            message: `Skill "${name}" 已存在，是否覆盖?`,
+            default: false
+          }]);
+          overwriteMap.set(name, overwrite);
+        }
+      }
+
+      // 过滤掉选择不覆盖的
+      const skillsToInstall = availableSkills.filter(name => overwriteMap.get(name));
+
+      // 按每批 3 个并行安装
+      const BATCH_SIZE = 3;
+      let successCount = 0;
+      for (let i = 0; i < skillsToInstall.length; i += BATCH_SIZE) {
+        const batch = skillsToInstall.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(
+          batch.map(async (name) => {
+            const skillDir = await getSkillDir(name);
+            if (!skillDir) return false;
+            return installSingleSkill(name, skillDir, targetPath, mode, true);
+          })
+        );
+        successCount += results.filter(Boolean).length;
+      }
+
+      const total = availableSkills.length;
+      const skipped = total - skillsToInstall.length;
+      console.log();
+      console.log(`🎉 共安装 ${successCount}/${total} 个 skills${skipped > 0 ? `（跳过 ${skipped} 个）` : ''}`);
+      console.log();
+      console.log('⚠️  重要: 请重启你的 AI agent 以加载新安装的 skills！');
+      return;
+    }
+
     // 检查 skill 是否存在
     const skillDir = await getSkillDir(skillName);
     if (!skillDir) {
@@ -149,7 +305,7 @@ async function installSkill(skillName, options = {}) {
 
     // 确定目标
     const target = options.target || 'kimi';
-    
+
     // 确定目标路径
     let targetPath;
     if (mode === 'local') {
@@ -166,35 +322,10 @@ async function installSkill(skillName, options = {}) {
     // 确保目标目录存在
     await fsPromises.mkdir(targetPath, { recursive: true });
 
-    // 检查是否已存在
-    const destPath = path.join(targetPath, skillName);
-    const exists = await pathExists(destPath);
+    const ok = await installSingleSkill(skillName, skillDir, targetPath, mode);
 
-    if (exists) {
-      const { overwrite } = await inquirer.prompt([{
-        type: 'confirm',
-        name: 'overwrite',
-        message: `Skill "${skillName}" 已存在，是否覆盖?`,
-        default: false
-      }]);
-
-      if (!overwrite) {
-        console.log('⚠️ 已取消安装');
-        return;
-      }
-
-      // 删除旧的
-      await removeDir(destPath);
-    }
-
-    // 复制 skill 文件
-    console.log(`📦 正在安装 ${skillName}...`);
-    await copyDir(skillDir, destPath);
-
-    // 验证安装
-    if (await pathExists(destPath)) {
-      const modeText = mode === 'global' ? '全局' : '本地';
-      console.log(`✅ 成功 ${modeText} 安装 ${skillName}`);
+    if (ok) {
+      const destPath = path.join(targetPath, skillName);
       console.log(`   位置: ${destPath}`);
       console.log();
       console.log('⚠️  重要: 请重启你的 AI agent 以加载新安装的 skill！');
@@ -202,8 +333,6 @@ async function installSkill(skillName, options = {}) {
       console.log('重启后，你可以在对话中:');
       console.log(`  • 直接询问关于 "${skillName}" 的内容`);
       console.log(`  • 使用 /skill:${skillName} 强制加载该 skill`);
-    } else {
-      console.log('❌ 安装验证失败');
     }
   } catch (error) {
     console.log(`❌ 错误: ${error.message}`);

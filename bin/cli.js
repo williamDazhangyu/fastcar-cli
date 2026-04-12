@@ -34,6 +34,7 @@ Commands:
   update:cos               更新 @fastcar/template-cos 的 target 文件夹
 
   skill install <name>     安装 FastCar skill 到本地 AI Agent
+                           使用 all 或 --all 安装全部 skills
                            -g, --global   安装到全局（默认）
                            -l, --local    安装到项目级
                            -t, --target   目标 agent (kimi/claude/cursor)
@@ -68,6 +69,8 @@ Examples:
   $ fastcar-cli skill install fastcar-framework -g    # 全局安装
   $ fastcar-cli skill install fastcar-framework -l    # 本地安装
   $ fastcar-cli skill install fastcar-framework -t kimi # 安装到 Kimi
+  $ fastcar-cli skill install all                     # 安装全部 skills
+  $ fastcar-cli skill install --all -g                # 全局安装全部 skills
   $ fastcar-cli skill list                            # 列出可用 skills
   $ fastcar-cli skill targets                         # 列出支持的 agents
 
@@ -168,6 +171,7 @@ async function run(argv) {
       const options = {
         global: args.includes("-g") || args.includes("--global"),
         local: args.includes("-l") || args.includes("--local"),
+        all: args.includes("--all"),
         target: null,
       };
 
@@ -182,14 +186,14 @@ async function run(argv) {
 
       switch (subCmd) {
         case "install": {
-          if (!skillName) {
-            console.log("❌ 请指定 skill 名称");
+          if (!skillName && !options.all) {
+            console.log("❌ 请指定 skill 名称，或使用 all/--all 安装全部");
             console.log(
               "用法: fastcar-cli skill install <skill-name> [options]",
             );
             return;
           }
-          installSkill(skillName, options);
+          await installSkill(skillName || 'all', options);
           break;
         }
         case "uninstall": {
@@ -200,11 +204,11 @@ async function run(argv) {
             );
             return;
           }
-          uninstallSkill(skillName, options);
+          await uninstallSkill(skillName, options);
           break;
         }
         case "list": {
-          listSkills();
+          await listSkills();
           break;
         }
         case "targets": {
@@ -212,7 +216,7 @@ async function run(argv) {
           break;
         }
         case "init": {
-          initSkill(options);
+          await initSkill(options);
           break;
         }
         default: {

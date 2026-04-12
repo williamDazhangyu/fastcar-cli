@@ -64,6 +64,7 @@ app.start();
 
 ```typescript
 import { GET, POST, REQUEST } from "@fastcar/koa/annotation";
+import { Context } from "koa";
 
 @Controller
 @REQUEST("/api/items")
@@ -73,16 +74,16 @@ class ItemController {
   async list() {
     return { data: [] };
   }
-  
+
   // GET 请求 - 有路径参数
   @GET("/:id")
-  async getById(id: string) {
+  async getById(id: string, ctx: Context) {
     return { id };
   }
-  
+
   // POST 请求
   @POST()
-  async create(body: ItemDTO) {
+  async create(body: ItemDTO, ctx: Context) {
     return { created: true };
   }
 }
@@ -91,9 +92,9 @@ class ItemController {
 **⚠️ 重要：FastCar 没有 `@Body`, `@Param`, `@Query` 装饰器**
 
 - 请求参数直接作为方法参数传入
-- GET 请求参数通过方法参数直接获取
-- POST 请求体通过 `body` 参数获取
-- 路径参数通过方法参数直接获取
+- 第一个参数为请求数据（GET 的 query / POST 的 body / 路径参数）
+- 第二个参数为 Koa 上下文 `ctx: Context`，**可省略**
+- `Context` 需从 `koa` 导入：`import { Context } from "koa"`
 
 ### 数据库 (@fastcar/mysql)
 

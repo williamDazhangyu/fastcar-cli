@@ -26,7 +26,14 @@ export default new APP();
 #### 定义实体模型
 
 ```typescript
-import { Table, Field, DBType, PrimaryKey, NotNull, Size } from "@fastcar/core/annotation";
+import {
+  Table,
+  Field,
+  DBType,
+  PrimaryKey,
+  NotNull,
+  Size,
+} from "@fastcar/core/annotation";
 
 @Table("entities")
 class Entity {
@@ -82,7 +89,7 @@ class EntityService {
   private mapper!: EntityMapper;
 
   // ===== 查询方法 =====
-  
+
   // 查询列表
   async list() {
     return this.mapper.select({});
@@ -118,28 +125,92 @@ class EntityService {
   // 多条件 AND
   async queryByConditions(name: string, status: number) {
     return this.mapper.select({
-      where: { name, status, delStatus: false }
+      where: { name, status, delStatus: false },
     });
   }
 
   // 比较运算符
   async queryByRange(min: number, max: number) {
     return this.mapper.select({
-      where: { value: { [OperatorEnum.gte]: min, [OperatorEnum.lte]: max } }
+      where: { value: { [OperatorEnum.gte]: min, [OperatorEnum.lte]: max } },
     });
   }
 
   // IN 查询
   async queryByIds(ids: number[]) {
     return this.mapper.select({
-      where: { id: { [OperatorEnum.in]: ids } }
+      where: { id: { [OperatorEnum.in]: ids } },
     });
   }
 
   // IS NULL 查询
   async queryDeleted() {
     return this.mapper.select({
-      where: { deletedAt: { [OperatorEnum.isNUll]: true } }
+      where: { deletedAt: { [OperatorEnum.isNUll]: true } },
+    });
+  }
+
+  // ===== AND 条件查询 =====
+
+  // 方式1：默认多字段自动 AND
+  async queryByMultipleConditions(name: string, status: number) {
+    return this.mapper.select({
+      where: { name, status, delStatus: false },
+      // 生成 SQL: WHERE name = ? AND status = ? AND del_status = ?
+    });
+  }
+
+  // 方式2：同一字段多条件 AND
+  async queryByAgeRange(min: number, max: number) {
+    return this.mapper.select({
+      where: {
+        age: { [OperatorEnum.gte]: min, [OperatorEnum.lte]: max },
+        // 生成 SQL: WHERE age >= ? AND age <= ?
+      },
+    });
+  }
+
+  // ===== OR 条件查询 =====
+
+  // 方式1：对象形式（推荐）- 不同字段 OR
+  async queryByNameOrEmail(keyword: string) {
+    return this.mapper.select({
+      where: {
+        [JoinEnum.or]: {
+          name: keyword,
+          email: keyword,
+        },
+        // 生成 SQL: WHERE name = ? OR email = ?
+      },
+    });
+  }
+
+  // 方式2：数组形式 - 复杂条件 OR
+  async queryComplexOr() {
+    return this.mapper.select({
+      where: {
+        [JoinEnum.or]: [
+          { status: 1, type: "A" },
+          { status: 2, type: "B" },
+        ],
+        // 生成 SQL: WHERE (status = 1 AND type = 'A') OR (status = 2 AND type = 'B')
+      },
+    });
+  }
+
+  // ===== AND 与 OR 组合 =====
+
+  async queryComplex(department: string, status: number, keyword: string) {
+    return this.mapper.select({
+      where: {
+        department,
+        [JoinEnum.or]: {
+          name: { [OperatorEnum.like]: `%${keyword}%` },
+          email: { [OperatorEnum.like]: `%${keyword}%` },
+        },
+        status,
+        // 生成 SQL: WHERE department = ? AND (name LIKE ? OR email LIKE ?) AND status = ?
+      },
     });
   }
 
@@ -148,7 +219,7 @@ class EntityService {
   async getOrdered() {
     return this.mapper.select({
       where: { status: 1 },
-      orders: { createdAt: OrderEnum.desc }
+      orders: { createdAt: OrderEnum.desc },
     });
   }
 
@@ -156,7 +227,7 @@ class EntityService {
     return this.mapper.select({
       orders: { id: OrderEnum.desc },
       offset: (page - 1) * pageSize,
-      limit: pageSize
+      limit: pageSize,
     });
   }
 
@@ -184,7 +255,7 @@ class EntityService {
   async updateName(id: number, name: string) {
     return this.mapper.update({
       where: { id },
-      row: { name, updatedAt: new Date() }
+      row: { name, updatedAt: new Date() },
     });
   }
 
@@ -202,7 +273,7 @@ class EntityService {
   async softDelete(id: number) {
     return this.mapper.update({
       where: { id },
-      row: { delStatus: true, deletedAt: new Date() }
+      row: { delStatus: true, deletedAt: new Date() },
     });
   }
 
@@ -221,18 +292,20 @@ class EntityService {
   // selectByCustom 支持 JOIN、分组、聚合
   async advancedQuery() {
     // 指定字段 + 泛型类型
-    const results = await this.mapper.selectByCustom<{ 
-      id: number; 
-      name: string; 
+    const results = await this.mapper.selectByCustom<{
+      id: number;
+      name: string;
       relatedName: string;
     }>({
       tableAlias: "t",
       fields: ["t.id", "t.name", "r.name as relatedName"],
-      join: [{
-        type: "LEFT",
-        table: "related_table r",
-        on: "r.entity_id = t.id"
-      }],
+      join: [
+        {
+          type: "LEFT",
+          table: "related_table r",
+          on: "r.entity_id = t.id",
+        },
+      ],
       where: { "t.status": 1 },
       camelcaseStyle: true,
     });
@@ -242,10 +315,10 @@ class EntityService {
       fields: [
         "status",
         "COUNT(*) as totalCount",
-        "MAX(created_at) as lastCreated"
+        "MAX(created_at) as lastCreated",
       ],
       groups: ["status"],
-      orders: { totalCount: OrderEnum.desc }
+      orders: { totalCount: OrderEnum.desc },
     });
 
     return { results, stats };
@@ -255,7 +328,7 @@ class EntityService {
   async customQuery() {
     return this.mapper.query(
       "SELECT * FROM entities WHERE status = ? AND created_at > ?",
-      [1, "2024-01-01"]
+      [1, "2024-01-01"],
     );
   }
 }
@@ -284,6 +357,18 @@ import { OperatorEnum, OrderEnum } from "@fastcar/core/db";
 { where: { deletedAt: { [OperatorEnum.isNUll]: true } } }
 { where: { deletedAt: { [OperatorEnum.isNotNull]: true } } }
 
+// AND（默认，多字段自动 AND）
+{ where: { name: "A", status: 1 } }
+
+// OR（对象形式 - 推荐，不同字段）
+{ where: { [JoinEnum.or]: { name: "A", email: "A" } } }
+
+// OR（数组形式，复杂条件）
+{ where: { [JoinEnum.or]: [{ status: 1 }, { status: 2 }] } }
+
+// AND + OR 组合
+{ where: { status: 1, [JoinEnum.or]: { type: 1, category: 2 } } }
+
 // 排序
 { orders: { createdAt: OrderEnum.desc } }
 
@@ -310,14 +395,18 @@ class BizService {
 
   async transactionExample(dataA: any, dataB: any) {
     const sessionId = await this.dsm.beginTransaction();
-    
+
     try {
       await this.mapperA.saveOne(dataA, undefined, sessionId);
-      await this.mapperB.update({
-        where: { id: dataB.id },
-        row: { status: dataB.status }
-      }, undefined, sessionId);
-      
+      await this.mapperB.update(
+        {
+          where: { id: dataB.id },
+          row: { status: dataB.status },
+        },
+        undefined,
+        sessionId,
+      );
+
       await this.dsm.commit(sessionId);
       return true;
     } catch (error) {
@@ -469,13 +558,13 @@ redis:
 
 ## 完整模块列表
 
-| 模块 | 安装命令 | 用途 |
-|------|----------|------|
-| @fastcar/mysql | `npm i @fastcar/mysql` | MySQL ORM |
-| @fastcar/pgsql | `npm i @fastcar/pgsql` | PostgreSQL ORM |
-| @fastcar/mongo | `npm i @fastcar/mongo` | MongoDB |
-| @fastcar/redis | `npm i @fastcar/redis` | Redis 缓存 |
-| @fastcar/mysql-tool | `npm i @fastcar/mysql-tool` | 逆向生成工具 |
+| 模块                | 安装命令                    | 用途           |
+| ------------------- | --------------------------- | -------------- |
+| @fastcar/mysql      | `npm i @fastcar/mysql`      | MySQL ORM      |
+| @fastcar/pgsql      | `npm i @fastcar/pgsql`      | PostgreSQL ORM |
+| @fastcar/mongo      | `npm i @fastcar/mongo`      | MongoDB        |
+| @fastcar/redis      | `npm i @fastcar/redis`      | Redis 缓存     |
+| @fastcar/mysql-tool | `npm i @fastcar/mysql-tool` | 逆向生成工具   |
 
 ## 快速开始
 
@@ -498,6 +587,93 @@ npm run debug
 3. **批量插入**：`saveList` 会自动分批处理（每批1000条）
 4. **软删除**：建议使用 `update` 方法更新 `delStatus` 字段，而不是物理删除
 
+## 数据库查询最佳实践
+
+### ⚠️ 分页查询 - 必须使用数据库层分页
+
+**核心原则**：分页必须在数据库层完成，严禁全表查询后在内存中切片。
+
+```typescript
+// ✅ 正确：使用 SQL LIMIT/OFFSET 分页（数据库层完成分页）
+const list = await this.mapper.select({
+  where: { status: 1 },
+  orders: { id: OrderEnum.desc },
+  offset: (page - 1) * pageSize,
+  limit: pageSize,  // 只取需要的记录
+});
+
+// ✅ 正确：使用游标/滚动分页（适合大数据量）
+const list = await this.mapper.select({
+  where: { 
+    id: { [OperatorEnum.lt]: lastId }  // 基于上一页最后ID
+  },
+  orders: { id: OrderEnum.desc },
+  limit: pageSize,
+});
+
+// ❌ 错误：全表查询后在内存中切片（数据量大时会导致 OOM）
+const allData = await this.mapper.select({ where: { status: 1 } });  // 可能百万级数据
+const pageData = allData.slice((page - 1) * pageSize, page * pageSize);  // 内存中切片
+```
+
+**为什么重要**：
+- 全表查询会将所有数据加载到 Node.js 内存，数据量大时会导致内存溢出（OOM）
+- 网络传输大量无用数据，严重影响性能
+- 数据库层分页只返回需要的记录，内存占用固定
+
+---
+
+### ⚠️ 分组聚合 - 必须使用数据库层 GROUP BY
+
+**核心原则**：分组统计必须在数据库层完成，严禁全表查询后在 JS 中分组。
+
+```typescript
+// ✅ 正确：使用 SQL GROUP BY 分组（数据库层聚合）
+const stats = await this.mapper.selectByCustom({
+  fields: [
+    "status",
+    "COUNT(*) as count",
+    "SUM(amount) as totalAmount",
+    "MAX(created_at) as latestTime",
+  ],
+  groups: ["status"],  // 数据库层分组
+  orders: { count: OrderEnum.desc },
+});
+
+// ✅ 正确：使用 JOIN + GROUP BY 关联聚合
+const userOrderStats = await this.mapper.selectByCustom({
+  fields: [
+    "u.id",
+    "u.name",
+    "COUNT(o.id) as orderCount",
+    "SUM(o.amount) as totalAmount",
+  ],
+  join: [{
+    type: "LEFT",
+    table: "orders o",
+    on: "o.user_id = u.id",
+  }],
+  groups: ["u.id", "u.name"],  // 数据库层分组聚合
+});
+
+// ❌ 错误：全表查询后在 JS 中分组（数据量大时会导致 OOM）
+const allRecords = await this.mapper.select({});  // 加载所有数据
+const grouped = allRecords.reduce((acc, item) => {
+  if (!acc[item.status]) acc[item.status] = { count: 0, total: 0 };
+  acc[item.status].count++;
+  acc[item.status].total += item.amount;
+  return acc;
+}, {});  // 内存中分组，大数据量时性能极差
+```
+
+**为什么重要**：
+- 数据库专为聚合计算优化，性能远高于 JS 遍历
+- 减少网络传输（只返回聚合结果，而非原始数据）
+- 避免 JS 单线程处理大量数据的性能瓶颈
+- 防止内存溢出风险
+
+---
+
 ## 编码规范
 
 ### 1. 实体对象创建规范
@@ -505,9 +681,9 @@ npm run debug
 ```typescript
 // ✅ 正确：使用 key-value 形式创建对象
 const entity = new Entity({
-    name: "示例",
-    status: 1,
-    createTime: new Date(),
+  name: "示例",
+  status: 1,
+  createTime: new Date(),
 });
 
 // ❌ 错误：逐行赋值创建对象
@@ -522,10 +698,10 @@ entity.status = 1;
 // ✅ 正确：使用 SQL limit/offset 分页
 const total = await this.mapper.count(where);
 const list = await this.mapper.select({
-    where: where,
-    orders: { createTime: OrderEnum.desc },
-    offset: (page - 1) * pageSize,
-    limit: pageSize,
+  where: where,
+  orders: { createTime: OrderEnum.desc },
+  offset: (page - 1) * pageSize,
+  limit: pageSize,
 });
 
 // ❌ 错误：先全表查询再用 JS slice 分页
@@ -540,10 +716,10 @@ import { OperatorEnum } from "@fastcar/core/db";
 
 // ✅ 正确：使用 OperatorEnum
 const list = await this.mapper.select({
-    where: {
-        age: { [OperatorEnum.gte]: 18, [OperatorEnum.lte]: 60 },
-        status: { [OperatorEnum.in]: [1, 2, 3] },
-    },
+  where: {
+    age: { [OperatorEnum.gte]: 18, [OperatorEnum.lte]: 60 },
+    status: { [OperatorEnum.in]: [1, 2, 3] },
+  },
 });
 ```
 
@@ -552,12 +728,12 @@ const list = await this.mapper.select({
 ```typescript
 // ✅ 正确：返回空数据
 if (records.length === 0) {
-    return Result.ok({ list: [], total: 0 });
+  return Result.ok({ list: [], total: 0 });
 }
 
 // ❌ 错误：返回模拟数据
 if (records.length === 0) {
-    return Result.ok({ list: [{ name: "模拟数据1" }] });
+  return Result.ok({ list: [{ name: "模拟数据1" }] });
 }
 ```
 
@@ -566,8 +742,8 @@ if (records.length === 0) {
 ```typescript
 // ✅ 正确：更新少于3个字段时使用 update/updateOne
 await this.mapper.updateOne({
-    where: { id },
-    row: { lastLoginTime: new Date() },
+  where: { id },
+  row: { lastLoginTime: new Date() },
 });
 
 // ❌ 错误：为了更新1-2个字段而查询整个实体对象
