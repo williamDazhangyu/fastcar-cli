@@ -139,6 +139,11 @@ fastcar-cli skill install fastcar-framework -g
 # 本地安装（仅当前项目可用）
 fastcar-cli skill install fastcar-framework --local
 fastcar-cli skill install fastcar-framework -l
+# 若项目根目录不存在 AGENTS.md，会自动补到项目根目录
+
+# 安装全部 skills（会同时补充共享的 AGENTS.md）
+fastcar-cli skill install all
+fastcar-cli skill install --all -g
 
 # 指定目标 agent
 fastcar-cli skill install fastcar-framework --target kimi
@@ -159,6 +164,10 @@ fastcar-cli skill install fastcar-framework -t claude
 
 ```bash
 fastcar-cli skill uninstall fastcar-framework
+
+# 卸载全部 skills（保留共享的 AGENTS.md）
+fastcar-cli skill uninstall all
+fastcar-cli skill uninstall --all -l
 ```
 
 #### 初始化项目级 agent 配置

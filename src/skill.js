@@ -20,6 +20,13 @@ function getSkillsDir() {
 }
 
 /**
+ * 获取共享 AGENTS.md 路径
+ */
+function getSharedAgentsPath() {
+  return path.join(getSkillsDir(), 'AGENTS.md');
+}
+
+/**
  * 检查路径是否存在
  */
 async function pathExists(checkPath) {
@@ -88,6 +95,54 @@ async function copyDir(src, dest) {
       await fsPromises.copyFile(srcPath, destPath);
     }
   }
+}
+
+/**
+ * 安装共享 AGENTS.md 到指定目录
+ */
+async function installSharedAgentsFile(targetPath) {
+  const agentsSourcePath = getSharedAgentsPath();
+  const agentsTargetPath = path.join(targetPath, 'AGENTS.md');
+
+  if (!(await pathExists(agentsSourcePath)) || (await pathExists(agentsTargetPath))) {
+    return false;
+  }
+
+  await fsPromises.copyFile(agentsSourcePath, agentsTargetPath);
+  return true;
+}
+
+/**
+ * 本地安装时，补充项目根目录 AGENTS.md
+ */
+async function installProjectAgentsFile() {
+  const agentsSourcePath = getSharedAgentsPath();
+  const agentsTargetPath = path.join(process.cwd(), 'AGENTS.md');
+
+  if (!(await pathExists(agentsSourcePath)) || (await pathExists(agentsTargetPath))) {
+    return false;
+  }
+
+  await fsPromises.copyFile(agentsSourcePath, agentsTargetPath);
+  return true;
+}
+
+/**
+ * 安装 AGENTS.md
+ */
+async function syncAgentsFiles(targetPath, mode) {
+  const installed = {
+    skillRoot: false,
+    projectRoot: false
+  };
+
+  installed.skillRoot = await installSharedAgentsFile(targetPath);
+
+  if (mode === 'local') {
+    installed.projectRoot = await installProjectAgentsFile();
+  }
+
+  return installed;
 }
 
 /**
@@ -207,6 +262,13 @@ async function installSkill(skillName, options = {}) {
       }
 
       await fsPromises.mkdir(targetPath, { recursive: true });
+      const agentsInstalled = await syncAgentsFiles(targetPath, mode);
+      if (agentsInstalled.skillRoot) {
+        console.log('📝 已同步 skills 目录 AGENTS.md');
+      }
+      if (agentsInstalled.projectRoot) {
+        console.log('📝 已同步项目根目录 AGENTS.md');
+      }
 
       // 先确认覆盖策略
       const overwriteMap = new Map();
@@ -321,6 +383,13 @@ async function installSkill(skillName, options = {}) {
 
     // 确保目标目录存在
     await fsPromises.mkdir(targetPath, { recursive: true });
+    const agentsInstalled = await syncAgentsFiles(targetPath, mode);
+    if (agentsInstalled.skillRoot) {
+      console.log('📝 已同步 skills 目录 AGENTS.md');
+    }
+    if (agentsInstalled.projectRoot) {
+      console.log('📝 已同步项目根目录 AGENTS.md');
+    }
 
     const ok = await installSingleSkill(skillName, skillDir, targetPath, mode);
 
@@ -363,6 +432,52 @@ async function uninstallSkill(skillName, options = {}) {
       targetPath = getLocalPath(target);
     } else {
       targetPath = getGlobalPath(target);
+    }
+
+    if (!targetPath) {
+      console.log('❌ 无法确定卸载路径');
+      return;
+    }
+
+    const isAll = skillName === 'all' || options.all;
+    if (isAll) {
+      const availableSkills = await listAvailableSkills();
+      const installedSkills = [];
+
+      for (const name of availableSkills) {
+        const skillPath = path.join(targetPath, name);
+        if (await pathExists(skillPath)) {
+          installedSkills.push(name);
+        }
+      }
+
+      if (installedSkills.length === 0) {
+        console.log(`⚠️ ${targetPath} 中没有可卸载的 skills`);
+        return;
+      }
+
+      const { confirm } = await inquirer.prompt([{
+        type: 'confirm',
+        name: 'confirm',
+        message: `确认卸载全部 ${installedSkills.length} 个 skills?`,
+        default: false
+      }]);
+
+      if (!confirm) {
+        console.log('⚠️ 已取消卸载');
+        return;
+      }
+
+      let removedCount = 0;
+      for (const name of installedSkills) {
+        console.log(`🗑️  正在卸载 ${name}...`);
+        await removeDir(path.join(targetPath, name));
+        removedCount += 1;
+      }
+
+      console.log(`✅ 成功卸载 ${removedCount} 个 skills`);
+      console.log('ℹ️ 已保留共享 AGENTS.md');
+      return;
     }
 
     const skillPath = path.join(targetPath, skillName);

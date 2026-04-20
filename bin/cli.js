@@ -39,6 +39,7 @@ Commands:
                            -l, --local    安装到项目级
                            -t, --target   目标 agent (kimi/claude/cursor)
   skill uninstall <name>   卸载 FastCar skill
+                           使用 all 或 --all 卸载全部 skills
   skill list               列出可用的 skills
   skill targets            列出支持的 AI Agents
   skill init               初始化项目级 agent 配置
@@ -71,6 +72,8 @@ Examples:
   $ fastcar-cli skill install fastcar-framework -t kimi # 安装到 Kimi
   $ fastcar-cli skill install all                     # 安装全部 skills
   $ fastcar-cli skill install --all -g                # 全局安装全部 skills
+  $ fastcar-cli skill uninstall fastcar-framework     # 卸载单个 skill
+  $ fastcar-cli skill uninstall all                   # 卸载全部 skills
   $ fastcar-cli skill list                            # 列出可用 skills
   $ fastcar-cli skill targets                         # 列出支持的 agents
 
@@ -197,14 +200,14 @@ async function run(argv) {
           break;
         }
         case "uninstall": {
-          if (!skillName) {
-            console.log("❌ 请指定 skill 名称");
+          if (!skillName && !options.all) {
+            console.log("❌ 请指定 skill 名称，或使用 all/--all 卸载全部");
             console.log(
               "用法: fastcar-cli skill uninstall <skill-name> [options]",
             );
             return;
           }
-          await uninstallSkill(skillName, options);
+          await uninstallSkill(skillName || 'all', options);
           break;
         }
         case "list": {
