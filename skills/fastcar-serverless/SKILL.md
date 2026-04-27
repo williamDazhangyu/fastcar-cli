@@ -1,11 +1,21 @@
 ---
 name: fastcar-serverless
-description: FastCar Serverless 开发指南。Use when working with FastCar framework for: (1) Building serverless functions for Aliyun FC, Tencent SCF, or AWS Lambda, (2) Using @ServerlessApp, @Handler, @HttpTrigger, @TimerTrigger, @EventTrigger decorators, (3) Local development and debugging of serverless applications, (4) Integrating Koa middleware in serverless environments.
+description: FastCar Serverless 开发指南。Use when building or modifying FastCar serverless functions for Aliyun FC, Tencent SCF, AWS Lambda, HTTP triggers, timer triggers, event triggers, local debugging, or platform adapters.
 ---
 
 # FastCar Serverless
 
 FastCar Serverless 框架支持将 FastCar 应用部署到阿里云函数计算（FC）、腾讯云云函数（SCF）和 AWS Lambda，同时提供本地开发调试能力。
+
+## Agent 使用指南
+
+使用本 skill 时：
+
+- 先遵守 `skills/AGENTS.md` 的共享规则。
+- 适合处理 `@ServerlessApp`、`@Handler`、`@HttpTrigger`、`@TimerTrigger`、`@EventTrigger`、本地调试和云平台适配器。
+- HTTP、定时和事件触发器的入参结构不同，生成代码时必须明确事件来源。
+- 不要在示例之外硬编码云平台密钥、区域、账号或生产 URL。
+- 返回值应符合目标平台适配器要求，HTTP 场景要明确 `statusCode`、`headers` 和 `body`。
 
 ## 核心装饰器
 

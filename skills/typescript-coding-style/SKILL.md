@@ -1,9 +1,19 @@
 ---
 name: typescript-coding-style
-description: TypeScript 编码规范与最佳实践。Use when writing TypeScript code for: (1) Defining reusable type aliases for complex intersection types, (2) Using enums instead of string literals for status fields, (3) Naming conventions for types and interfaces, (4) Code organization and maintainability tips.
+description: TypeScript 编码规范与最佳实践。Use when writing or reviewing TypeScript types, interfaces, enums, reusable aliases, status fields, naming conventions, maintainability, or FastCar example code.
 ---
 
 # TypeScript 编码规范
+
+## Agent 使用指南
+
+使用本 skill 时：
+
+- 先遵守 `skills/AGENTS.md` 的共享规则。
+- 适合处理 TypeScript 类型设计、枚举、命名、复杂类型复用和示例代码可维护性。
+- 复杂交叉类型在 2 处及以上使用时，应提取类型别名或接口。
+- 状态、类型、模式等离散字段优先使用字符串枚举。
+- 不要为了减少代码行数牺牲类型可读性。
 
 ## 1. 复用复杂类型别名
 

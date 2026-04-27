@@ -1,11 +1,21 @@
 ---
 name: fastcar-rpc-microservices
-description: FastCar RPC 与微服务开发指南。Use when working with FastCar framework for: (1) Building RPC servers and clients with @fastcar/rpc, (2) Using WebSocket/SocketIO/MQTT/gRPC for service communication, (3) Setting up microservices architecture, (4) Configuring RPC endpoints, authentication, retry policies, (5) Using protobuf with RPC.
+description: FastCar RPC 与微服务开发指南。Use when building or modifying @fastcar/rpc servers, clients, WebSocket, Socket.IO, MQTT, gRPC, protobuf calls, authentication, retry policies, or microservices topology.
 ---
 
 # FastCar RPC & Microservices
 
 FastCar RPC 模块提供基于多种协议（WS、SocketIO、MQTT、gRPC）的远程调用能力，并支持构建多服务微服务架构。
+
+## Agent 使用指南
+
+使用本 skill 时：
+
+- 先遵守 `skills/AGENTS.md` 的共享规则。
+- 适合处理 RPC 服务端、客户端、协议配置、认证、重试策略、protobuf 和微服务拓扑。
+- 修改微服务配置时，保持 `center`、`connector`、`message`、`web`、`base` 的职责清晰。
+- 不要把认证令牌、证书、账号密码写死到示例之外的业务代码中。
+- 示例配置应明确协议类型、端口、`serviceType`、`front` 和重试参数的含义。
 
 ## RPC 核心概念
 
@@ -255,7 +265,7 @@ npm run debug
 
 # Microservices 项目
 mkdir my-ms-app && cd my-ms-app
-fastcar-cli init microservices
+fastcar-cli init micro
 npm install
 npm run start-node
 ```

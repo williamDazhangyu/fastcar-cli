@@ -91,44 +91,44 @@ appName!: string;
 ### 路由装饰器
 
 ```typescript
-@Get(path?)       // GET 请求
-@Post(path?)      // POST 请求
-@Put(path?)       // PUT 请求
-@Delete(path?)    // DELETE 请求
-@Patch(path?)     // PATCH 请求
-@RequestMapping(path)  // 通用路由
+@GET(path?)       // GET 请求，必须以函数调用形式使用
+@POST(path?)      // POST 请求，必须以函数调用形式使用
+@PUT(path?)       // PUT 请求，必须以函数调用形式使用
+@DELETE(path?)    // DELETE 请求，必须以函数调用形式使用
+@PATCH(path?)     // PATCH 请求，必须以函数调用形式使用
+@REQUEST(path)    // 控制器路由前缀
 ```
 
-### 参数装饰器
+### Controller 参数规则
 
-```typescript
-@Param(name)      // URL 参数 /:id
-@Query(name?)     // 查询参数 ?key=value
-@Body             // 请求体
-@Header(name?)    // 请求头
-@Ctx              // Koa Context
-@Request          // 请求对象
-@Response         // 响应对象
-```
+FastCar Koa 没有 `@Body`、`@Param`、`@Query` 参数装饰器。
+
+- 第一个方法参数接收请求数据：GET query、path params 或 POST body。
+- 第二个方法参数可选接收 `ctx?: Context`。
+- `Context` 必须从 `koa` 导入。
 
 ### 示例
 
 ```typescript
+import { Controller } from "@fastcar/core/annotation";
+import { GET, POST, REQUEST } from "@fastcar/koa/annotation";
+import { Context } from "koa";
+
 @Controller
-@RequestMapping("/api/users")
+@REQUEST("/api/users")
 class UserController {
-  @Get
-  async list(@Query("page") page: number = 1) {
-    return { page, data: [] };
+  @GET()
+  async list(query: { page?: number } = {}) {
+    return { page: query.page ?? 1, data: [] };
   }
 
-  @Get("/:id")
-  async get(@Param("id") id: string) {
+  @GET("/:id")
+  async get(id: string, ctx?: Context) {
     return { id };
   }
 
-  @Post
-  async create(@Body user: UserDTO) {
+  @POST()
+  async create(user: UserDTO) {
     return { created: user };
   }
 }

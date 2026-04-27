@@ -1,11 +1,21 @@
 ---
 name: fastcar-database
-description: FastCar 数据库与缓存开发指南。Use when working with FastCar framework for: (1) MySQL/PostgreSQL/MongoDB operations with @fastcar/mysql, @fastcar/pgsql, @fastcar/mongo, (2) Redis caching with @fastcar/redis, (3) Reverse engineering database tables to models/mappers with @fastcar/mysql-tool, (4) Writing entity models with decorators (@Table, @Field, @PrimaryKey, @Repository), (5) Using MysqlMapper/PgsqlMapper/MongoMapper for CRUD, joins, transactions.
+description: FastCar 数据库与缓存开发指南。Use when writing or reviewing MySQL, PostgreSQL, MongoDB, Redis, ORM mapper, entity model, transaction, query optimization, or reverse-generation code for FastCar applications.
 ---
 
 # FastCar Database
 
 FastCar 数据库模块提供基于装饰器的 ORM 支持，涵盖 MySQL、PostgreSQL、MongoDB 和 Redis。
+
+## Agent 使用指南
+
+使用本 skill 时：
+
+- 先遵守 `skills/AGENTS.md` 的共享规则。
+- 适合处理实体模型、Mapper、CRUD、事务、Redis 缓存、逆向生成和 SQL 查询优化。
+- 分页、分组、聚合、排序和 JOIN 必须在数据库层完成。
+- 排序必须使用 `OrderEnum`，条件运算符必须使用 `OperatorEnum` / `JoinEnum`。
+- 状态、类型、模式等离散字段必须使用枚举，不要使用魔法字符串或裸数字。
 
 ## 模块速查
 

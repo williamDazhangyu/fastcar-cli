@@ -1,11 +1,21 @@
 ---
 name: fastcar-toolkit
-description: FastCar 工具集开发指南。Use when working with FastCar framework for: (1) In-memory caching with @fastcar/cache, (2) Scheduled tasks and cron jobs with @fastcar/timer, (3) Delayed tasks with HashedWheelTimer from @fastcar/timewheel, (4) CPU-intensive operations with @fastcar/workerpool, (5) File watching with @fastcar/watchfile, (6) Object storage operations with @fastcar/cossdk.
+description: FastCar 工具集开发指南。Use when adding or reviewing FastCar cache, scheduled tasks, cron jobs, delayed tasks, time wheel, worker pool, file watcher, or COS/object-storage SDK code.
 ---
 
 # FastCar Toolkit
 
 FastCar Toolkit 汇总了框架提供的各类工具模块，包括缓存、定时任务、时间轮、工作线程池、文件监听和对象存储 SDK。
+
+## Agent 使用指南
+
+使用本 skill 时：
+
+- 先遵守 `skills/AGENTS.md` 的共享规则。
+- 适合处理缓存、定时任务、Cron、时间轮延时任务、worker 线程池、文件监听和对象存储。
+- 定时任务优先使用 `@fastcar/timer/scheduling2`。
+- CPU 密集型任务应放入 workerpool，避免阻塞主线程。
+- COS 示例中的密钥、签名和域名只能作为占位示例，不要写入真实凭据。
 
 ## 缓存 (@fastcar/cache)
 

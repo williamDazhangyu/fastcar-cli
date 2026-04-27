@@ -1,11 +1,21 @@
 ---
 name: fastcar-framework
-description: FastCar 是一个基于 TypeScript 的 Node.js 企业级应用开发框架，采用 IoC（控制反转）设计思想。Use when working with FastCar framework for: (1) Creating IoC-based Node.js applications, (2) Using dependency injection with decorators (@Component, @Service, @Autowired), (3) Building web APIs with @fastcar/koa, (4) Database operations with MySQL/MongoDB/Redis, (5) Setting up scheduled tasks or worker pools, (6) Managing application lifecycle and configuration.
+description: FastCar Framework 核心开发指南。Use when building or modifying FastCar TypeScript applications with IoC, dependency injection, decorators, @fastcar/koa APIs, lifecycle hooks, configuration, templates, or framework-level examples.
 ---
 
 # FastCar Framework
 
 FastCar 是基于 TypeScript 的 Node.js 企业级应用开发框架，采用 IoC（控制反转）设计思想。
+
+## Agent 使用指南
+
+使用本 skill 时：
+
+- 先遵守 `skills/AGENTS.md` 的共享规则。
+- 适合处理 IoC、`@Component`、`@Service`、`@Controller`、`@Autowired`、Koa Web、配置、生命周期和项目模板。
+- 生成 Koa Controller 时，不要使用 `@Body`、`@Param`、`@Query`。
+- 路由装饰器必须写成 `@GET()` / `@POST()`，不能省略括号。
+- 示例代码必须保留关键 import，尤其是 `Context` 从 `koa` 导入。
 
 ## 核心概念
 
@@ -524,7 +534,7 @@ npm run debug
 
 # Microservices 项目
 mkdir my-ms-app && cd my-ms-app
-fastcar-cli init microservices
+fastcar-cli init micro
 npm install
 npm run start-node
 ```

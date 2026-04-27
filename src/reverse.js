@@ -6,6 +6,7 @@ const inquirer = require("inquirer");
 
 // 默认配置文件模板
 const defaultConfig = {
+  type: "mysql",
   tables: ["test"],
   modelDir: "",
   mapperDir: "",
@@ -103,6 +104,7 @@ async function initReverseConfig() {
     console.log(`✅ 已生成 ${CONFIG_FILES[ext]} 配置文件`);
     console.log("📁 文件路径:", configPath);
     console.log("\n💡 请根据需要修改以下配置:");
+    console.log("   • type: 数据库类型 (mysql 或 pgsql)");
     console.log("   • tables: 要逆向生成的表名数组");
     console.log("   • modelDir: Model 文件输出目录");
     console.log("   • mapperDir: Mapper 文件输出目录");
@@ -132,6 +134,7 @@ async function reverseGenerate(args = []) {
     console.log("   请在项目根目录创建该文件，格式如下：");
     console.log(`
 YAML 格式 (reverse.config.yml):
+  type: mysql
   tables: [test]
   modelDir: ${cwd.replace(/\\/g, "/")}/src/models
   mapperDir: ${cwd.replace(/\\/g, "/")}/src/mappers
@@ -152,6 +155,7 @@ YAML 格式 (reverse.config.yml):
 
 JSON 格式 (reverse.config.json):
 {
+  "type": "mysql",
   "tables": ["test"],
   "modelDir": "${cwd.replace(/\\/g, "/")}/src/models",
   "mapperDir": "${cwd.replace(/\\/g, "/")}/src/mappers",
@@ -192,61 +196,103 @@ JSON 格式 (reverse.config.json):
     return;
   }
 
-  // 尝试加载 @fastcar/mysql-tool 包
-  let mysqlTool;
-  try {
-    // 先尝试从项目本地加载
-    mysqlTool = require(path.join(nodeModulesPath, "@fastcar/mysql-tool"));
-  } catch (e) {
-    // 检查错误类型：是 @fastcar/mysql-tool 本身缺失，还是其依赖 @fastcar/mysql 缺失
-    if (e.code === "MODULE_NOT_FOUND") {
-      // 如果错误消息中包含 @fastcar/mysql-tool，说明是包本身未安装
-      if (e.message.includes("@fastcar/mysql-tool")) {
-        console.log("❌ 未找到 @fastcar/mysql-tool 包，请先安装:");
-        return;
-      }
-      // 如果 Require stack 中有 mysql-tool，说明是 @fastcar/mysql 依赖缺失
-      if (
-        e.requireStack &&
-        e.requireStack.some((s) => s.includes("@fastcar/mysql-tool"))
-      ) {
-        console.log("❌ 缺少依赖包 @fastcar/mysql，请先安装:");
-        return;
-      }
-    }
+  // 数据库类型与对应工具包映射
+  const DB_TOOLS = {
+    mysql: {
+      pkg: "@fastcar/mysql-tool",
+      mainDep: "@fastcar/mysql",
+    },
+    pgsql: {
+      pkg: "@fastcar/pgsql",
+      mainDep: "@fastcar/core",
+    },
+  };
+
+  const dbType = config.type || "mysql";
+  const dbToolInfo = DB_TOOLS[dbType];
+  if (!dbToolInfo) {
+    console.log(
+      `❌ 不支持的数据库类型: ${dbType}，目前支持: ${Object.keys(DB_TOOLS).join(", ")}`,
+    );
+    return;
+  }
+
+  // 加载数据库逆向生成工具包
+  function requireDBTool(nodeModulesPath, pkgName, mainDepName) {
+    let tool;
 
     try {
-      // 如果本地没有，尝试全局加载
-      mysqlTool = require("@fastcar/mysql-tool");
-    } catch (e2) {
-      if (e2.code === "MODULE_NOT_FOUND") {
-        // 同样区分是包本身缺失还是依赖缺失
-        if (e2.message.includes("@fastcar/mysql-tool")) {
-          console.log("❌ 未找到 @fastcar/mysql-tool 包，请先安装:");
-          console.log("   npm install @fastcar/mysql-tool");
-          console.log("   或: yarn add @fastcar/mysql-tool");
-          return;
+      // 先尝试从项目本地加载
+      tool = require(path.join(nodeModulesPath, pkgName));
+    } catch (e) {
+      // 检查错误类型：是包本身缺失，还是其依赖缺失
+      if (e.code === "MODULE_NOT_FOUND") {
+        // 如果错误消息中包含包名，说明是包本身未安装
+        if (e.message.includes(pkgName)) {
+          console.log(`❌ 未找到 ${pkgName} 包，请先安装:`);
+          return null;
         }
-        if (e2.message.includes("@fastcar/mysql")) {
-          console.log("❌ 缺少依赖包 @fastcar/mysql，请先安装:");
-          console.log("   npm install @fastcar/mysql");
-          console.log("   或: yarn add @fastcar/mysql");
-          return;
+        // 如果 Require stack 中有该包路径，说明是主要依赖缺失
+        if (
+          mainDepName &&
+          e.requireStack &&
+          e.requireStack.some((s) => s.includes(pkgName))
+        ) {
+          console.log(`❌ 缺少依赖包 ${mainDepName}，请先安装:`);
+          return null;
         }
       }
 
-      console.log("❌ 加载 @fastcar/mysql-tool 失败:", e2.message);
-      return;
+      try {
+        // 如果本地没有，尝试全局加载
+        tool = require(pkgName);
+      } catch (e2) {
+        if (e2.code === "MODULE_NOT_FOUND") {
+          // 同样区分是包本身缺失还是依赖缺失
+          if (e2.message.includes(pkgName)) {
+            console.log(`❌ 未找到 ${pkgName} 包，请先安装:`);
+            console.log(`   npm install ${pkgName}`);
+            console.log(`   或: yarn add ${pkgName}`);
+            return null;
+          }
+          if (mainDepName && e2.message.includes(mainDepName)) {
+            console.log(`❌ 缺少依赖包 ${mainDepName}，请先安装:`);
+            console.log(`   npm install ${mainDepName}`);
+            console.log(`   或: yarn add ${mainDepName}`);
+            return null;
+          }
+          const match = e2.message.match(/Cannot find module '([^']+)'/);
+          const missingDep = match ? match[1] : "相关依赖";
+          console.log(`❌ 缺少依赖包 ${missingDep}，请先安装:`);
+          console.log(`   npm install ${missingDep}`);
+          console.log(`   或: yarn add ${missingDep}`);
+          return null;
+        }
+
+        console.log(`❌ 加载 ${pkgName} 失败:`, e2.message);
+        return null;
+      }
     }
+
+    return tool;
+  }
+
+  const dbTool = requireDBTool(
+    nodeModulesPath,
+    dbToolInfo.pkg,
+    dbToolInfo.mainDep,
+  );
+  if (!dbTool) {
+    return;
   }
 
   // 检查 ReverseGenerate.generator 方法是否存在
   if (
-    !mysqlTool.ReverseGenerate ||
-    typeof mysqlTool.ReverseGenerate.generator !== "function"
+    !dbTool.ReverseGenerate ||
+    typeof dbTool.ReverseGenerate.generator !== "function"
   ) {
     console.log(
-      "❌ @fastcar/mysql-tool 包中未找到 ReverseGenerate.generator 方法",
+      `❌ ${dbToolInfo.pkg} 包中未找到 ReverseGenerate.generator 方法`,
     );
     return;
   }
@@ -256,15 +302,14 @@ JSON 格式 (reverse.config.json):
     console.log("📋 目标表:", config.tables.join(", "));
     console.log("📁 Model 输出目录:", config.modelDir);
     console.log("📁 Mapper 输出目录:", config.mapperDir);
-    await mysqlTool.ReverseGenerate.generator(config);
+    await dbTool.ReverseGenerate.generator(config);
     console.log("✅ 逆向生成完成");
   } catch (error) {
-    // 检查是否是 @fastcar/mysql 依赖缺失
-    if (
-      error.code === "MODULE_NOT_FOUND" &&
-      error.message.includes("@fastcar/mysql")
-    ) {
-      console.log("❌ 缺少依赖包 @fastcar/mysql，请先安装:");
+    // 检查是否是依赖缺失
+    if (error.code === "MODULE_NOT_FOUND") {
+      const match = error.message.match(/Cannot find module '([^']+)'/);
+      const missingDep = match ? match[1] : "相关依赖";
+      console.log(`❌ 缺少依赖包 ${missingDep}，请先安装:`);
       return;
     }
     console.log("❌ 逆向生成失败:", error.message);

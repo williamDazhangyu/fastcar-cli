@@ -1,21 +1,40 @@
-# FastCar 项目 AI 开发规范
+# FastCar AI Agent 开发规范
 
-本文件用于指导 AI agent 在 FastCar 项目中进行开发。当你读取或修改本项目中的文件时，请遵循以下规范，避免常见错误。
+本文件会被 `fastcar-cli skill install` 同步到目标 Agent 或项目根目录，用于指导 Codex、Claude Code、Cursor、Kimi Code、Gemini CLI 等主流 AI Agent 编写 FastCar 相关代码。
 
----
+## 适用范围
 
-## 1. @fastcar/koa Controller 传参规范
+- FastCar 框架项目开发。
+- FastCar CLI 模板、示例代码、skills 文档维护。
+- 基于 `@fastcar/core`、`@fastcar/koa`、`@fastcar/mysql`、`@fastcar/rpc`、`@fastcar/serverless` 等模块的代码生成和重构。
 
-**核心原则：FastCar 没有 `@Body`、`@Param`、`@Query` 装饰器。**
+## Agent 工作流程
 
-- **第一个参数**：请求数据对象（POST 的 `body`、GET 的 `query` / `params`）。
-- **第二个参数**：Koa 上下文 `ctx: Context`，**可选，可省略**。
-- `Context` 必须从 `koa` 导入：`import { Context } from "koa";`。
-- 表单验证时，`@ValidForm` 放在**方法**上，`@Rule()` 放在**第一个** DTO 参数前。
+1. 先确认当前任务属于哪个 skill：框架、数据库、RPC/微服务、Serverless、工具集或 TypeScript 编码规范。
+2. 读取对应 `SKILL.md` 后再写代码，不要凭 NestJS、Express、Spring 等其他框架习惯推断 FastCar API。
+3. 修改示例、模板或业务代码时，优先保持现有项目结构和包管理器，不要无关格式化整个仓库。
+4. 生成代码后检查 import 来源、装饰器写法、数据库查询方式和返回值语义。
+5. 如果无法运行测试或示例命令，应在回复中明确说明未验证项。
 
-### ✅ 正确示例
+## 可用 Skills
+
+| Skill | 使用场景 |
+| --- | --- |
+| `fastcar-framework` | IoC、依赖注入、Koa Web、配置、生命周期、项目模板。 |
+| `fastcar-database` | MySQL、PostgreSQL、MongoDB、Redis、ORM、事务、逆向生成。 |
+| `fastcar-rpc-microservices` | RPC 服务端/客户端、协议配置、微服务架构。 |
+| `fastcar-serverless` | 阿里云 FC、腾讯云 SCF、AWS Lambda、本地 Serverless 调试。 |
+| `fastcar-toolkit` | 缓存、定时任务、时间轮、workerpool、文件监听、COS SDK。 |
+| `typescript-coding-style` | TypeScript 类型、枚举、命名、可维护性规则。 |
+
+## FastCar Koa Controller 规则
+
+核心原则：FastCar 没有 `@Body`、`@Param`、`@Query` 装饰器。
+
+正确写法：
 
 ```typescript
+import { Controller } from "@fastcar/core/annotation";
 import { GET, POST, REQUEST } from "@fastcar/koa/annotation";
 import { Context } from "koa";
 
@@ -23,229 +42,108 @@ import { Context } from "koa";
 @REQUEST("/api/items")
 class ItemController {
   @GET("/:id")
-  async getById(id: string, ctx: Context) {
+  async getById(id: string, ctx?: Context) {
     return { id };
   }
 
   @POST()
-  async create(body: ItemDTO, ctx: Context) {
+  async create(body: ItemDTO, ctx?: Context) {
     return { created: true };
-  }
-
-  @ValidForm
-  @POST("/login")
-  async login(@Rule() body: LoginDTO, ctx: Context) {
-    // body: 校验后的请求体
-    // ctx: 可选的 Koa 上下文
   }
 }
 ```
 
-### ❌ 常见错误
+必须遵守：
 
-- 从 `@fastcar/koa` 导入 `Context`。
-- 将 `ctx` 放在第一个参数位置。
-- 使用 `@Body`、`@Param`、`@Query` 等不存在的装饰器。
-- 忘记 `ctx` 是可选的。
+- 第一个参数是请求数据对象：POST 的 `body`、GET 的 `query` 或路由参数。
+- 第二个参数是可选的 Koa 上下文：`ctx?: Context`。
+- `Context` 必须从 `koa` 导入。
+- 路由装饰器必须写成函数调用：`@GET()`、`@POST()`、`@REQUEST("/api")`。
+- 表单验证使用方法级 `@ValidForm` 和 DTO 参数上的 `@Rule()`。
 
----
-
-## 2. 禁止使用 `@Body`、`@Param`、`@Query` 装饰器
-
-FastCar **没有** `@Body`、`@Param`、`@Query` 这些装饰器。请求参数直接通过方法参数传入，不要套用 NestJS / Express 的习惯。
+禁止：
 
 ```typescript
-// ❌ 错误
 import { Body, Param, Query } from "@fastcar/koa/annotation";
 
+@GET
+async list() {}
+
 @GET("/:id")
-async getById(@Param("id") id: string) { }
+async getById(@Param("id") id: string) {}
 
 @POST()
-async create(@Body body: ItemDTO) { }
+async create(@Body body: ItemDTO) {}
 ```
 
----
+## 数据库查询规则
 
-## 3. 路由装饰器必须带括号
+分页、聚合、分组和关联查询必须在数据库层完成，不能先全表查询再在 JS 内存中处理。
 
-路由装饰器**必须**以函数调用的形式使用，不能省略括号。
-
-```typescript
-// ❌ 错误
-@GET
-async list() { }
-
-// ✅ 正确
-@GET()
-async list() { }
-```
-
----
-
-## 4. 数据库查询必须在数据库层完成
-
-### 分页查询
-
-**严禁**先全表查询再在 JS 内存中用 `.slice()` 分页。
+正确写法：
 
 ```typescript
-// ✅ 正确：使用 SQL limit/offset
 const list = await this.mapper.select({
-  where: { status: 1 },
+  where: { status: JobStatus.running },
   orders: { id: OrderEnum.desc },
   offset: (page - 1) * pageSize,
   limit: pageSize,
 });
 
-// ❌ 错误：全表查询后内存切片
-const all = await this.mapper.select({ where: { status: 1 } });
-const pageData = all.slice((page - 1) * pageSize, page * pageSize);
-```
-
-### 分组聚合
-
-**严禁**先全表查询再在 JS 中用 `.reduce()` 分组统计。
-
-```typescript
-// ✅ 正确：使用 SQL GROUP BY
 const stats = await this.mapper.selectByCustom({
   fields: ["status", "COUNT(*) as count", "SUM(amount) as totalAmount"],
   groups: ["status"],
 });
-
-// ❌ 错误：全表查询后 JS 分组
-const all = await this.mapper.select({});
-const grouped = all.reduce((acc, item) => { /* ... */ }, {});
 ```
 
-### 复杂关联查询
+禁止：
 
-**严禁**用 N+1 循环查询再在内存中组装数据。
+- 全表查询后用 `.slice()` 分页。
+- 全表查询后用 `.reduce()` 分组统计。
+- N+1 循环查询后在内存中组装关联数据。
+- 用字符串 `"DESC"` / `"ASC"` 代替 `OrderEnum`。
 
-```typescript
-// ✅ 正确：使用 selectByCustom + JOIN 一条 SQL 完成
-const results = await this.mapper.selectByCustom<QueryResult>({
-  tableAlias: "t",
-  fields: ["t.id", "t.name", "r.name as relatedName"],
-  join: [{
-    type: "INNER",
-    table: "related_table r",
-    on: "r.entity_id = t.id",
-  }],
-  where: { "t.status": 1 },
-  camelcaseStyle: true,
-});
+## 实体、枚举和更新规则
 
-// ❌ 错误：N+1 循环查询
-const list = await this.mapper.select({});
-for (const item of list) {
-  const related = await this.relatedMapper.selectOne({ ... });
-}
-```
-
----
-
-## 5. 实体 / 模型规范
-
-### 创建实体
-
-**必须**通过构造函数的对象形式创建实体，禁止逐行赋值。
+实体创建必须使用构造函数对象形式：
 
 ```typescript
-// ✅ 正确
 const entity = new Entity({
   name: "示例",
-  status: 1,
+  status: JobStatus.pending,
   createdAt: new Date(),
 });
-
-// ❌ 错误
-const entity = new Entity();
-entity.name = "示例";
-entity.status = 1;
 ```
 
-### 排序
-
-排序**必须**使用 `OrderEnum`，禁止使用字符串。
+状态、类型、模式等离散字段必须使用枚举：
 
 ```typescript
-import { OrderEnum } from "@fastcar/core/db";
-
-// ✅ 正确
-await this.mapper.select({
-  orders: { createdAt: OrderEnum.desc },
-});
-
-// ❌ 错误
-await this.mapper.select({
-  orders: { createdAt: "DESC" },
-});
-```
-
-### 状态字段必须使用枚举
-
-状态、类型等离散取值字段**必须**使用 `enum`，禁止使用裸数字或魔法字符串。
-
-```typescript
-// ✅ 正确
 export enum JobStatus {
   pending = "pending",
   running = "running",
   completed = "completed",
 }
-
-await this.mapper.updateOne({
-  where: { id },
-  row: { status: JobStatus.running },
-});
-
-// ❌ 错误
-await this.mapper.updateOne({
-  where: { id },
-  row: { status: 1 },
-});
 ```
 
-### 更新少量字段
+其他规则：
 
-当更新字段少于 3 个时，**直接**使用 `updateOne` / `update`，禁止先查出整行再修改。
+- 更新 1 到 2 个字段时，直接使用 `updateOne` / `update`，不要先查询完整实体再保存。
+- `selectByPrimaryKey` 和 `updateByPrimaryKey` 必须传入包含主键字段的对象。
+- `saveList` 会自动分批处理，每批 1000 条。
+- 接口无数据时返回真实空数组、空对象或 `null`，不要为了展示效果注入模拟数据。
 
-```typescript
-// ✅ 正确
-await this.mapper.updateOne({
-  where: { id },
-  row: { lastLoginTime: new Date() },
-});
+## TypeScript 代码规则
 
-// ❌ 错误
-const entity = await this.mapper.selectByPrimaryKey({ id });
-entity.lastLoginTime = new Date();
-await this.mapper.updateByPrimaryKey(entity);
-```
+- 复杂交叉类型在 2 处及以上使用时，提取为 `type` 或 `interface`。
+- 类型、接口、枚举使用 PascalCase。
+- 状态字段优先使用字符串枚举，避免裸数字和魔法字符串。
+- 示例代码必须给出关键 import，避免让 Agent 猜测模块来源。
 
----
+## 验证建议
 
-## 6. 接口返回规范
+根据项目实际情况选择验证方式：
 
-**必须**如实返回空数据，禁止为了"美观"而注入模拟数据。
-
-```typescript
-// ✅ 正确
-if (records.length === 0) {
-  return Result.ok({ list: [], total: 0 });
-}
-
-// ❌ 错误
-if (records.length === 0) {
-  return Result.ok({ list: [{ name: "模拟数据1" }] });
-}
-```
-
----
-
-## 7. 主键操作规范
-
-- `selectByPrimaryKey` 和 `updateByPrimaryKey` 需要传入**包含主键字段的对象**。
-- 批量插入 `saveList` 会自动分批处理（每批 1000 条）。
+- TypeScript 项目：优先运行 `npm run build`、`npm run test` 或项目已有 lint 命令。
+- FastCar CLI 项目：优先运行 `node bin/cli.js --help`、`node bin/cli.js skill list`。
+- 数据库相关代码：确认 SQL 在数据库层分页、聚合和 JOIN；真实连接数据库前先确认配置和权限。
+- Serverless 代码：本地调试优先验证 HTTP、定时和事件触发器的输入输出格式。
