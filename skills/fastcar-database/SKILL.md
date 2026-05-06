@@ -461,50 +461,125 @@ class EntityMapper extends MongoMapper<Entity> {}
 
 ### Redis (@fastcar/redis)
 
+`@fastcar/redis` 基于 `redis@5`，当前导出 `RedisTemplate`、`RedisDataSource`、`RedisDataSourceManager`，并通过 `@fastcar/redis/annotation` 导出 `EnableRedis`。不要使用不存在的 `RedisClient` / `@RedisClient`。
+
+#### 启用 Redis
+
 ```typescript
+import { Application } from "@fastcar/core/annotation";
 import { EnableRedis } from "@fastcar/redis/annotation";
-import { RedisClient } from "@fastcar/redis/annotation";
 
 @Application
 @EnableRedis
 class APP {}
+export default new APP();
+```
+
+#### 声明 RedisTemplate
+
+业务代码应继承 `RedisTemplate` 并注册为 FastCar 组件；需要绑定默认数据源时使用 `@DS("default")`。
+
+```typescript
+import { DS, Repository } from "@fastcar/core/annotation";
+import { RedisTemplate } from "@fastcar/redis";
+
+@Repository
+@DS("default")
+export default class AppRedisTemplate extends RedisTemplate {}
+```
+
+#### 业务注入与基础使用
+
+```typescript
+import { Autowired, Service } from "@fastcar/core/annotation";
+import AppRedisTemplate from "../redis/AppRedisTemplate";
 
 @Service
 class CacheService {
-  @RedisClient
-  private redis!: RedisClient;
+  @Autowired
+  private redisTemplate!: AppRedisTemplate;
 
   async set(key: string, value: string, ttl?: number) {
-    await this.redis.set(key, value, ttl);
+    if (ttl) {
+      await this.redisTemplate.setEx(key, value, ttl);
+      return;
+    }
+    await this.redisTemplate.set(key, value);
   }
 
   async get(key: string) {
-    return this.redis.get(key);
+    return this.redisTemplate.get(key);
   }
 
   async del(key: string) {
-    await this.redis.del(key);
+    await this.redisTemplate.delKey(key);
   }
 
   // Hash 操作
-  async hset(key: string, field: string, value: string) {
-    await this.redis.hset(key, field, value);
+  async hSet(key: string, field: string, value: string) {
+    await this.redisTemplate.hSet(key, field, value);
   }
 
-  async hget(key: string, field: string) {
-    return this.redis.hget(key, field);
+  async hGet(key: string, field: string) {
+    return this.redisTemplate.hGet(key, field);
   }
 
   // List 操作
-  async lpush(key: string, value: string) {
-    await this.redis.lpush(key, value);
+  async lPush(key: string, value: string) {
+    await this.redisTemplate.lPush(key, [value]);
   }
 
-  async rpop(key: string) {
-    return this.redis.rpop(key);
+  async rPop(key: string) {
+    return this.redisTemplate.rPop(key);
   }
 }
 ```
+
+#### RedisTemplate 核心 API
+
+```typescript
+// String / Cache
+await redisTemplate.set("cache:name", "fastcar");
+await redisTemplate.setEx("token:1", { id: 1 }, 3600);
+await redisTemplate.setJson("user:1", { id: 1, name: "Tom" }, 3600);
+const user = await redisTemplate.getJson<{ id: number; name: string }>("user:1");
+const locked = await redisTemplate.setNx("lock:job", "1", 30);
+await redisTemplate.mSet({ "profile:1": { id: 1 }, "profile:2": { id: 2 } });
+const profiles = await redisTemplate.mGet(["profile:1", "profile:2"]);
+const views = await redisTemplate.incr("article:1:views");
+
+// Key / TTL
+await redisTemplate.exists("user:1");
+await redisTemplate.expire("user:1", 600);
+await redisTemplate.ttl("user:1");
+await redisTemplate.delKey("user:1");
+await redisTemplate.del(["user:1", "user:2"]);
+await redisTemplate.scan("user:*", 100);
+await redisTemplate.delKeys("temp:*");
+
+// Hash / List / Set / ZSet
+await redisTemplate.hSet("user:1:info", "name", "Tom");
+await redisTemplate.hGetAll("user:1:info");
+await redisTemplate.lPush("queue:email", ["job-1"]);
+await redisTemplate.rPop("queue:email");
+await redisTemplate.sAdd("article:1:tags", ["redis", "cache"]);
+await redisTemplate.sMembers("article:1:tags");
+await redisTemplate.zAdd("rank:score", 100, "user:1");
+await redisTemplate.zRangeWithScores("rank:score", 0, -1);
+
+// Pipeline / Transaction / PubSub / Lua / Raw Command
+await redisTemplate.pipeline([["SET", "pipeline:key", "ok"], ["GET", "pipeline:key"]]);
+await redisTemplate.transaction([["SET", "tx:key", "ok"], ["INCR", "tx:count"]]);
+const unsubscribe = await redisTemplate.subscribe("notice", (message, channel) => {
+  console.log(channel, message);
+});
+await redisTemplate.publish("notice", { type: "created", id: 1 });
+await unsubscribe();
+await redisTemplate.eval("return redis.call('GET', KEYS[1]) or ARGV[1]", ["missing:key"], ["default"]);
+await redisTemplate.rawCommand<string>(["PING"]);
+```
+
+所有 `RedisTemplate` 方法最后一个参数都可以传入 `source?: string` 指定数据源，例如 `await redisTemplate.get("user:1", "cache")`。生产环境按模式遍历 key 时优先使用 `scan` / `delKeys`，不要直接对大 key 空间使用 `keys`。
 
 ## 数据库逆向生成 (@fastcar/mysql-tool)
 
@@ -539,32 +614,33 @@ fastcar-cli reverse
 application:
   env: dev
 
-mysql:
-  host: localhost
-  port: 3306
-  database: mydb
-  username: root
-  password: password
-  connectionLimit: 10
-
-pgsql:
-  host: localhost
-  port: 5432
-  database: mydb
-  username: postgres
-  password: password
-
-mongo:
-  host: localhost
-  port: 27017
-  database: mydb
-
-redis:
-  host: localhost
-  port: 6379
-  password: ""
-  db: 0
+settings:
+  mysql:
+    host: localhost
+    port: 3306
+    database: mydb
+    username: root
+    password: password
+    connectionLimit: 10
+  pgsql:
+    host: localhost
+    port: 5432
+    database: mydb
+    username: postgres
+    password: password
+  mongo:
+    host: localhost
+    port: 27017
+    database: mydb
+  redis:
+    - { source: "default", host: "localhost", port: 6379 }
+    - source: "cache"
+      socket:
+        host: "localhost"
+        port: 6379
 ```
+
+Redis 配置由 `@fastcar/redis` 从 `settings.redis` 读取，格式是数据源数组，每项必须包含 `source`。本地 Redis 无密码时不要配置 `password`；需要密码时可在数据源项中加入 `password`。
 
 ## 完整模块列表
 

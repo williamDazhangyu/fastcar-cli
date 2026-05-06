@@ -1,6 +1,6 @@
 ---
 name: typescript-coding-style
-description: TypeScript 编码规范与最佳实践。Use when writing or reviewing TypeScript types, interfaces, enums, reusable aliases, status fields, naming conventions, maintainability, or FastCar example code.
+description: TypeScript 编码规范与最佳实践。Use when writing or reviewing TypeScript types, interfaces, enums, reusable aliases, status fields, naming conventions, async waiting, polling loops, timers, cancellation, maintainability, or FastCar example code.
 ---
 
 # TypeScript 编码规范
@@ -13,6 +13,7 @@ description: TypeScript 编码规范与最佳实践。Use when writing or review
 - 适合处理 TypeScript 类型设计、枚举、命名、复杂类型复用和示例代码可维护性。
 - 复杂交叉类型在 2 处及以上使用时，应提取类型别名或接口。
 - 状态、类型、模式等离散字段优先使用字符串枚举。
+- 异步等待类代码避免裸写 `while + sleep` 轮询，优先表达为“等待事件、超时、取消、异常”的组合。
 - 不要为了减少代码行数牺牲类型可读性。
 
 ## 1. 复用复杂类型别名
@@ -152,3 +153,78 @@ class Service {
     }
 }
 ```
+
+---
+
+## 3. 避免裸写 while + sleep 式异步等待
+
+### 问题场景
+当代码需要等待任务完成、事件到达、SSE 输出、队列状态变化或外部资源就绪时，直接使用 `while` 循环配合 `setTimeout` sleep 会让取消、超时、异常处理和资源释放变得分散。
+
+### 反例
+```typescript
+// ❌ 手写轮询等待，关闭、超时和异常语义不集中
+while (!closed && Date.now() < deadline) {
+    const events = await this.generationService.listTaskEvents(actor, body.id, cursor);
+
+    for (const event of events) {
+        this.writeSseEvent(ctx, event);
+        cursor = event.id;
+    }
+
+    if (events.some((event) => event.type === "task.succeeded" || event.type === "task.failed")) {
+        break;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+}
+```
+
+### 正例：封装可取消的等待原语
+```typescript
+const terminalTypes = new Set<TaskEventType>([
+    TaskEventType.succeeded,
+    TaskEventType.failed,
+]);
+
+const timeout = setTimeout(() => {
+    controller.abort(new Error("Task event stream timeout"));
+}, timeoutMs);
+
+try {
+    for await (const event of this.generationService.watchTaskEvents(actor, body.id, {
+        cursor,
+        signal: controller.signal,
+    })) {
+        this.writeSseEvent(ctx, event);
+        cursor = event.id;
+
+        if (terminalTypes.has(event.type)) {
+            break;
+        }
+    }
+} finally {
+    clearTimeout(timeout);
+}
+```
+
+### 次优但可接受：把轮询隐藏在等待函数里
+```typescript
+const event = await this.generationService.waitTaskEvent(actor, body.id, cursor, {
+    signal: controller.signal,
+    timeoutMs: 500,
+});
+
+if (event) {
+    this.writeSseEvent(ctx, event);
+    cursor = event.id;
+}
+```
+
+### 规范建议
+1. **业务层表达意图**：优先写成 `watchTaskEvents`、`waitTaskEvent`、`waitUntilReady`，不要在业务层暴露 `while + sleep`
+2. **等待必须可取消**：异步等待函数应支持 `AbortSignal`，并在连接关闭、请求取消或任务终止时释放资源
+3. **超时集中管理**：使用 `setTimeout`、`AbortController` 或统一超时工具表达 deadline，避免循环里反复 `Date.now()`
+4. **异常路径明确**：等待失败应抛出领域错误或写出错误事件，不要让异常隐式穿透到框架默认处理
+5. **终止条件类型化**：任务成功、失败、取消等终态优先使用枚举或常量集合，不要在多处散落字符串字面量
+6. **轮询留在基础设施层**：如果底层只能轮询，把轮询封装在 service/helper 内部；调用方只消费事件或等待结果

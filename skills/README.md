@@ -25,8 +25,48 @@
 ```bash
 fastcar-cli skill list
 fastcar-cli skill install fastcar-framework
+fastcar-cli skill install auto-iterate-coding
 fastcar-cli skill install all --local
 fastcar-cli skill targets
+```
+
+## 启动自动迭代开发
+
+先单独安装 `auto-iterate-coding`，再在项目根目录生成启动文件：
+
+```bash
+fastcar-cli skill install auto-iterate-coding
+fastcar-cli auto-iterate
+```
+
+如果 AI 实现流程清单很长，可以从本地文档导入：
+
+```bash
+fastcar-cli auto-iterate --from docs/ai-checklist.md
+fastcar-cli auto-iterate -f docs/ai-checklist.md
+```
+
+`fastcar-cli auto-iterate` 会交互式询问 AI 实现流程清单和迭代预算，并生成：
+
+- `.agent-state/auto-iterate-coding.md`
+- `.agent-state/auto-iterate-start-prompt.md`
+
+生成后，把 `.agent-state/auto-iterate-start-prompt.md` 的内容发给 Agent。
+
+单独安装自动迭代编码 skill：
+
+```bash
+# 交互式选择安装位置
+fastcar-cli skill install auto-iterate-coding
+
+# 全局安装
+fastcar-cli skill install auto-iterate-coding --global
+
+# 本地安装到当前项目
+fastcar-cli skill install auto-iterate-coding --local
+
+# 安装到指定 Agent
+fastcar-cli skill install auto-iterate-coding --target codex
 ```
 
 ## 主流 Agent 使用方式

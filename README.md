@@ -114,6 +114,23 @@ fastcar-cli reverse
 
 将 FastCar skill 安装到支持的 AI Agent 中，让 AI 在对话时掌握 FastCar 框架知识。
 
+#### 启动自动迭代开发
+
+`auto-iterate` 会交互式询问 AI 实现流程清单和迭代预算，并在当前项目生成 `.agent-state/auto-iterate-coding.md` 与 `.agent-state/auto-iterate-start-prompt.md`。
+
+```bash
+fastcar-cli auto-iterate
+```
+
+如果流程清单很长，也可以从本地文档导入：
+
+```bash
+fastcar-cli auto-iterate --from docs/ai-checklist.md
+fastcar-cli auto-iterate -f docs/ai-checklist.md
+```
+
+生成后，把 `.agent-state/auto-iterate-start-prompt.md` 的内容发给 Agent，即可按 `auto-iterate-coding` skill 进入 Autopilot 自动化开发。
+
 #### 列出可用的 skills
 
 ```bash
@@ -141,6 +158,11 @@ fastcar-cli skill install fastcar-framework --local
 fastcar-cli skill install fastcar-framework -l
 # 若项目根目录不存在 AGENTS.md，会自动补到项目根目录
 
+# 单独安装自动迭代编码 skill
+fastcar-cli skill install auto-iterate-coding
+fastcar-cli skill install auto-iterate-coding --global
+fastcar-cli skill install auto-iterate-coding --local
+
 # 安装全部 skills（会同时补充共享的 AGENTS.md）
 fastcar-cli skill install all
 fastcar-cli skill install --all -g
@@ -159,6 +181,7 @@ fastcar-cli skill install fastcar-framework -t claude
 | fastcar-rpc-microservices | RPC 通信、微服务架构、Socket/gRPC | `fastcar-cli skill install fastcar-rpc-microservices` |
 | fastcar-serverless | 阿里云 FC / 腾讯云 SCF / AWS Lambda | `fastcar-cli skill install fastcar-serverless` |
 | fastcar-toolkit | 缓存、定时任务、时间轮、工作线程池、COS SDK | `fastcar-cli skill install fastcar-toolkit` |
+| auto-iterate-coding | 自动迭代式 AI 编程、多轮实现-验证-修复-优化 | `fastcar-cli skill install auto-iterate-coding` |
 
 #### 卸载 skill
 

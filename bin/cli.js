@@ -11,6 +11,7 @@ const {
   listTargets,
   initSkill,
 } = require("../src/skill");
+const { initAutoIterate } = require("../src/auto-iterate");
 const { updateCosTemplate } = require("../src/update");
 const packageINFO = require("../package.json");
 const templates = require("../src/templates.json");
@@ -32,6 +33,8 @@ Commands:
                            pm: 包管理器 (npm/yarn/pnpm)，可选，默认自动检测
 
   update:cos               更新 @fastcar/template-cos 的 target 文件夹
+  auto-iterate             交互式生成 auto-iterate-coding 启动文件
+                           -f, --from    从本地清单文档导入长需求
 
   skill install <name>     安装 FastCar skill 到本地 AI Agent
                            使用 all 或 --all 安装全部 skills
@@ -65,11 +68,16 @@ Examples:
   $ fastcar-cli pack pnpm      # 使用 pnpm 安装依赖
 
   $ fastcar-cli update:cos     # 更新 cos 模板的 target 文件夹
+  $ fastcar-cli auto-iterate   # 生成自动迭代开发状态和启动提示
+  $ fastcar-cli auto-iterate --from docs/ai-checklist.md # 从本地清单文档生成
 
   $ fastcar-cli skill install fastcar-framework       # 交互式安装
   $ fastcar-cli skill install fastcar-framework -g    # 全局安装
   $ fastcar-cli skill install fastcar-framework -l    # 本地安装
   $ fastcar-cli skill install fastcar-framework -t kimi # 安装到 Kimi
+  $ fastcar-cli skill install auto-iterate-coding     # 安装自动迭代编码 skill
+  $ fastcar-cli skill install auto-iterate-coding -g  # 全局安装自动迭代编码 skill
+  $ fastcar-cli skill install auto-iterate-coding -l  # 本地安装自动迭代编码 skill
   $ fastcar-cli skill install all                     # 安装全部 skills
   $ fastcar-cli skill install --all -g                # 全局安装全部 skills
   $ fastcar-cli skill uninstall fastcar-framework     # 卸载单个 skill
@@ -164,6 +172,10 @@ async function run(argv) {
     }
     case "update:cos": {
       await updateCosTemplate(body);
+      break;
+    }
+    case "auto-iterate": {
+      await initAutoIterate(body);
       break;
     }
     case "skill": {

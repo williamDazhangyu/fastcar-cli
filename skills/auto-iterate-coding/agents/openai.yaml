@@ -1,0 +1,4 @@
+interface:
+  display_name: "Auto Iterate Coding"
+  short_description: "Bounded edit-test-fix loops with real validation and architecture guardrails."
+  default_prompt: "Use this skill to implement or repair code through bounded edit-test-fix loops with real validation, progress tracking, test quality checks, mock boundary discipline, architecture-friction detection, and stop conditions."

@@ -76,13 +76,15 @@ appName!: string;
 
 ```typescript
 @ValidForm                    // 开启方法参数校验
-@Rule(rules?)                 // 校验规则配置
+@Rule(rules?)                 // 校验规则配置，并按规则格式化后回写参数
 @NotNull                      // 参数不能为空
 @Size({minSize?, maxSize?})   // 大小限制
 @Type(type)                   // 指定参数类型
 @DefaultVal(val)              // 设置默认值
 @ValidCustom(fn, msg?)        // 自定义校验
 ```
+
+`@ValidForm` + `@Rule()` 会在进入 Controller 方法前完成校验和基础格式化。Controller 中直接使用参数，不要再写 `DTO.from(body).toInput()`；业务归一化放到 service 或 mapper/helper。
 
 ---
 
@@ -106,6 +108,7 @@ FastCar Koa 没有 `@Body`、`@Param`、`@Query` 参数装饰器。
 - 第一个方法参数接收请求数据：GET query、path params 或 POST body。
 - 第二个方法参数可选接收 `ctx?: Context`。
 - `Context` 必须从 `koa` 导入。
+- 使用 `@Rule()` 的 DTO 参数已经被 FastCar 校验和基础格式化，Controller 不要二次构造 DTO 或调用 `toInput()`。
 
 ### 示例
 
@@ -201,37 +204,70 @@ try {
 
 ## @fastcar/redis
 
-### 装饰器
+### 启用组件
 
 ```typescript
-@RedisClient     // 注入 Redis 客户端
+import { Application } from "@fastcar/core/annotation";
+import { EnableRedis } from "@fastcar/redis/annotation";
+
+@Application
+@EnableRedis
+class App {}
 ```
 
 ### 使用示例
 
 ```typescript
+import { Autowired, DS, Repository, Service } from "@fastcar/core/annotation";
+import { RedisTemplate } from "@fastcar/redis";
+
+@Repository
+@DS("default")
+class AppRedisTemplate extends RedisTemplate {}
+
 @Service
 class CacheService {
-  @RedisClient
-  private redis!: RedisClient;
+  @Autowired
+  private redisTemplate!: AppRedisTemplate;
 
   async get(key: string) {
-    return this.redis.get(key);
+    return this.redisTemplate.get(key);
   }
 
   async set(key: string, value: string, ttl?: number) {
-    await this.redis.set(key, value, ttl);
+    if (ttl) {
+      await this.redisTemplate.setEx(key, value, ttl);
+      return;
+    }
+    await this.redisTemplate.set(key, value);
   }
 
   async del(key: string) {
-    await this.redis.del(key);
+    await this.redisTemplate.delKey(key);
   }
 
   async expire(key: string, seconds: number) {
-    await this.redis.expire(key, seconds);
+    await this.redisTemplate.expire(key, seconds);
   }
 }
 ```
+
+### 常用方法
+
+```typescript
+await redisTemplate.set("key", "value");
+await redisTemplate.setEx("token:1", { id: 1 }, 3600);
+await redisTemplate.getJson<{ id: number }>("token:1");
+await redisTemplate.setNx("lock:job", "1", 30);
+await redisTemplate.hSet("user:1", "name", "Tom");
+await redisTemplate.lPush("queue", ["job-1"]);
+await redisTemplate.sAdd("tags", ["redis"]);
+await redisTemplate.zAdd("rank", 100, "user:1");
+await redisTemplate.scan("user:*", 100);
+await redisTemplate.pipeline([["SET", "pipeline:key", "ok"], ["GET", "pipeline:key"]]);
+```
+
+`@fastcar/redis` 没有 `RedisClient` 或 `@RedisClient` 导出。所有 `RedisTemplate` 方法最后一个参数都可以传入 `source?: string` 指定数据源。
 
 ---
 

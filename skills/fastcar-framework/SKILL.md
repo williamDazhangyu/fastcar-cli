@@ -15,6 +15,7 @@ FastCar 是基于 TypeScript 的 Node.js 企业级应用开发框架，采用 Io
 - 适合处理 IoC、`@Component`、`@Service`、`@Controller`、`@Autowired`、Koa Web、配置、生命周期和项目模板。
 - 生成 Koa Controller 时，不要使用 `@Body`、`@Param`、`@Query`。
 - 路由装饰器必须写成 `@GET()` / `@POST()`，不能省略括号。
+- 使用 `@ValidForm` + `@Rule()` 后，Controller 参数已经被 FastCar 按规则校验并格式化，不要再写 `DTO.from(body).toInput()` 之类的二次转换。
 - 示例代码必须保留关键 import，尤其是 `Context` 从 `koa` 导入。
 
 ## 核心概念
@@ -213,27 +214,67 @@ class ItemController {
 | 装饰器 | 用途 | 示例 |
 |--------|------|------|
 | `@ValidForm` | 开启方法参数校验 | 放在方法上 |
-| `@Rule()` | 标记校验对象 | 放在 DTO 参数前 |
+| `@Rule()` | 标记校验对象，并让 FastCar 按 DTO 规则读取、格式化和回写参数 | 放在 DTO 参数前 |
 | `@NotNull` | 参数不能为空 | 放在 DTO 字段上 |
 | `@Size({min, max})` | 大小限制 | 放在 DTO 字段上 |
 
+**Controller 使用规范：**
+
+- Controller 只负责接收 `@Rule()` 后的参数并转交 service，不要在 Controller 内重复构造 DTO。
+- `@Rule()` 会结合 DTO 字段装饰器执行校验，并通过 `DataFormat.formatValue` 对字段做基础格式化后回写到参数对象。
+- DTO 类只声明入参结构和校验规则，不要为了 Controller 调用而添加 `static from()`、`toInput()` 等转换方法。
+- 需要 trim、兼容字段合并、枚举兜底、业务默认值等业务归一化时，放在 service 或专门的 mapper/helper 中处理，不要混进 Controller 校验链路。
+
+❌ **错误：**
+```typescript
+@ValidForm
+@POST()
+async create(@Rule() body: ItemDTO) {
+  return this.service.create(ItemDTO.from(body).toInput());
+}
+```
+
+✅ **正确：**
+```typescript
+@ValidForm
+@POST()
+async create(@Rule() body: ItemDTO) {
+  return this.service.create(body);
+}
+```
+
 ### Redis (@fastcar/redis)
 
+`@fastcar/redis` 使用 `EnableRedis` 启用，业务侧通过继承并注入 `RedisTemplate` 使用；不要使用不存在的 `RedisClient` / `@RedisClient`。
+
 ```typescript
-import { Service, Autowired } from "@fastcar/core/annotation";
-import { RedisClient } from "@fastcar/redis/annotation";
+import { Autowired, DS, Repository, Service } from "@fastcar/core/annotation";
+import { RedisTemplate } from "@fastcar/redis";
+
+@Repository
+@DS("default")
+class AppRedisTemplate extends RedisTemplate {}
 
 @Service
 class CacheService {
-  @RedisClient
-  private redis!: RedisClient;
+  @Autowired
+  private redisTemplate!: AppRedisTemplate;
   
   async get(key: string) {
-    return this.redis.get(key);
+    return this.redisTemplate.get(key);
   }
   
   async set(key: string, value: string, ttl?: number) {
-    await this.redis.set(key, value, ttl);
+    if (ttl) {
+      await this.redisTemplate.setEx(key, value, ttl);
+      return;
+    }
+    await this.redisTemplate.set(key, value);
+  }
+
+  async cacheUser(id: number, user: { id: number; name: string }) {
+    await this.redisTemplate.setJson(`user:${id}`, user, 3600);
+    return this.redisTemplate.getJson<{ id: number; name: string }>(`user:${id}`);
   }
 }
 ```
@@ -366,16 +407,15 @@ application:
   version: 1.0.0
   env: dev
 
-mysql:
-  host: localhost
-  port: 3306
-  database: mydb
-  username: root
-  password: password
-
-redis:
-  host: localhost
-  port: 6379
+settings:
+  mysql:
+    host: localhost
+    port: 3306
+    database: mydb
+    username: root
+    password: password
+  redis:
+    - { source: "default", host: "localhost", port: 6379 }
 ```
 
 使用配置：
@@ -584,4 +624,26 @@ async create(@Body body: ItemDTO) { }
 @ValidForm
 @POST()
 async create(@Rule() body: ItemDTO) { }
+```
+
+### 4. @Rule 参数不要二次 DTO 转换
+
+`@Rule()` 参数已经由 FastCar 校验并格式化。Controller 不要再调用 `DTO.from(body).toInput()`，否则会造成重复校验、职责混乱，并容易与框架格式化结果冲突。
+
+❌ **错误：**
+```typescript
+@ValidForm
+@POST()
+async create(@Rule() body: ItemDTO) {
+  return this.service.create(ItemDTO.from(body).toInput());
+}
+```
+
+✅ **正确：**
+```typescript
+@ValidForm
+@POST()
+async create(@Rule() body: ItemDTO) {
+  return this.service.create(body);
+}
 ```

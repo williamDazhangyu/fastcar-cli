@@ -20,6 +20,7 @@
 
 | Skill | 使用场景 |
 | --- | --- |
+| `auto-iterate-coding` | 面向 AI Coding Agent 的有界自动迭代开发协议，用于实现、验证、修复、优化和跨会话恢复。 |
 | `fastcar-framework` | IoC、依赖注入、Koa Web、配置、生命周期、项目模板。 |
 | `fastcar-database` | MySQL、PostgreSQL、MongoDB、Redis、ORM、事务、逆向生成。 |
 | `fastcar-rpc-microservices` | RPC 服务端/客户端、协议配置、微服务架构。 |
@@ -60,6 +61,7 @@ class ItemController {
 - `Context` 必须从 `koa` 导入。
 - 路由装饰器必须写成函数调用：`@GET()`、`@POST()`、`@REQUEST("/api")`。
 - 表单验证使用方法级 `@ValidForm` 和 DTO 参数上的 `@Rule()`。
+- `@Rule()` 会按 DTO 规则校验并格式化参数，Controller 中直接传递该参数，不要再调用 `DTO.from(body).toInput()`。
 
 禁止：
 
@@ -74,6 +76,12 @@ async getById(@Param("id") id: string) {}
 
 @POST()
 async create(@Body body: ItemDTO) {}
+
+@ValidForm
+@POST()
+async create(@Rule() body: ItemDTO) {
+  return this.service.create(ItemDTO.from(body).toInput());
+}
 ```
 
 ## 数据库查询规则
