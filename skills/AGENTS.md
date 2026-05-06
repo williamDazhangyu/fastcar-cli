@@ -10,11 +10,51 @@
 
 ## Agent 工作流程
 
-1. 先确认当前任务属于哪个 skill：框架、数据库、RPC/微服务、Serverless、工具集或 TypeScript 编码规范。
-2. 读取对应 `SKILL.md` 后再写代码，不要凭 NestJS、Express、Spring 等其他框架习惯推断 FastCar API。
-3. 修改示例、模板或业务代码时，优先保持现有项目结构和包管理器，不要无关格式化整个仓库。
-4. 生成代码后检查 import 来源、装饰器写法、数据库查询方式和返回值语义。
-5. 如果无法运行测试或示例命令，应在回复中明确说明未验证项。
+1. 先确认当前任务属于哪个 skill：自动迭代、框架、数据库、RPC/微服务、Serverless、工具集或 TypeScript 编码规范。
+2. 当用户用大白话要求启动、恢复、切换、检查、规划或优化自动迭代任务时，先读取 `auto-iterate-coding`，将自然语言意图映射为 `fastcar-cli auto-iterate` 命令；用户不需要记住 CLI 参数。
+3. 读取对应 `SKILL.md` 后再写代码，不要凭 NestJS、Express、Spring 等其他框架习惯推断 FastCar API。
+4. 修改示例、模板或业务代码时，优先保持现有项目结构和包管理器，不要无关格式化整个仓库。
+5. 生成代码后检查 import 来源、装饰器写法、数据库查询方式和返回值语义。
+6. 如果无法运行测试或示例命令，应在回复中明确说明未验证项。
+
+## 自动迭代 Skill 强触发词
+
+如果用户消息包含以下意图或词语，优先使用 `auto-iterate-coding`，并先读取 `skills/auto-iterate-coding/SKILL.md`：
+
+- 自动迭代、auto-iterate、全自动开发、Autopilot。
+- 完整实现、完整做完、全部实现、端到端实现、把需求都做完。
+- 根据文档实现、按文档实现、实现这个文档、实现 docs、实现 docs 文档。
+- 实现 PRD、根据 PRD 实现、按 PRD 实现、按 issue 实现、把文档里的需求都做完。
+- 快速启动、开一个自动迭代任务、帮我自动推进。
+- 一直修到通过、一直修到测试通过、不要停直到完成。
+- 检查是否完成、帮我验收、验收 PRD、验证这个 PRD 是否都实现了。
+- 只规划、先规划不要写代码、Plan-only。
+- 优化模块、优化性能、提升可维护性但别改行为。
+- 恢复任务、切换 session、列出自动迭代任务、resume session、switch session、list session。
+
+用户不需要记住 `fastcar-cli auto-iterate` 参数。Agent 应按 `auto-iterate-coding` 的自然语言命令路由规则，将用户意图映射为对应命令；只有缺少会影响安全、兼容性或外部资源的关键信息时才追问。
+
+## Import 规则
+
+- `@fastcar/*` 相关模块必须使用 TypeScript 静态 `import`。
+- 不要对 `@fastcar/core`、`@fastcar/koa`、`@fastcar/pgsql`、`@fastcar/pgboss` 等使用 CommonJS `require()`。
+- 示例、模板和业务代码都必须给出明确 import 来源，避免让 Agent 猜测 API 来源。
+
+正确写法：
+
+```typescript
+import { FastCarApplication } from "@fastcar/core";
+import { Application } from "@fastcar/core/annotation";
+import { EnableKoa } from "@fastcar/koa/annotation";
+import { PgsqlMapper } from "@fastcar/pgsql";
+```
+
+禁止：
+
+```typescript
+const { Application } = require("@fastcar/core/annotation");
+const { PgsqlMapper } = require("@fastcar/pgsql");
+```
 
 ## 可用 Skills
 
@@ -110,6 +150,12 @@ const stats = await this.mapper.selectByCustom({
 - 全表查询后用 `.reduce()` 分组统计。
 - N+1 循环查询后在内存中组装关联数据。
 - 用字符串 `"DESC"` / `"ASC"` 代替 `OrderEnum`。
+
+## 数据库一致性处理规则
+
+事务不是数据库实现的默认第一优先级。多数业务写入优先采用更温和、可恢复的方式处理，例如幂等键、状态机校验、唯一约束、分阶段写入、补偿更新、重试或后台修复任务。
+
+只有在明确存在强一致性需求时才优先使用事务，例如账户余额、库存扣减、跨表写入必须同时成功或失败、或中间状态会被外部系统立即消费。使用事务前应先确认事务边界短、锁范围小、失败路径可观测，并避免把网络调用、文件 IO、LLM 调用等长耗时操作放进事务。
 
 ## 实体、枚举和更新规则
 

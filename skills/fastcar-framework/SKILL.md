@@ -17,6 +17,7 @@ FastCar 是基于 TypeScript 的 Node.js 企业级应用开发框架，采用 Io
 - 路由装饰器必须写成 `@GET()` / `@POST()`，不能省略括号。
 - 使用 `@ValidForm` + `@Rule()` 后，Controller 参数已经被 FastCar 按规则校验并格式化，不要再写 `DTO.from(body).toInput()` 之类的二次转换。
 - 示例代码必须保留关键 import，尤其是 `Context` 从 `koa` 导入。
+- `@fastcar/*` 模块必须使用 TypeScript 静态 `import`，不要使用 CommonJS `require()`。
 
 ## 核心概念
 
@@ -68,6 +69,23 @@ app.start();
 ```
 
 ## 模块速查
+
+### Import 约束
+
+FastCar 示例、模板和业务代码必须使用静态 import：
+
+```typescript
+import { FastCarApplication } from "@fastcar/core";
+import { Application } from "@fastcar/core/annotation";
+import { EnableKoa } from "@fastcar/koa/annotation";
+```
+
+不要写：
+
+```typescript
+const { Application } = require("@fastcar/core/annotation");
+const { EnableKoa } = require("@fastcar/koa/annotation");
+```
 
 ### Web 开发 (@fastcar/koa)
 
@@ -593,6 +611,20 @@ async list() { }
 ```typescript
 @GET()
 async list() { }
+```
+
+### 1.1 @fastcar 包必须使用 import
+
+❌ **错误：**
+```typescript
+const { Controller } = require("@fastcar/core/annotation");
+const { GET } = require("@fastcar/koa/annotation");
+```
+
+✅ **正确：**
+```typescript
+import { Controller } from "@fastcar/core/annotation";
+import { GET } from "@fastcar/koa/annotation";
 ```
 
 ### 2. 不要使用不存在的装饰器

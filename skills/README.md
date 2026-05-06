@@ -32,11 +32,38 @@ fastcar-cli skill targets
 
 ## 启动自动迭代开发
 
-先单独安装 `auto-iterate-coding`，再在项目根目录生成启动文件：
+如果已经让 Agent 读取了 `auto-iterate-coding`，用户可以直接用大白话描述意图，让 Agent 自动路由到对应命令：
+
+```text
+帮我快速启动自动迭代，修复登录失败，session 叫 login-bugfix
+帮我快速启动自动迭代，修复登录失败，最多跑 5 轮
+帮我验收 docs/prd.md，不要改代码，session 叫 prd-check
+只帮我规划订单模块重构，不要写代码
+恢复登录修复任务
+列出所有自动迭代任务
+```
+
+Agent 应自动转换为类似命令：
+
+```bash
+fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix
+fastcar-cli auto-iterate --quick --goal "修复登录失败" --autopilot-max-iterations 5
+fastcar-cli auto-iterate --verify --from docs/prd.md --session prd-check
+fastcar-cli auto-iterate --plan-only --goal "订单模块重构"
+fastcar-cli auto-iterate --resume login-bugfix
+fastcar-cli auto-iterate --list
+```
+
+也可以手动执行命令。先单独安装 `auto-iterate-coding`，再在项目根目录生成启动文件：
 
 ```bash
 fastcar-cli skill install auto-iterate-coding
 fastcar-cli auto-iterate
+fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix
+fastcar-cli auto-iterate --verify --from docs/prd.md --session login-verify
+fastcar-cli auto-iterate --list
+fastcar-cli auto-iterate --resume login-bugfix
+fastcar-cli auto-iterate --mode plan --goal "设计支付模块"
 ```
 
 如果 AI 实现流程清单很长，可以从本地文档导入：
@@ -46,12 +73,40 @@ fastcar-cli auto-iterate --from docs/ai-checklist.md
 fastcar-cli auto-iterate -f docs/ai-checklist.md
 ```
 
-`fastcar-cli auto-iterate` 会交互式询问 AI 实现流程清单和迭代预算，并生成：
+`fastcar-cli auto-iterate` 会交互式选择启动模式，询问 AI 实现流程清单或轻量目标，并生成 session 文件和当前活动镜像：
 
-- `.agent-state/auto-iterate-coding.md`
-- `.agent-state/auto-iterate-start-prompt.md`
+- `.agent-state/auto-iterate/<session>/state.md`
+- `.agent-state/auto-iterate/<session>/start-prompt.md`
+- `.agent-state/auto-iterate-current.json`
+- `.agent-state/auto-iterate-coding.md`（当前活动 session 的 legacy 状态镜像）
+- `.agent-state/auto-iterate-start-prompt.md`（当前活动 session 的 legacy 启动提示镜像）
 
-生成后，把 `.agent-state/auto-iterate-start-prompt.md` 的内容发给 Agent。
+生成后，把 `.agent-state/auto-iterate/<session>/start-prompt.md` 的内容发给 Agent。旧流程也可以继续使用 `.agent-state/auto-iterate-start-prompt.md`。
+
+常用模式：
+
+```bash
+# 严格启动：完整流程清单
+fastcar-cli auto-iterate --strict
+
+# 快速启动：小中型任务，Agent 先推断流程清单
+fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix
+fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --autopilot-max-iterations 5
+
+# Verify-only：只检查/验收，不主动修改
+fastcar-cli auto-iterate --verify --from docs/prd.md --session login-verify
+
+# 查看、切换、恢复 session
+fastcar-cli auto-iterate --list
+fastcar-cli auto-iterate --switch login-verify
+fastcar-cli auto-iterate --resume login-bugfix
+
+# Plan-only：只规划，不写代码
+fastcar-cli auto-iterate --plan-only --goal "规划订单模块重构"
+
+# Optimization-only：先建立 baseline，再做有边界优化
+fastcar-cli auto-iterate --optimize --goal "优化查询性能"
+```
 
 单独安装自动迭代编码 skill：
 

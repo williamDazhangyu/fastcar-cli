@@ -16,6 +16,7 @@ FastCar 数据库模块提供基于装饰器的 ORM 支持，涵盖 MySQL、Post
 - 分页、分组、聚合、排序和 JOIN 必须在数据库层完成。
 - 排序必须使用 `OrderEnum`，条件运算符必须使用 `OperatorEnum` / `JoinEnum`。
 - 状态、类型、模式等离散字段必须使用枚举，不要使用魔法字符串或裸数字。
+- `@fastcar/*` 数据库相关模块必须使用 TypeScript 静态 `import`，不要使用 CommonJS `require()`。
 
 ## 模块速查
 
@@ -388,6 +389,10 @@ import { OperatorEnum, OrderEnum } from "@fastcar/core/db";
 
 #### 事务处理
 
+事务不是数据库实现的默认第一优先级。多数业务写入优先采用更温和、可恢复的方式处理，例如幂等键、状态机校验、唯一约束、分阶段写入、补偿更新、重试或后台修复任务。
+
+只有在明确存在强一致性需求时才优先使用事务，例如账户余额、库存扣减、跨表写入必须同时成功或失败、或中间状态会被外部系统立即消费。使用事务前应先确认事务边界短、锁范围小、失败路径可观测，并避免把网络调用、文件 IO、LLM 调用等长耗时操作放进事务。
+
 ```typescript
 import { SqlSession } from "@fastcar/core/annotation";
 import { MysqlDataSourceManager } from "@fastcar/mysql";
@@ -443,6 +448,8 @@ class EntityMapper extends PgsqlMapper<Entity> {}
 ```
 
 用法与 `MysqlMapper` 基本一致。
+
+`@fastcar/pgsql` 升级后仍应优先使用 ORM `select` / `update` / `updateOne` / `selectByCustom` 等能力。不要为了更新空字符串、少量字段或动态条件而绕过 ORM 改写为自定义 SQL；如遇类型收窄问题，应在 Repository 边界做清晰的类型适配，并保留 ORM 更新语义。
 
 ### MongoDB (@fastcar/mongo)
 

@@ -34,6 +34,14 @@ Commands:
 
   update:cos               更新 @fastcar/template-cos 的 target 文件夹
   auto-iterate             交互式生成 auto-iterate-coding 启动文件
+                           --mode strict|quick|verify|plan|optimize
+                           --strict / --quick / --verify / --plan-only / --optimize
+                           --goal <text> 快速传入简短目标
+                           --session <name> 指定 session，避免覆盖历史任务
+                           --max-iterations <n> 普通迭代预算
+                           --autopilot-max-iterations <n> Autopilot 迭代预算
+                           --list / --switch <name> / --resume <name>
+                           --no-latest 只写 session 文件，不同步 legacy 镜像
                            -f, --from    从本地清单文档导入长需求
 
   skill install <name>     安装 FastCar skill 到本地 AI Agent
@@ -68,7 +76,14 @@ Examples:
   $ fastcar-cli pack pnpm      # 使用 pnpm 安装依赖
 
   $ fastcar-cli update:cos     # 更新 cos 模板的 target 文件夹
-  $ fastcar-cli auto-iterate   # 生成自动迭代开发状态和启动提示
+  $ fastcar-cli auto-iterate   # 选择模式并生成自动迭代开发状态和启动提示
+  $ fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix # 快速启动 session
+  $ fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --autopilot-max-iterations 5 # 最多自动迭代 5 轮
+  $ fastcar-cli auto-iterate --verify --from docs/prd.md --session login-verify # Verify-only 验收 session
+  $ fastcar-cli auto-iterate --list # 列出 auto-iterate sessions
+  $ fastcar-cli auto-iterate --switch login-verify # 切换当前 session
+  $ fastcar-cli auto-iterate --resume login-bugfix # 恢复指定 session
+  $ fastcar-cli auto-iterate --mode plan --goal "设计支付模块" # Plan-only 规划模式
   $ fastcar-cli auto-iterate --from docs/ai-checklist.md # 从本地清单文档生成
 
   $ fastcar-cli skill install fastcar-framework       # 交互式安装

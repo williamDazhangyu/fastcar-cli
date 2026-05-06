@@ -8,10 +8,10 @@ export default class HelloController {
   @Autowired
   private helloService!: HelloService;
 
-  @GET
+  @GET()
   async index() {
     const message = this.helloService.sayHello("FastCar");
-    return { message, timestamp: new Date().toISOString() };
+    return { message, timestamp: Date.now() };
   }
 
   @GET("/health")
