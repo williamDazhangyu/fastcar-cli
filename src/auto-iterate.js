@@ -117,6 +117,9 @@ function parseArgs(args = []) {
     writeLatest: true,
     maxIterations: null,
     autopilotMaxIterations: null,
+    yes: false,
+    examples: false,
+    query: null,
   };
 
   args.forEach((arg, index) => {
@@ -187,6 +190,35 @@ function parseArgs(args = []) {
 
     if (arg === "--no-latest") {
       options.writeLatest = false;
+      return;
+    }
+
+    if (arg === "--yes" || arg === "-y" || arg === "--non-interactive") {
+      options.yes = true;
+      return;
+    }
+
+    if (arg === "--examples") {
+      options.examples = true;
+      if (args[index + 1] && !args[index + 1].startsWith("-")) {
+        options.query = args[index + 1];
+      }
+      return;
+    }
+
+    if (arg.startsWith("--examples=")) {
+      options.examples = true;
+      options.query = arg.slice("--examples=".length);
+      return;
+    }
+
+    if (arg === "--query" && args[index + 1]) {
+      options.query = args[index + 1];
+      return;
+    }
+
+    if (arg.startsWith("--query=")) {
+      options.query = arg.slice("--query=".length);
       return;
     }
 
@@ -840,6 +872,100 @@ async function promptMode(defaultMode = "strict") {
   return mode;
 }
 
+function buildNonInteractiveConfig(mode, options = {}, source = null) {
+  const config = getModeConfig(mode);
+  const goal = options.goal || (source ? "见原始清单文档" : "未指定目标");
+  const maxIterations = options.maxIterations || config.defaultMaxIterations;
+  const autopilotMaxIterations =
+    options.autopilotMaxIterations || config.defaultAutopilotMaxIterations;
+  const sourceDefaults = source
+    ? {
+        sourceChecklist: source.content,
+        sourceChecklistPath: path.relative(process.cwd(), source.path),
+      }
+    : {};
+
+  const base = {
+    mode,
+    goal,
+    maxIterations,
+    autopilotMaxIterations,
+    constraints: DEFAULT_CONSTRAINTS,
+    deliveryFormat: DEFAULT_DELIVERY_FORMAT,
+    allowAgentInference: mode !== "strict",
+    ...sourceDefaults,
+  };
+
+  switch (mode) {
+    case "quick":
+      return withModeDefaults({
+        ...base,
+        successCriteria:
+          "由 Agent 先探索代码库后推断，并在实现前写入需求覆盖矩阵（Requirement Coverage Matrix）",
+        nonGoals: "不做与本需求无关的重构、架构迁移或新依赖引入",
+        allowedScope:
+          "优先限于与目标直接相关的最小文件集合；跨模块修改前停止确认",
+        compatibility:
+          "保持现有公开 API、CLI 命令、配置、数据格式和测试行为；可能破坏兼容性时停止确认",
+        validationCommands:
+          "由 Agent 从 package.json、Makefile、scripts、CI 配置和项目约定中识别；缺失时标记 not_verified",
+      });
+    case "verify":
+      return withModeDefaults({
+        ...base,
+        allowModify: false,
+        successCriteria: source
+          ? "逐项验证原始清单文档是否已由现有实现满足"
+          : "逐项验证目标或 PRD 是否已由现有实现满足，并给出证据",
+        nonGoals: "不修改项目文件；不把差距修复伪装成验收结果",
+        allowedScope: "现有实现、测试、文档和与目标直接相关的文件",
+        compatibility: "不得削弱现有测试、接口、配置、数据格式或兼容行为",
+        validationCommands: "由 Agent 自动识别；缺失时标记 not_verified",
+        deliveryFormat:
+          "最终输出需求覆盖矩阵、完成定义、已运行验证、未验证项、差距清单、建议修复顺序、阻塞项和验收结论。",
+      });
+    case "plan":
+      return withModeDefaults({
+        ...base,
+        allowModify: false,
+        successCriteria:
+          "输出可执行计划、任务拆分、验证策略、风险和需要用户确认的问题",
+        nonGoals: "不写代码，不修改项目文件，不执行破坏性操作",
+        allowedScope: "只读探索项目，不修改项目文件",
+        compatibility: "保持现有架构、接口、命令和数据格式兼容",
+        validationCommands: "只识别验证命令，不运行需要修改环境或外部资源的操作",
+        deliveryFormat:
+          "最终输出需求拆解、架构理解、关键文件、实施步骤、验证策略、风险、阻塞项和建议下一步。",
+      });
+    case "optimize":
+      return withModeDefaults({
+        ...base,
+        successCriteria:
+          "建立 baseline；完成低风险优化；重新运行验证；证明质量提升且无行为回归",
+        nonGoals: "不做无关重构，不追求抽象最优，不改变用户可观察行为",
+        allowedScope: "与优化目标直接相关的代码、测试、类型和文档",
+        compatibility: "保持现有 API、命令、配置、数据格式和测试行为兼容",
+        validationCommands: "npm test\nnpm run build\nnpm run typecheck",
+        constraints:
+          "不要改变外部可观察行为\n不要新增依赖，除非先说明原因并等待确认\n无法重新运行验证时停止优化",
+        deliveryFormat:
+          "最终输出 baseline、优化目标、优化前后对比、保留/放弃的优化、运行验证、剩余风险和回退建议。",
+      });
+    case "strict":
+    default:
+      return withModeDefaults({
+        ...base,
+        successCriteria: source ? "以原始清单文档为准" : "由用户目标推断并在实现前确认",
+        nonGoals: source ? "以原始清单文档为准" : "未指定",
+        allowedScope: source
+          ? "以原始清单文档为准；未明确时仅修改与本次需求直接相关的代码、测试、类型和文档"
+          : "与本次需求直接相关的代码、测试、类型和文档",
+        compatibility: source ? "以原始清单文档为准" : "保持现有公开接口、命令和行为兼容",
+        validationCommands: "npm test\nnpm run build\nnpm run typecheck",
+      });
+  }
+}
+
 async function promptStrictConfig(options = {}) {
   const config = getModeConfig("strict");
   const answers = await inquirer.prompt([
@@ -1279,6 +1405,130 @@ async function promptAutoIterateConfigFromFile(source, mode, options = {}) {
   });
 }
 
+const NATURAL_LANGUAGE_EXAMPLES = [
+  {
+    title: "快速启动开发任务",
+    keywords: ["quick", "快速", "启动", "修复", "开发"],
+    examples: [
+      "帮我快速启动自动迭代，修复登录失败问题，session 叫 login-bugfix",
+      "快速开始修复用户登录失败，最多跑 5 轮，session 叫 login-fix",
+      "开一个自动迭代任务，实现用户登录功能，session 叫 user-login",
+      "帮我自动推进这个问题：订单列表分页错误，最多迭代 8 次",
+      "启动快速自动迭代，目标是修复支付回调重复处理问题",
+    ],
+  },
+  {
+    title: "严格按文档完整实现",
+    keywords: ["strict", "严格", "文档", "PRD", "完整实现", "docs"],
+    examples: [
+      "完整实现 docs/prd.md 里的所有需求，session 叫 prd-implement",
+      "严格按照 docs/ai-checklist.md 实现，不要遗漏任何需求，最多跑 10 轮",
+      "根据 docs/login.md 全部实现登录模块，session 叫 login-prd",
+      "按这个 PRD 完整做完：docs/payment-prd.md",
+      "把 docs/order.md 文档里的需求都做完，使用严格启动模式",
+    ],
+  },
+  {
+    title: "Verify-only：只检查/验收，不修改代码",
+    keywords: ["verify", "验收", "检查", "验证", "不修改", "PRD"],
+    examples: [
+      "帮我验收 docs/prd.md 是否都实现了，不要修改代码，session 叫 prd-check",
+      "检查当前实现是否满足 docs/login.md，不能改代码",
+      "验证这个 PRD 是否已经完成：docs/payment-prd.md",
+      "只检查订单模块是否满足需求，不要修复，最多跑 3 轮",
+      "帮我做一次 Verify-only，检查登录功能是否完整实现",
+    ],
+  },
+  {
+    title: "Plan-only：只规划，不写代码",
+    keywords: ["plan", "规划", "计划", "不要写代码", "不修改"],
+    examples: [
+      "只帮我规划订单模块重构，不要写代码",
+      "先规划实现用户权限系统，不要修改任何文件",
+      "帮我制定支付模块改造计划，先不要实现",
+      "Plan-only：分析如何实现消息通知功能",
+      "只输出实现计划、风险和验证策略，不进入编码",
+    ],
+  },
+  {
+    title: "Optimization-only：优化但保持行为不变",
+    keywords: ["optimize", "优化", "重构", "性能", "可维护性"],
+    examples: [
+      "优化登录模块代码结构，但不要改变外部行为",
+      "优化订单查询性能，先建立 baseline，最多跑 5 轮",
+      "提升支付模块可维护性，不要新增依赖",
+      "帮我做一次 Optimization-only，目标是减少重复代码",
+      "优化这个模块的类型定义和命名，保持 API 兼容",
+    ],
+  },
+  {
+    title: "一直修到通过 / Autopilot",
+    keywords: ["autopilot", "一直", "通过", "测试", "全自动"],
+    examples: [
+      "一直修到测试通过，最多跑 10 轮，session 叫 fix-tests",
+      "全自动修复当前构建错误，直到通过或触发停止条件",
+      "帮我自动迭代修复 npm test 失败，最多迭代 8 次",
+      "不要每轮问我，自动修到验证通过，session 叫 auto-fix",
+      "进入 Autopilot，修复所有类型检查错误",
+    ],
+  },
+  {
+    title: "session 管理",
+    keywords: ["session", "会话", "恢复", "切换", "列出", "list", "resume", "switch"],
+    examples: [
+      "列出所有自动迭代任务",
+      "查看当前有哪些 auto-iterate session",
+      "恢复登录修复任务",
+      "恢复 session login-bugfix",
+      "切换到 login-verify 这个 session",
+      "继续上次的自动迭代任务",
+    ],
+  },
+  {
+    title: "组合场景",
+    keywords: ["组合", "预算", "最多", "latest", "依赖", "数据库"],
+    examples: [
+      "帮我快速启动自动迭代，目标是修复登录失败，最多跑 5 轮，session 叫 login-bugfix，不要新增依赖",
+      "严格按照 docs/prd.md 完整实现，Autopilot 预算 10 轮，session 叫 prd-impl，不要连接生产数据库",
+      "帮我验收 docs/login.md 是否都实现了，不要修改代码，最多跑 3 轮，session 叫 login-check",
+      "只规划支付模块重构，不要写代码，session 叫 payment-plan，输出风险和验证策略",
+      "优化订单查询性能，保持 API 兼容，最多跑 5 轮，session 叫 order-query-optimize",
+    ],
+  },
+];
+
+function showNaturalLanguageExamples(query) {
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  const sections = normalizedQuery
+    ? NATURAL_LANGUAGE_EXAMPLES.filter((section) => {
+        const haystack = [
+          section.title,
+          ...section.keywords,
+          ...section.examples,
+        ]
+          .join("\n")
+          .toLowerCase();
+        return haystack.includes(normalizedQuery);
+      })
+    : NATURAL_LANGUAGE_EXAMPLES;
+
+  if (sections.length === 0) {
+    console.log(`未找到匹配的自然语言场景: ${query}`);
+    console.log("可尝试关键词：快速、文档、验收、规划、优化、测试、session、预算");
+    return;
+  }
+
+  console.log("# auto-iterate 自然语言触发示例\n");
+  console.log("把下面任意一句发给 Agent，Agent 应自动路由到 fastcar-cli auto-iterate ... --yes。\n");
+  sections.forEach((section) => {
+    console.log(`## ${section.title}\n`);
+    section.examples.forEach((example) => {
+      console.log(example);
+    });
+    console.log("");
+  });
+}
+
 async function resolveMode(options) {
   if (options.mode) {
     return options.mode;
@@ -1293,6 +1543,11 @@ async function resolveMode(options) {
 
 async function initAutoIterate(args = []) {
   const options = parseArgs(args);
+
+  if (options.examples) {
+    showNaturalLanguageExamples(options.query);
+    return;
+  }
 
   if (options.list) {
     await listSessions();
@@ -1320,9 +1575,11 @@ async function initAutoIterate(args = []) {
   }
 
   const source = options.from ? await readChecklistFile(options.from) : null;
-  const rawAnswers = source
-    ? await promptAutoIterateConfigFromFile(source, mode, options)
-    : await promptAutoIterateConfig(mode, options);
+  const rawAnswers = options.yes
+    ? buildNonInteractiveConfig(mode, options, source)
+    : source
+      ? await promptAutoIterateConfigFromFile(source, mode, options)
+      : await promptAutoIterateConfig(mode, options);
   const sessionName = options.session
     ? slugifySessionName(options.session)
     : await makeUniqueSessionName(buildDefaultSessionName(rawAnswers));
@@ -1330,6 +1587,12 @@ async function initAutoIterate(args = []) {
   const answers = withSessionDefaults(rawAnswers, sessionPaths);
 
   if (await pathExists(sessionPaths.sessionDir)) {
+    if (options.yes) {
+      console.log(`❌ session 已存在，非交互模式不会覆盖: ${sessionPaths.session}`);
+      console.log("   请换一个 --session，或先使用 --resume / --switch。");
+      return;
+    }
+
     const { overwrite } = await inquirer.prompt([
       {
         type: "confirm",

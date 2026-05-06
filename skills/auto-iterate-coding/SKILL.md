@@ -163,20 +163,21 @@ fastcar-cli auto-iterate --resume login-bugfix
 - 用户已明确目标、文件路径或 session 名时，不要再重复询问。
 - 只有缺少会影响安全、兼容性或外部资源的关键信息时，才向用户提问。
 - 调用命令后，直接把 CLI 输出的启动提示词作为后续执行依据。
+- Agent 根据自然语言路由自动调用命令时，应追加 `--yes` 进入非交互生成模式，避免卡在 CLI 交互提示。
 - 如果用户只是询问命令含义，不要执行命令；只有用户表达“帮我启动/生成/恢复/切换/检查/规划/优化”时才执行。
 
 自然语言映射表：
 
 | 用户说法 | Agent 应调用 |
 | --- | --- |
-| “快速开始修这个问题” / “开一个自动迭代任务” | `fastcar-cli auto-iterate --quick --goal "<目标>"` |
-| “完整实现这个文档” / “把文档里的需求都做完” | 如果能确定文档路径，调用 `fastcar-cli auto-iterate --strict --from <文档路径>`；不能确定时先搜索或询问文档路径 |
+| “快速开始修这个问题” / “开一个自动迭代任务” | `fastcar-cli auto-iterate --quick --goal "<目标>" --yes` |
+| “完整实现这个文档” / “把文档里的需求都做完” | 如果能确定文档路径，调用 `fastcar-cli auto-iterate --strict --from <文档路径> --yes`；不能确定时先搜索或询问文档路径 |
 | “完整实现 docs” / “实现 docs 文档” | 先确认 `docs` 是文件还是目录；如果是目录，先找候选需求文档，不要盲目把目录当文件传给 `--from` |
-| “根据 docs/prd.md 全部实现” / “按 docs/prd.md 做完” | `fastcar-cli auto-iterate --strict --from docs/prd.md` |
-| “严格按这个 PRD 做” / “完整实现这个文档” | `fastcar-cli auto-iterate --strict --from <文档路径>` |
-| “检查这个 PRD 是否实现了，不要改代码” / “帮我验收” | `fastcar-cli auto-iterate --verify --from <文档路径>` |
-| “只帮我规划一下，不要写代码” | `fastcar-cli auto-iterate --plan-only --goal "<目标>"` |
-| “优化这个模块” / “提升性能但别改行为” | `fastcar-cli auto-iterate --optimize --goal "<目标>"` |
+| “根据 docs/prd.md 全部实现” / “按 docs/prd.md 做完” | `fastcar-cli auto-iterate --strict --from docs/prd.md --yes` |
+| “严格按这个 PRD 做” / “完整实现这个文档” | `fastcar-cli auto-iterate --strict --from <文档路径> --yes` |
+| “检查这个 PRD 是否实现了，不要改代码” / “帮我验收” | `fastcar-cli auto-iterate --verify --from <文档路径> --yes` |
+| “只帮我规划一下，不要写代码” | `fastcar-cli auto-iterate --plan-only --goal "<目标>" --yes` |
+| “优化这个模块” / “提升性能但别改行为” | `fastcar-cli auto-iterate --optimize --goal "<目标>" --yes` |
 | “列出自动迭代任务” | `fastcar-cli auto-iterate --list` |
 | “切换到登录修复任务” | `fastcar-cli auto-iterate --switch <session>` |
 | “恢复登录修复任务” | `fastcar-cli auto-iterate --resume <session>` |
@@ -217,13 +218,13 @@ session 推断：
 
 ```text
 用户：帮我快速启动自动迭代，修复登录失败，session 叫 login-bugfix
-Agent：fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix
+Agent：fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --yes
 
 用户：帮我快速启动自动迭代，修复登录失败，最多跑 5 轮，session 叫 login-bugfix
-Agent：fastcar-cli auto-iterate --quick --goal "修复登录失败" --autopilot-max-iterations 5 --session login-bugfix
+Agent：fastcar-cli auto-iterate --quick --goal "修复登录失败" --autopilot-max-iterations 5 --session login-bugfix --yes
 
 用户：帮我验收 docs/prd.md，不要改代码，session 叫 prd-check
-Agent：fastcar-cli auto-iterate --verify --from docs/prd.md --session prd-check
+Agent：fastcar-cli auto-iterate --verify --from docs/prd.md --session prd-check --yes
 
 用户：恢复登录修复任务
 Agent：先运行 fastcar-cli auto-iterate --list 匹配 session；如果唯一匹配 login-bugfix，则运行 fastcar-cli auto-iterate --resume login-bugfix

@@ -46,10 +46,10 @@ fastcar-cli skill targets
 Agent 应自动转换为类似命令：
 
 ```bash
-fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix
-fastcar-cli auto-iterate --quick --goal "修复登录失败" --autopilot-max-iterations 5
-fastcar-cli auto-iterate --verify --from docs/prd.md --session prd-check
-fastcar-cli auto-iterate --plan-only --goal "订单模块重构"
+fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --yes
+fastcar-cli auto-iterate --quick --goal "修复登录失败" --autopilot-max-iterations 5 --yes
+fastcar-cli auto-iterate --verify --from docs/prd.md --session prd-check --yes
+fastcar-cli auto-iterate --plan-only --goal "订单模块重构" --yes
 fastcar-cli auto-iterate --resume login-bugfix
 fastcar-cli auto-iterate --list
 ```
@@ -90,8 +90,8 @@ fastcar-cli auto-iterate -f docs/ai-checklist.md
 fastcar-cli auto-iterate --strict
 
 # 快速启动：小中型任务，Agent 先推断流程清单
-fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix
-fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --autopilot-max-iterations 5
+fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix --yes
+fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --autopilot-max-iterations 5 --yes
 
 # Verify-only：只检查/验收，不主动修改
 fastcar-cli auto-iterate --verify --from docs/prd.md --session login-verify
@@ -123,6 +123,154 @@ fastcar-cli skill install auto-iterate-coding --local
 # 安装到指定 Agent
 fastcar-cli skill install auto-iterate-coding --target codex
 ```
+
+## 自然语言触发示例
+
+如果 Agent 已读取 `auto-iterate-coding`，可以直接对 Agent 说下面这些大白话，Agent 应自动路由到对应的 `fastcar-cli auto-iterate ... --yes` 命令。
+
+### 查看自然语言示例
+
+也可以用 CLI 直接输出可复制的自然语言触发语：
+
+```bash
+fastcar-cli auto-iterate --examples
+fastcar-cli auto-iterate --examples 验收
+fastcar-cli auto-iterate --examples 规划
+fastcar-cli auto-iterate --examples session
+```
+
+### 快速启动开发任务
+
+```text
+帮我快速启动自动迭代，修复登录失败问题，session 叫 login-bugfix
+快速开始修复用户登录失败，最多跑 5 轮，session 叫 login-fix
+开一个自动迭代任务，实现用户登录功能，session 叫 user-login
+帮我自动推进这个问题：订单列表分页错误，最多迭代 8 次
+启动快速自动迭代，目标是修复支付回调重复处理问题
+```
+
+### 严格按文档完整实现
+
+```text
+完整实现 docs/prd.md 里的所有需求，session 叫 prd-implement
+严格按照 docs/ai-checklist.md 实现，不要遗漏任何需求，最多跑 10 轮
+根据 docs/login.md 全部实现登录模块，session 叫 login-prd
+按这个 PRD 完整做完：docs/payment-prd.md
+把 docs/order.md 文档里的需求都做完，使用严格启动模式
+```
+
+### docs 目录相关
+
+```text
+完整实现 docs 里的需求文档
+根据 docs 目录下的 PRD 完整实现功能
+帮我找出 docs 里的需求文档，并启动严格自动迭代实现
+实现 docs 文档中的所有需求，如果有多个文档先让我选择
+按 docs 下的需求说明完整开发，session 叫 docs-implement
+```
+
+### Verify-only：只检查/验收，不修改代码
+
+```text
+帮我验收 docs/prd.md 是否都实现了，不要修改代码，session 叫 prd-check
+检查当前实现是否满足 docs/login.md，不能改代码
+验证这个 PRD 是否已经完成：docs/payment-prd.md
+只检查订单模块是否满足需求，不要修复，最多跑 3 轮
+帮我做一次 Verify-only，检查登录功能是否完整实现
+```
+
+### Plan-only：只规划，不写代码
+
+```text
+只帮我规划订单模块重构，不要写代码
+先规划实现用户权限系统，不要修改任何文件
+帮我制定支付模块改造计划，先不要实现
+Plan-only：分析如何实现消息通知功能
+只输出实现计划、风险和验证策略，不进入编码
+```
+
+### Optimization-only：优化但保持行为不变
+
+```text
+优化登录模块代码结构，但不要改变外部行为
+优化订单查询性能，先建立 baseline，最多跑 5 轮
+提升支付模块可维护性，不要新增依赖
+帮我做一次 Optimization-only，目标是减少重复代码
+优化这个模块的类型定义和命名，保持 API 兼容
+```
+
+### 一直修到通过 / Autopilot
+
+```text
+一直修到测试通过，最多跑 10 轮，session 叫 fix-tests
+全自动修复当前构建错误，直到通过或触发停止条件
+帮我自动迭代修复 npm test 失败，最多迭代 8 次
+不要每轮问我，自动修到验证通过，session 叫 auto-fix
+进入 Autopilot，修复所有类型检查错误
+```
+
+### 指定迭代预算
+
+```text
+帮我快速启动自动迭代，修复登录失败，最多跑 5 轮
+完整实现 docs/prd.md，Autopilot 预算 10 轮，普通预算 50 轮
+自动修复测试失败，最多迭代 3 次
+严格按 docs/order.md 实现，max_iterations 100，autopilot_max_iterations 20
+优化查询性能，最多跑 4 轮，超过就停止并汇报
+```
+
+### session 管理
+
+```text
+列出所有自动迭代任务
+查看当前有哪些 auto-iterate session
+恢复登录修复任务
+恢复 session login-bugfix
+切换到 login-verify 这个 session
+切换到 PRD 验收任务
+继续上次的自动迭代任务
+恢复最近的 auto-iterate session
+```
+
+### 指定 session 名
+
+```text
+帮我快速启动自动迭代，修复登录失败，session 叫 login-bugfix
+完整实现 docs/prd.md，session 叫 prd-implement
+验收 docs/login.md，不要改代码，session 叫 login-verify
+只规划订单模块重构，session 叫 order-plan
+优化查询性能，session 叫 query-optimize
+```
+
+### 不同步 latest 镜像
+
+```text
+帮我快速启动自动迭代，修复登录失败，session 叫 login-bugfix，不要同步 latest
+创建一个独立 session 叫 payment-test，不要同步 latest 镜像
+按 docs/payment.md 完整实现，session 叫 payment-implement，不要更新当前活动任务
+```
+
+### 组合场景
+
+```text
+帮我快速启动自动迭代，目标是修复登录失败，最多跑 5 轮，session 叫 login-bugfix，不要新增依赖
+严格按照 docs/prd.md 完整实现，Autopilot 预算 10 轮，session 叫 prd-impl，不要连接生产数据库
+帮我验收 docs/login.md 是否都实现了，不要修改代码，最多跑 3 轮，session 叫 login-check
+只规划支付模块重构，不要写代码，session 叫 payment-plan，输出风险和验证策略
+优化订单查询性能，保持 API 兼容，最多跑 5 轮，session 叫 order-query-optimize
+```
+
+### 最推荐的日常说法
+
+```text
+帮我快速启动自动迭代，目标是【这里写目标】，最多跑 5 轮，session 叫【session-name】
+完整实现【文档路径】，最多跑 10 轮，session 叫【session-name】
+帮我验收【文档路径】，不要修改代码，session 叫【session-name】
+只规划【目标】，不要写代码，session 叫【session-name】
+优化【目标】，保持行为不变，最多跑 5 轮，session 叫【session-name】
+```
+
+注意：如果说的是“完整实现 docs”，Agent 应先判断 `docs` 是文件还是目录。如果是目录，应先找候选需求文档，不能直接把目录传给 `--from`。更稳的说法是“完整实现 docs/prd.md，session 叫 prd-implement”。
 
 ## 主流 Agent 使用方式
 

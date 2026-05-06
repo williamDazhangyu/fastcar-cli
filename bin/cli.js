@@ -42,6 +42,8 @@ Commands:
                            --autopilot-max-iterations <n> Autopilot 迭代预算
                            --list / --switch <name> / --resume <name>
                            --no-latest 只写 session 文件，不同步 legacy 镜像
+                           --yes, -y 非交互生成，适合 Agent 自然语言路由
+                           --examples [关键词] 输出可复制的自然语言触发示例
                            -f, --from    从本地清单文档导入长需求
 
   skill install <name>     安装 FastCar skill 到本地 AI Agent
@@ -77,10 +79,12 @@ Examples:
 
   $ fastcar-cli update:cos     # 更新 cos 模板的 target 文件夹
   $ fastcar-cli auto-iterate   # 选择模式并生成自动迭代开发状态和启动提示
-  $ fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix # 快速启动 session
+  $ fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix --yes # 快速启动 session（非交互）
   $ fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --autopilot-max-iterations 5 # 最多自动迭代 5 轮
   $ fastcar-cli auto-iterate --verify --from docs/prd.md --session login-verify # Verify-only 验收 session
   $ fastcar-cli auto-iterate --list # 列出 auto-iterate sessions
+  $ fastcar-cli auto-iterate --examples # 输出自然语言触发示例
+  $ fastcar-cli auto-iterate --examples 验收 # 按关键词检索触发示例
   $ fastcar-cli auto-iterate --switch login-verify # 切换当前 session
   $ fastcar-cli auto-iterate --resume login-bugfix # 恢复指定 session
   $ fastcar-cli auto-iterate --mode plan --goal "设计支付模块" # Plan-only 规划模式
