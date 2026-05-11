@@ -8,6 +8,27 @@ const CURRENT_FILE = "auto-iterate-current.json";
 const SESSION_STATE_FILE = "state.md";
 const SESSION_PROMPT_FILE = "start-prompt.md";
 
+const REQUIRED_STATE_SECTIONS = [
+  "## At-a-Glance / 人类摘要",
+  "## Task / 任务",
+  "## Session / 会话",
+  "## Mode / 模式",
+  "## Agent Capability Summary",
+  "## Sub-Agent Dispatch / 子 Agent 调度",
+  "## Budgets / 预算",
+  "## Recovery / Reconcile / 恢复一致性检查",
+  "## Current State / 当前状态",
+  "## Watchdog / 看门狗",
+  "## Requirement Coverage Matrix / 需求覆盖矩阵",
+  "## Definition of Done / 完成定义",
+  "## Decisions / 已确认决策",
+  "## Hypotheses / 假设",
+  "## Validation / 验证",
+  "## Temporary Artifacts / Cleanup / 临时产物清理",
+  "## Context Handoff Summary / 上下文交接摘要",
+  "## Resume Prompt / 恢复提示",
+];
+
 const MODE_CONFIGS = {
   strict: {
     label: "严格启动",
@@ -146,6 +167,7 @@ function parseArgs(args = []) {
     list: false,
     switchSession: null,
     resumeSession: null,
+    validateState: null,
     maxIterations: null,
     autopilotMaxIterations: null,
     yes: false,
@@ -216,6 +238,18 @@ function parseArgs(args = []) {
 
     if (arg.startsWith("--resume=")) {
       options.resumeSession = arg.slice("--resume=".length);
+      return;
+    }
+
+    if (arg === "--validate-state") {
+      options.validateState = args[index + 1] && !args[index + 1].startsWith("-")
+        ? args[index + 1]
+        : "__current__";
+      return;
+    }
+
+    if (arg.startsWith("--validate-state=")) {
+      options.validateState = arg.slice("--validate-state=".length) || "__current__";
       return;
     }
 
@@ -450,6 +484,566 @@ function extractStateField(content, pattern, fallback = "unknown") {
   return match && match[1] ? match[1].trim() : fallback;
 }
 
+function extractSection(content, heading) {
+  const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `^${escapedHeading}\\s*\\r?\\n([\\s\\S]*?)(?=^##\\s|(?![\\s\\S]))`,
+    "m",
+  );
+  const match = content.match(pattern);
+  return match && match[1] ? match[1].trimEnd() : "";
+}
+
+function extractFirstSection(content, headings) {
+  for (const heading of headings) {
+    const section = extractSection(content, heading);
+    if (section) {
+      return section;
+    }
+  }
+  return "";
+}
+
+function parseScalar(section, fieldName, fallback = "") {
+  const escapedField = fieldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^\\s*${escapedField}：([^\\r\\n]*)`, "m");
+  const match = section.match(pattern);
+  return match && match[1] ? match[1].trim() : fallback;
+}
+
+function parseSubAgentList(section, fieldName) {
+  const escapedField = fieldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `^${escapedField}：\\s*\\r?\\n([\\s\\S]*?)(?=^${escapedField}_item_template：|^[^\\s].*：|^##\\s|(?![\\s\\S]))`,
+    "m",
+  );
+  const match = section.match(pattern);
+  if (!match || !match[1]) {
+    const inlineValue = parseScalar(section, fieldName, "");
+    return inlineValue && !inlineValue.startsWith("无") ? [{ raw: inlineValue }] : [];
+  }
+
+  const block = match[1];
+  if (!block.trim() || block.trim().startsWith("无")) {
+    return [];
+  }
+
+  return block
+    .split(/\r?\n(?=\s*-\s+)/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const item = { raw: entry };
+      for (const line of entry.split(/\r?\n/)) {
+        const normalized = line.replace(/^\s*-\s*/, "").trim();
+        const fieldMatch = normalized.match(/^([^：]+)：(.*)$/);
+        if (fieldMatch) {
+          item[fieldMatch[1].trim()] = fieldMatch[2].trim();
+        }
+      }
+      return item;
+    });
+}
+
+function splitAssignedFiles(value) {
+  return String(value || "")
+    .split(/[,，、\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((item) => !["无", "未分配", "not_run", "N/A"].includes(item));
+}
+
+function expectedSubAgentTypesForPhase(currentPhase) {
+  switch (currentPhase) {
+    case "explore":
+    case "req_extract":
+      return ["explore"];
+    case "verify":
+      return ["background"];
+    case "implement":
+      return ["coder"];
+    default:
+      return [];
+  }
+}
+
+function missingSubAgentFields(agent, requiredFields) {
+  return requiredFields.filter((field) => {
+    const value = agent[field];
+    return !value || value === "无" || value === "未开始" || value === "未完成";
+  });
+}
+
+function addIssue(issues, severity, message) {
+  issues.push({ severity, message });
+}
+
+function addError(issues, message) {
+  addIssue(issues, "error", message);
+}
+
+function addWarning(issues, message) {
+  addIssue(issues, "warning", message);
+}
+
+async function resolveStateFileForValidation(target) {
+  const paths = getStatePaths();
+  if (!target || target === "__current__") {
+    const current = await readJsonFile(paths.currentPath);
+    if (!current || !current.stateFile) {
+      throw new Error("未找到 current 指针，请传入 --validate-state <session|state.md>");
+    }
+    return {
+      stateFile: path.resolve(process.cwd(), current.stateFile),
+      current,
+      currentPath: paths.currentPath,
+      session: current.session || "unknown",
+      targetType: "current",
+    };
+  }
+
+  if (target.endsWith(".md") || target.includes("/") || target.includes("\\")) {
+    return {
+      stateFile: path.resolve(process.cwd(), target),
+      current: await readJsonFile(paths.currentPath),
+      currentPath: paths.currentPath,
+      session: null,
+      targetType: "path",
+    };
+  }
+
+  const sessionPaths = getSessionPaths(target);
+  if (!(await pathExists(sessionPaths.sessionStatePath))) {
+    throw new Error(`未找到 session state: ${sessionPaths.session} (${toRelative(sessionPaths.sessionStatePath)})`);
+  }
+  return {
+    stateFile: sessionPaths.sessionStatePath,
+    current: await readJsonFile(paths.currentPath),
+    currentPath: paths.currentPath,
+    session: sessionPaths.session,
+    targetType: "session",
+  };
+}
+
+function validateSubAgentDispatchState(content) {
+  const issues = [];
+  const dispatch = extractSection(content, "## Sub-Agent Dispatch / 子 Agent 调度");
+  const decisions = extractSection(content, "## Decisions / 已确认决策") ||
+    extractSection(content, "## Decisions");
+  const rcm = extractSection(content, "## Requirement Coverage Matrix / 需求覆盖矩阵") ||
+    extractSection(content, "## Requirement Coverage Matrix");
+
+  if (!dispatch) {
+    return {
+      issues: [
+        {
+          severity: "error",
+          message: "缺少 ## Sub-Agent Dispatch / 子 Agent 调度 章节",
+        },
+      ],
+    };
+  }
+
+  const currentPhase = parseScalar(dispatch, "current_phase", "unknown");
+  const enabled = parseScalar(dispatch, "enabled", "unknown");
+  const lastMergeResult = parseScalar(dispatch, "last_merge_result", "unknown");
+  const failedCount = Number.parseInt(parseScalar(dispatch, "failed_count", "0"), 10) || 0;
+  const completedCount = Number.parseInt(parseScalar(dispatch, "completed_count", "0"), 10) || 0;
+  const dispatchedCount = Number.parseInt(parseScalar(dispatch, "dispatched_count", "0"), 10) || 0;
+  const maxFailed = Number.parseInt(parseScalar(dispatch, "max_failed_sub_agents", "2"), 10) || 2;
+  const active = parseSubAgentList(dispatch, "active_sub_agents");
+  const history = parseSubAgentList(dispatch, "sub_agent_history");
+  const parallelWriteAllowed = parseScalar(decisions, "parallel_write_allowed", "false");
+  const ownership = parseScalar(decisions, "coder_file_ownership", "");
+  const enabledValue = String(enabled).trim();
+  const enabledIsTrue = enabledValue.startsWith("true");
+  const expectedTypes = expectedSubAgentTypesForPhase(currentPhase);
+
+  if (enabledIsTrue && currentPhase === "idle" && active.length > 0) {
+    addError(issues, "current_phase=idle 时 active_sub_agents 必须为空");
+  }
+
+  if (!enabledIsTrue && active.length > 0) {
+    addError(issues, "enabled 非 true 时不得存在 active_sub_agents");
+  }
+
+  if (active.length > 0 && currentPhase === "idle") {
+    addError(issues, "active_sub_agents 非空时不得处于 idle，也不得开始新 dispatch");
+  }
+
+  const coderFileOwners = new Map();
+  for (const agent of active) {
+    const type = agent.type || "";
+    const status = agent.status || "";
+    const mergeStatus = agent.merge_status || "";
+    const agentId = agent.id || agent.raw;
+    const missingFields = missingSubAgentFields(agent, ["id", "type", "task", "files_assigned", "status", "merge_status"]);
+
+    if (missingFields.length > 0) {
+      addError(issues, `子 Agent ${agentId} 缺少必要字段: ${missingFields.join(", ")}`);
+    }
+
+    if (expectedTypes.length > 0 && type && !expectedTypes.includes(type)) {
+      addError(issues, `current_phase=${currentPhase} 与子 Agent ${agentId} type=${type} 不一致`);
+    }
+
+    if ((status === "completed" || status === "failed") && mergeStatus === "pending") {
+      addError(issues, `子 Agent ${agentId} 已结束但 merge_status 仍为 pending，进入下一轮前必须 merged 或 skipped`);
+    }
+
+    if (type === "coder") {
+      const files = splitAssignedFiles(agent.files_assigned);
+      if (files.length === 0) {
+        addError(issues, `coder 子 Agent ${agentId} 缺少 files_assigned 白名单`);
+      }
+
+      for (const file of files) {
+        if (coderFileOwners.has(file)) {
+          addError(issues, `coder files_assigned 冲突: ${file} 同时分配给 ${coderFileOwners.get(file)} 和 ${agentId}`);
+        } else {
+          coderFileOwners.set(file, agentId);
+        }
+      }
+    }
+  }
+
+  const hasActiveCoder = active.some((agent) => agent.type === "coder");
+  if (hasActiveCoder) {
+    if (!String(parallelWriteAllowed).includes("true")) {
+      addError(issues, "存在 active coder 子 Agent，但 Decisions.parallel_write_allowed 未确认为 true");
+    }
+    if (!ownership || ownership === "未分配") {
+      addError(issues, "存在 active coder 子 Agent，但 coder_file_ownership 未记录 ownership");
+    }
+  }
+
+  if (failedCount >= maxFailed && hasActiveCoder) {
+    addError(issues, "failed_count 已达到 max_failed_sub_agents，后续不得继续 dispatch coder 子 Agent");
+  }
+
+  const allAgents = [...active, ...history];
+  const observedCompletedCount = allAgents.filter((agent) => agent.status === "completed" || agent.merge_result === "success").length;
+  const observedFailedCount = allAgents.filter((agent) => agent.status === "failed" || agent.merge_result === "skipped").length;
+  if (dispatchedCount > 0 && dispatchedCount < allAgents.length) {
+    addWarning(issues, "dispatched_count 小于 active_sub_agents + sub_agent_history 条目数，请确认计数已更新");
+  }
+  if (completedCount < observedCompletedCount) {
+    addWarning(issues, "completed_count 小于已完成/成功合并的子 Agent 条目数，请确认计数已更新");
+  }
+  if (failedCount < observedFailedCount) {
+    addWarning(issues, "failed_count 小于失败/跳过的子 Agent 条目数，请确认计数已更新");
+  }
+
+  if (/partial|failed/.test(lastMergeResult) && /状态：passed/.test(rcm)) {
+    addWarning(issues, "last_merge_result 为 partial/failed 时发现 RCM passed，请确认没有错误推进需求状态");
+  }
+
+  if (active.some((agent) => /merged|skipped/.test(agent.merge_status || ""))) {
+    addWarning(issues, "active_sub_agents 中存在已 merged/skipped 条目，merge 后应移入 sub_agent_history");
+  }
+
+  if (history.some((agent) => !agent.agent_id && !agent.id)) {
+    addWarning(issues, "sub_agent_history 中存在缺少 agent_id 的记录，恢复审计可能不完整");
+  }
+
+  return { issues };
+}
+
+function stateHeadingExists(content, heading) {
+  const baseHeading = heading.split(" / ")[0];
+  const escapedHeading = baseHeading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^${escapedHeading}(?:\\s*/.*)?\\s*$`, "m");
+  return pattern.test(content);
+}
+
+function parseStateNumber(section, fieldName, fallback = 0) {
+  const value = parseScalar(section, fieldName, "");
+  const match = String(value).match(/-?\d+/);
+  if (!match) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(match[0], 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseStateBoolean(section, fieldName, fallback = false) {
+  const value = parseScalar(section, fieldName, String(fallback));
+  if (String(value).trim().startsWith("true")) {
+    return true;
+  }
+  if (String(value).trim().startsWith("false")) {
+    return false;
+  }
+  return fallback;
+}
+
+function normalizeRelativePathForCompare(filePath) {
+  return String(filePath || "").replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function isPendingCleanupValue(value) {
+  return /pending|待|未|需要|todo/i.test(String(value || ""));
+}
+
+function countRequirementStates(rcm) {
+  const counts = {
+    passed: 0,
+    pending: 0,
+    implemented: 0,
+    notVerified: 0,
+    blocked: 0,
+  };
+  for (const match of rcm.matchAll(/^状态：([^\r\n]+)/gm)) {
+    const value = match[1].trim();
+    if (value.startsWith("passed")) {
+      counts.passed += 1;
+    } else if (value.startsWith("pending")) {
+      counts.pending += 1;
+    } else if (value.startsWith("implemented")) {
+      counts.implemented += 1;
+    } else if (value.startsWith("not_verified")) {
+      counts.notVerified += 1;
+    } else if (value.startsWith("blocked")) {
+      counts.blocked += 1;
+    }
+  }
+  return counts;
+}
+
+async function validateSessionStateBaseline(content, stateInfo) {
+  const issues = [];
+  for (const section of REQUIRED_STATE_SECTIONS) {
+    if (!stateHeadingExists(content, section)) {
+      addError(issues, `缺少必要章节: ${section}`);
+    }
+  }
+
+  const stateFile = stateInfo.stateFile;
+  const sessionSection = extractFirstSection(content, [
+    "## Session / 会话",
+    "## Session",
+  ]);
+  const session = parseScalar(sessionSection, "session", "");
+  const stateFileInState = parseScalar(sessionSection, "状态文件", "");
+  const promptFileInState = parseScalar(sessionSection, "启动提示", "");
+  const currentFileInState = parseScalar(sessionSection, "current 指针", "");
+  const expectedSession = session || stateInfo.session;
+  const expectedStatePath = expectedSession
+    ? `.agent-state/auto-iterate/${expectedSession}/state.md`
+    : normalizeRelativePathForCompare(toRelative(stateFile));
+  const expectedPromptPath = expectedSession
+    ? `.agent-state/auto-iterate/${expectedSession}/start-prompt.md`
+    : normalizeRelativePathForCompare(promptFileInState);
+  const promptPath = promptFileInState
+    ? path.resolve(process.cwd(), promptFileInState)
+    : expectedSession
+      ? getSessionPaths(expectedSession).sessionPromptPath
+      : null;
+  const currentPromptPath = stateInfo.current && stateInfo.current.promptFile
+    ? path.resolve(process.cwd(), stateInfo.current.promptFile)
+    : null;
+
+  if (!session) {
+    addError(issues, "Session 章节缺少 session 字段");
+  }
+
+  if (stateInfo.targetType === "session" && session && stateInfo.session !== session) {
+    addError(issues, `命令指定 session=${stateInfo.session}，但 state.md 中 session=${session}`);
+  }
+
+  if (stateFileInState && normalizeRelativePathForCompare(stateFileInState) !== normalizeRelativePathForCompare(toRelative(stateFile))) {
+    addWarning(issues, `Session.状态文件=${stateFileInState} 与实际文件 ${toRelative(stateFile)} 不一致`);
+  }
+
+  if (stateFileInState && expectedSession && normalizeRelativePathForCompare(stateFileInState) !== expectedStatePath) {
+    addWarning(issues, `Session.状态文件 未指向标准 session 路径 ${expectedStatePath}`);
+  }
+
+  if (!promptPath || !(await pathExists(promptPath))) {
+    addError(issues, `缺少 start-prompt.md: ${promptFileInState || expectedPromptPath || "unknown"}`);
+  }
+  if (currentPromptPath && !(await pathExists(currentPromptPath))) {
+    addError(issues, `auto-iterate-current.json.promptFile 指向的文件不存在: ${stateInfo.current.promptFile}`);
+  }
+
+  if (!currentFileInState || normalizeRelativePathForCompare(currentFileInState) !== ".agent-state/auto-iterate-current.json") {
+    addWarning(issues, "Session.current 指针未记录为 .agent-state/auto-iterate-current.json");
+  }
+
+  if (!stateInfo.current || !stateInfo.current.stateFile) {
+    addWarning(issues, "缺少 auto-iterate-current.json 或 current.stateFile，无法确认当前活动 session");
+  } else if (expectedSession && stateInfo.current.session === expectedSession) {
+    const currentStateFile = normalizeRelativePathForCompare(stateInfo.current.stateFile);
+    const currentPromptFile = normalizeRelativePathForCompare(stateInfo.current.promptFile);
+    if (currentStateFile !== expectedStatePath) {
+      addError(issues, `auto-iterate-current.json.stateFile=${stateInfo.current.stateFile}，未指向 ${expectedStatePath}`);
+    }
+    if (currentPromptFile !== expectedPromptPath) {
+      addError(issues, `auto-iterate-current.json.promptFile=${stateInfo.current.promptFile}，未指向 ${expectedPromptPath}`);
+    }
+    if (stateFileInState && currentStateFile !== normalizeRelativePathForCompare(stateFileInState)) {
+      addError(issues, `auto-iterate-current.json.stateFile=${stateInfo.current.stateFile}，与 Session.状态文件=${stateFileInState} 不一致`);
+    }
+    if (promptFileInState && currentPromptFile !== normalizeRelativePathForCompare(promptFileInState)) {
+      addError(issues, `auto-iterate-current.json.promptFile=${stateInfo.current.promptFile}，与 Session.启动提示=${promptFileInState} 不一致`);
+    }
+  } else if (stateInfo.targetType === "current" && expectedSession && stateInfo.current.session !== expectedSession) {
+    addError(issues, `current.session=${stateInfo.current.session || "unknown"} 与 state.md session=${expectedSession} 不一致`);
+  } else if (stateInfo.targetType === "session" && expectedSession && stateInfo.current.session !== expectedSession) {
+    addWarning(issues, `当前活动 session 是 ${stateInfo.current.session || "unknown"}，本次校验的是 ${expectedSession}`);
+  }
+
+  const budgets = extractFirstSection(content, ["## Budgets / 预算", "## Budgets"]);
+  const implementationUsed = parseStateNumber(budgets, "implementation_iterations_used", 0);
+  const optimizationUsed = parseStateNumber(budgets, "optimization_iterations_used", 0);
+  const totalCycles = parseStateNumber(budgets, "total_cycles", 0);
+  const remainingImplementation = parseStateNumber(budgets, "remaining_implementation_iterations", 0);
+  const maxIterations = parseStateNumber(budgets, "max_iterations", 0);
+  const minimumIterationsValue = parseScalar(budgets, "minimum_implementation_iterations", "未启用");
+  const minimumIterations = /^\d+/.test(minimumIterationsValue)
+    ? parseStateNumber(budgets, "minimum_implementation_iterations", 0)
+    : null;
+
+  if (totalCycles !== implementationUsed + optimizationUsed) {
+    addError(issues, `total_cycles=${totalCycles}，但 implementation_iterations_used + optimization_iterations_used=${implementationUsed + optimizationUsed}`);
+  }
+
+  if (remainingImplementation === 0) {
+    addWarning(issues, "remaining_implementation_iterations = 0，恢复后必须先请求用户追加预算，不得继续修改");
+  }
+
+  if (minimumIterations !== null) {
+    if (maxIterations > 0 && minimumIterations > maxIterations) {
+      addError(issues, `minimum_implementation_iterations=${minimumIterations} 大于 max_iterations=${maxIterations}`);
+    }
+    if (implementationUsed < minimumIterations) {
+      addWarning(issues, `implementation_iterations_used=${implementationUsed} 尚未达到 minimum_implementation_iterations=${minimumIterations}`);
+    }
+  }
+
+  const watchdog = extractFirstSection(content, ["## Watchdog / 看门狗", "## Watchdog"]);
+  const watchdogTriggered = parseStateBoolean(watchdog, "triggered", false);
+  const requiredAction = parseScalar(watchdog, "required_action", "");
+  const deliveryVerifiability = parseScalar(watchdog, "delivery_verifiability", "");
+  const stateDrift = parseScalar(watchdog, "state_drift", "");
+  const watchdogLastValidationResult = parseScalar(watchdog, "last_validation_result", "");
+  if (watchdogTriggered) {
+    addError(issues, `Watchdog.triggered=true，必须先处理 required_action=${requiredAction || "unknown"}`);
+  }
+  if (/suspected|confirmed/.test(stateDrift)) {
+    addError(issues, `Watchdog.state_drift=${stateDrift}，必须先进入 reconcile`);
+  }
+  if (/not_verifiable|unknown/.test(deliveryVerifiability)) {
+    addWarning(issues, `Watchdog.delivery_verifiability=${deliveryVerifiability}，交付前不得声称完整完成`);
+  }
+
+  const rcm = extractFirstSection(content, [
+    "## Requirement Coverage Matrix / 需求覆盖矩阵",
+    "## Requirement Coverage Matrix",
+  ]);
+  const dod = extractFirstSection(content, [
+    "## Definition of Done / 完成定义",
+    "## Definition of Done",
+  ]);
+  const requirementCounts = countRequirementStates(rcm);
+  const hasOpenRequirements = requirementCounts.pending > 0 ||
+    requirementCounts.implemented > 0 ||
+    requirementCounts.notVerified > 0 ||
+    requirementCounts.blocked > 0;
+  const hasPassedRequirements = requirementCounts.passed > 0;
+  const dodVerifiability = parseScalar(dod, "交付可验证性", "");
+  const dodWatchdogState = parseScalar(dod, "看门狗状态", "");
+  if (hasOpenRequirements && /交付可验证性：verifiable/.test(dod)) {
+    addError(issues, "RCM 仍存在 pending/implemented/not_verified/blocked，但 DoD 标记为 verifiable");
+  }
+  if (hasOpenRequirements && deliveryVerifiability === "verifiable") {
+    addError(issues, "RCM 仍存在 pending/implemented/not_verified/blocked，但 Watchdog.delivery_verifiability=verifiable");
+  }
+  if (hasPassedRequirements && /未运行|failed|失败/.test(watchdogLastValidationResult)) {
+    addWarning(issues, "RCM 已存在 passed 需求，但 Watchdog.last_validation_result 未显示最近验证通过");
+  }
+  if (requirementCounts.blocked > 0 && /看门狗状态：clear/.test(dod)) {
+    addWarning(issues, "RCM 存在 blocked 需求，但 DoD 看门狗状态仍为 clear");
+  }
+  if (/not_verifiable|unknown/.test(dodVerifiability)) {
+    addWarning(issues, `DoD.交付可验证性=${dodVerifiability}，交付前不得声称完整完成`);
+  }
+  if (/triggered/.test(dodWatchdogState)) {
+    addError(issues, "DoD.看门狗状态=triggered，必须先处理停止/恢复动作");
+  }
+
+  const validation = extractFirstSection(content, ["## Validation / 验证", "## Validation"]);
+  const validationVerifiability = parseScalar(validation, "最终交付可验证性", "");
+  const passedValidation = parseScalar(validation, "已通过验证", "");
+  if (deliveryVerifiability && validationVerifiability && validationVerifiability !== "unknown" && deliveryVerifiability !== validationVerifiability) {
+    addWarning(issues, `Watchdog.delivery_verifiability=${deliveryVerifiability} 与 Validation.最终交付可验证性=${validationVerifiability} 不一致`);
+  }
+  if (hasPassedRequirements && (!passedValidation || passedValidation === "无")) {
+    addWarning(issues, "RCM 已存在 passed 需求，但 Validation.已通过验证 未记录证据");
+  }
+
+  const cleanup = extractFirstSection(content, [
+    "## Temporary Artifacts / Cleanup / 临时产物清理",
+    "## Temporary Artifacts / Cleanup",
+  ]);
+  const cleanupStatus = parseScalar(cleanup, "清理状态", "");
+  const artifactsToDelete = parseScalar(cleanup, "待删除 artifacts", "");
+  if (isPendingCleanupValue(cleanupStatus) && !/无|not_needed|已确认保留/.test(artifactsToDelete)) {
+    addWarning(issues, `Temporary Artifacts / Cleanup 清理状态=${cleanupStatus}，交付前需清理或记录保留理由`);
+  }
+
+  return { issues };
+}
+
+async function validateState(target) {
+  let stateInfo;
+  try {
+    stateInfo = await resolveStateFileForValidation(target);
+  } catch (error) {
+    console.log(`❌ ${error.message}`);
+    return;
+  }
+
+  let content;
+  try {
+    content = await fs.promises.readFile(stateInfo.stateFile, "utf8");
+  } catch {
+    console.log(`❌ 无法读取 state 文件: ${stateInfo.stateFile}`);
+    return;
+  }
+
+  const sessionValidation = await validateSessionStateBaseline(content, stateInfo);
+  const subAgentValidation = validateSubAgentDispatchState(content);
+  const issues = [...sessionValidation.issues, ...subAgentValidation.issues];
+  console.log(`State: ${toRelative(stateInfo.stateFile)}`);
+  if (issues.length === 0) {
+    console.log("✅ auto-iterate session state 校验通过");
+    console.log("✅ sub-agent state 校验通过");
+    return;
+  }
+
+  const hasError = issues.some((issue) => issue.severity === "error");
+  console.log(hasError ? "❌ auto-iterate session state 校验发现错误:" : "⚠️ auto-iterate session state 校验发现警告:");
+  if (subAgentValidation.issues.length === 0) {
+    console.log("✅ sub-agent state 校验通过");
+  } else {
+    const hasSubAgentError = subAgentValidation.issues.some((issue) => issue.severity === "error");
+    console.log(hasSubAgentError ? "❌ sub-agent state 校验发现错误:" : "⚠️ sub-agent state 校验发现警告:");
+  }
+  issues.forEach((issue) => {
+    const prefix = issue.severity === "error" ? "ERROR" : "WARN";
+    console.log(`- ${prefix}: ${issue.message}`);
+  });
+  console.log(
+    hasError
+      ? "下一步: 先修正 state 中的 session 指针、预算/看门狗或 Sub-Agent Dispatch / Decisions，再重新运行 --validate-state。"
+      : "下一步: 建议在下一轮 dispatch、迭代或交付前同步这些 session 状态字段。",
+  );
+  if (hasError) {
+    process.exitCode = 1;
+  }
+}
+
 async function readJsonFile(filePath) {
   try {
     return JSON.parse(await fs.promises.readFile(filePath, "utf8"));
@@ -659,38 +1253,21 @@ function buildStateContent(rawAnswers) {
   const autopilotText = answers.autopilot ? "true" : "false";
   const remainingImplementationIterations = answers.autopilot
     ? answers.autopilotMaxIterations
-    : "按模式需要使用";
+    : answers.maxIterations;
 
   return `# 自动迭代编码状态
 ${sourceChecklist}
 
 ## At-a-Glance / 人类摘要
 tl;dr：整体 in_progress；模式：${answers.mode} / ${answers.modeLabel}
+激活状态：active；这不是普通对话内多轮工作节奏，必须按 auto-iterate session 持久化流程执行
 进度：implementation 0 / ${answers.autopilot ? answers.autopilotMaxIterations : answers.maxIterations}；optimization 0 / 未开始
 需求：passed 0 / not_verified 全部 / blocked 0 / pending REQ-BOOTSTRAP
 验证：最近命令 未运行；最近结果 未运行
-看门狗：triggered；required_action：run_validation
+看门狗：clear；required_action：continue
 交付可验证性：unknown
 需要用户决策：无
 下一步：${answers.nextAction}
-
-## Session / 会话
-session：${answers.session || "default"}
-状态文件：${answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"}
-启动提示：${answers.sessionPromptFile || ".agent-state/auto-iterate/default/start-prompt.md"}
-current 指针：${answers.currentFile || ".agent-state/auto-iterate-current.json"}
-恢复优先级：当前消息显式 session > session state > current 指针 > 对话推断
-语言规则：输出、状态记录和交付总结必须与用户当前提示语言保持一致；用户使用中文时不要突然切换为英文，除非术语、命令、代码或用户明确要求保留英文
-
-## Mode / 模式
-模式：${answers.mode} / ${answers.modeLabel}
-模式说明：${answers.modeDescription}
-Autopilot：${autopilotText}
-允许 Agent 推断流程清单：${answers.allowAgentInference ? "true" : "false"}
-允许修改文件：${answers.allowModify ? "true" : "false"}
-
-模式执行规则：
-${answers.modeInstructions}
 
 ## Task / 任务
 用户目标：
@@ -708,6 +1285,25 @@ ${answers.allowedScope || "未指定"}
 兼容性约束：
 ${formatList(answers.compatibility)}
 
+## Session / 会话
+session：${answers.session || "default"}
+状态文件：${answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"}
+启动提示：${answers.sessionPromptFile || ".agent-state/auto-iterate/default/start-prompt.md"}
+current 指针：${answers.currentFile || ".agent-state/auto-iterate-current.json"}
+激活声明：Agent 开始执行前必须在对话中明确声明“auto-iterate 已激活”，并列出 mode、session、state 文件、current 指针和下一步最小动作
+恢复优先级：当前消息显式 session > session state > current 指针 > 对话推断
+语言规则：输出、状态记录和交付总结必须与用户当前提示语言保持一致；用户使用中文时不要突然切换为英文，除非术语、命令、代码或用户明确要求保留英文
+
+## Mode / 模式
+模式：${answers.mode} / ${answers.modeLabel}
+模式说明：${answers.modeDescription}
+Autopilot：${autopilotText}
+允许 Agent 推断流程清单：${answers.allowAgentInference ? "true" : "false"}
+允许修改文件：${answers.allowModify ? "true" : "false"}
+
+模式执行规则：
+${answers.modeInstructions}
+
 ## Agent Capability Summary / 能力摘要
 读文件/搜索代码：unknown
 修改文件：unknown
@@ -715,6 +1311,9 @@ ${formatList(answers.compatibility)}
 真实测试：unknown
 状态持久化：available
 子 Agent/并行：unknown
+  并行探索（explore）：unknown
+  后台任务（background）：unknown
+  并行实现（coder）：unknown
 网络/外部服务：unknown
 数据库/密钥：user-confirmed-required
 git 状态/diff：unknown
@@ -722,9 +1321,47 @@ git 状态/diff：unknown
 降级策略：能力不可用时标记 not_verified 或 blocked，不得伪造验证
 阻塞能力：待 Agent 启动后探测
 
+## Sub-Agent Dispatch / 子 Agent 调度
+enabled：false（待 Agent 能力探测后决定）
+current_phase：idle
+active_sub_agents：无
+active_sub_agents_item_template：
+  - id：<agent_id>
+    type：explore / coder / background
+    task：
+    files_assigned：
+    status：planned / running / completed / failed / blocked
+    failure_reason：
+    started_at：
+    completed_at：
+    result_summary：
+    merge_status：pending / merged / skipped
+sub_agent_history：无（待首轮 dispatch 后追加；字段模板：round / agent_id / type / task_summary / merge_result / files_changed / validation_result / failure_reason）
+sub_agent_history_item_template：
+  - round：1
+    agent_id：<agent_id>
+    type：explore / coder / background
+    task_summary：
+    merge_result：success / partial / skipped
+    files_changed：
+    validation_result：
+    failure_reason：
+dispatched_count：0
+completed_count：0
+failed_count：0
+last_dispatch_round：0
+last_merge_result：N/A
+max_sub_agent_rounds：3
+sub_agent_timeout_seconds：300
+max_failed_sub_agents：2
+token_budget_hint：未设置
+concurrency_limit：3
+
 ## Budgets / 预算
 max_iterations：${answers.maxIterations}
 autopilot_max_iterations：${answers.autopilotMaxIterations}
+minimum_implementation_iterations：未启用
+minimum_iteration_policy：最少/至少 N 轮是下限检查点，不是上限或仅执行 N 轮；达到下限后仍按 RCM、Watchdog、验证结果和剩余预算继续或停止
 implementation_iterations_used：0
 optimization_iterations_used：0
 total_cycles：0
@@ -777,7 +1414,7 @@ state_drift：none
 delivery_verifiability：unknown
 triggered：false
 trigger_reason：无
-required_action：run_validation
+required_action：continue
 
 ## Requirement Coverage Matrix / 需求覆盖矩阵
 REQ-BOOTSTRAP：
@@ -800,7 +1437,7 @@ ${normalizeLines(answers.successCriteria)
 未验证项：全部成功标准尚未验证
 Requirement Coverage Matrix 状态：未提取完整矩阵，REQ-BOOTSTRAP pending
 交付可验证性：unknown
-看门狗状态：triggered - required_action: run_validation
+看门狗状态：clear
 剩余风险：尚未开始执行
 
 ## Decisions / 已确认决策
@@ -810,6 +1447,11 @@ Requirement Coverage Matrix 状态：未提取完整矩阵，REQ-BOOTSTRAP pendi
 ${formatList(answers.compatibility)}
 用户提供的限制：
 ${formatList(answers.constraints)}
+并发决策：
+  parallel_write_allowed：false
+  parallel_write_confirmation：未确认；同 worktree 下不得并发 coder 写入
+  coder_file_ownership：未分配
+  fallback_strategy：能力不足、无隔离或用户未确认时串行执行
 
 ## Hypotheses / 假设
 已排除假设：无
@@ -886,6 +1528,12 @@ ${answers.modeDescription}
 当前 session：${answers.session || "default"}
 Session 状态文件：${answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"}
 Session 启动提示：${answers.sessionPromptFile || ".agent-state/auto-iterate/default/start-prompt.md"}
+Current 指针：${answers.currentFile || ".agent-state/auto-iterate-current.json"}
+
+Auto-iterate 激活声明：
+开始执行前，请先在对话中用 1-3 行明确声明本任务已经进入 auto-iterate-coding 激活态，并列出 mode、session、state 文件、current 指针和下一步最小动作。
+如果不能读取或写入 session state、start-prompt 或 current 指针，必须把状态持久化标记为 degraded / not_available，并说明原因；不得把普通对话内多轮修改称为完整 auto-iterate session。
+后续每轮进展摘要和最终交付都必须引用当前 session，避免把“多轮迭代开发”误判为未激活持久化任务。
 
 模式执行规则：
 ${answers.modeInstructions}
@@ -895,6 +1543,11 @@ ${answers.modeInstructions}
 本 skill 是面向 AI Coding Agent 的自动迭代开发协议，不是独立 CLI 工具，也不依赖特定 Agent 平台。
 请先探测当前 Agent 环境可用能力，包括读写文件、运行命令、真实测试、状态持久化、子 Agent/并行、网络、数据库/密钥和 git diff。
 如果某项能力不可用，请按降级规则标记 not_verified 或 blocked，不要伪造完成或验证。
+如果子 Agent/并行为 available，请先读取 references/sub-agent-concurrency.md，并按“启用门禁与平台适配”“调度流程”和 Sub-Agent Result Schema 维护 Sub-Agent Dispatch；state 字段结构以 examples/state-template.md 为唯一来源，不得自行添加协议旧字段。
+sub-agent 是 Agent 工具执行自动迭代时的协议增强，不是 fastcar-cli 内置运行时；小任务、单文件修改、ownership 不清晰或验证副作用不明时默认串行执行。
+启用任何 coder/background 并发前，请同步维护 Decisions 中的并发决策：parallel_write_allowed、parallel_write_confirmation、coder_file_ownership 和 fallback_strategy；未声明共享文件 owner 或验证副作用时不得并发执行。
+每轮并发 dispatch 前必须建立轻量 baseline，例如 git status、已有 diff 摘要或关键文件 mtime；merge 后必须由父 Agent 执行 Quality Gate，更新 active_sub_agents、sub_agent_history、Watchdog、Budgets 和 RCM。检测到 state.md 在子 Agent 运行期间被外部修改时，先进入 reconcile，不得继续 dispatch。
+默认并发上限：explore 最多 4，需求提取和 background verify 最多 3，coder 默认最多 2；quick 模式默认只启用 explore/background 并发，只有文件 ownership、用户确认、baseline 和 Quality Gate 均明确时才允许 coder 并发。
 请不要依赖历史对话作为唯一上下文。
 如果存在 ${answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"}，请先读取它作为本 session 的恢复状态。
 恢复前执行 reconcile 检查：当前分支、git 状态/diff 摘要、状态文件与当前代码是否一致、是否存在上次停止后的外部修改、最近验证能否重新运行。
@@ -1866,6 +2519,11 @@ async function initAutoIterate(args = []) {
 
   if (options.resumeSession) {
     await activateSession(options.resumeSession, "resume");
+    return;
+  }
+
+  if (options.validateState) {
+    await validateState(options.validateState);
     return;
   }
 

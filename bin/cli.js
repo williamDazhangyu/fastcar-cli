@@ -89,6 +89,7 @@ Examples:
   $ fastcar-cli auto-iterate --examples 验收 # 按关键词检索触发示例
   $ fastcar-cli auto-iterate --switch login-verify # 切换当前 session
   $ fastcar-cli auto-iterate --resume login-bugfix # 恢复指定 session
+  $ fastcar-cli auto-iterate --validate-state login-bugfix # 只读校验 session 基线和 sub-agent 协议一致性
   $ fastcar-cli auto-iterate --mode plan --goal "设计支付模块" # Plan-only 规划模式
   $ fastcar-cli auto-iterate --from docs/ai-checklist.md # 从本地清单文档生成
 

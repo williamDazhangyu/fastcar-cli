@@ -47,12 +47,51 @@ Autopilot：true / false
 真实测试：available / unavailable / unknown
 状态持久化：available / unavailable / unknown
 子 Agent/并行：available / unavailable / unknown
+  并行探索（explore）：available / unavailable
+  后台任务（background）：available / unavailable
+  并行实现（coder）：available / unavailable
 网络/外部服务：available / unavailable / user-confirmed-required
 数据库/密钥：available / unavailable / user-confirmed-required
 git 状态/diff：available / unavailable / unknown
 媒体/文档处理：available / unavailable / not_needed
 降级策略：
 阻塞能力：
+
+## Sub-Agent Dispatch / 子 Agent 调度
+enabled：true / false
+current_phase：explore / req_extract / verify / implement / idle
+active_sub_agents：无
+active_sub_agents_item_template：
+  - id：<agent_id>
+    type：explore / coder / background
+    task：
+    files_assigned：
+    status：planned / running / completed / failed / blocked
+    failure_reason：
+    started_at：
+    completed_at：
+    result_summary：
+    merge_status：pending / merged / skipped
+sub_agent_history：无
+sub_agent_history_item_template：
+  - round：1
+    agent_id：<agent_id>
+    type：explore / coder / background
+    task_summary：
+    merge_result：success / partial / skipped
+    files_changed：
+    validation_result：
+    failure_reason：
+dispatched_count：
+completed_count：
+failed_count：
+last_dispatch_round：
+last_merge_result：success / partial / failed
+max_sub_agent_rounds：3
+sub_agent_timeout_seconds：300
+max_failed_sub_agents：2
+token_budget_hint：
+concurrency_limit：3
 
 ## Budgets
 max_iterations：
@@ -151,6 +190,11 @@ Requirement Coverage Matrix 状态：
 已确认的产品行为：
 已确认的接口兼容性：
 用户提供的限制：
+并发决策：
+  parallel_write_allowed：false / true
+  parallel_write_confirmation：
+  coder_file_ownership：
+  fallback_strategy：串行执行 / ask_user / stop
 
 ## Hypotheses
 已排除假设：

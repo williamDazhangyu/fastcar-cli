@@ -7,9 +7,11 @@
 - 优先用用户原话推断 `mode`、`goal`、`from`、`session`、迭代预算和是否允许修改。
 - 用户已明确目标、文件路径或 session 名时，不要重复询问。
 - 只有缺少会影响安全、兼容性或外部资源的关键信息时，才向用户提问。
-- 自动调用命令时追加 `--yes`，避免卡在 CLI 交互提示。
-- 每次自然语言路由都必须显式传入 `--session <name>`；用户未指定时，Agent 生成英文小写、数字和连字符组成的默认 session 名。
+- 自动调用会创建或更新 session 的命令时追加 `--yes`，避免卡在 CLI 交互提示；`--list`、`--switch`、`--resume`、`--validate-state` 不追加 `--yes`。
+- 每次自然语言路由启动新任务时都必须显式传入 `--session <name>`；用户未指定时，Agent 生成英文小写、数字和连字符组成的默认 session 名。`--validate-state` 复用已有 session 或 state 文件，不创建新 session。
 - 调用命令后，直接把 CLI 输出的启动提示词作为后续执行依据。
+- 调用命令或无 CLI fallback 创建状态后，必须先在对话中输出 auto-iterate 激活声明，列出 mode、session、state 文件、current 指针、状态持久化能力和下一步最小动作。
+- 如果没有 session state、start-prompt 或 current 指针，不得把当前会话内的多轮修改称为完整 auto-iterate session；必须标记为 degraded / not_available。
 
 ## 映射表
 
@@ -27,6 +29,8 @@
 | “先做原型验证状态机” / “做一次性原型” | `fastcar-cli auto-iterate --prototype --goal "<目标>" --session <session> --yes` |
 | “试几个 UI 方案” / “做 UI 原型” | `fastcar-cli auto-iterate --prototype --goal "<目标>" --session <session> --yes` |
 | “优化这个模块” / “提升性能但别改行为” | `fastcar-cli auto-iterate --optimize --goal "<目标>" --session <session> --yes` |
+| “校验自动迭代 state” / “检查 session 是否一致” / “检查 sub-agent 协议一致性” | 如果能确定 session 或 state 路径，调用 `fastcar-cli auto-iterate --validate-state <session|state.md>`；不能确定时先运行 `--list` 或询问 |
+| “校验当前自动迭代 state” / “检查当前 session 状态” | `fastcar-cli auto-iterate --validate-state` |
 | “列出自动迭代任务” | `fastcar-cli auto-iterate --list` |
 | “切换到登录修复任务” | `fastcar-cli auto-iterate --switch <session>` |
 | “恢复登录修复任务” | `fastcar-cli auto-iterate --resume <session>` |
@@ -39,16 +43,17 @@
 ## 意图判断顺序
 
 ```text
-1. session 管理：列出 / 切换 / 恢复
-2. 明确禁止修改：verify 或 plan-only
-3. 明确要求诊断、debug、复现、flaky、性能回归：diagnose
-4. 明确要求原型、试方案、验证状态机、验证数据模型：prototype
-5. 明确要求规划：plan-only
-6. 明确要求验收/检查完成度：verify
-7. 明确要求优化/重构且保持行为：optimize
-8. 提供长文档、PRD、issue 路径：优先 --from
-9. 默认小中型目标：quick
-10. 明确生产、完整、严格、复杂：strict
+1. state 校验：validate-state
+2. session 管理：列出 / 切换 / 恢复
+3. 明确禁止修改：verify 或 plan-only
+4. 明确要求诊断、debug、复现、flaky、性能回归：diagnose
+5. 明确要求原型、试方案、验证状态机、验证数据模型：prototype
+6. 明确要求规划：plan-only
+7. 明确要求验收/检查完成度：verify
+8. 明确要求优化/重构且保持行为：optimize
+9. 提供长文档、PRD、issue 路径：优先 --from
+10. 默认小中型目标：quick
+11. 明确生产、完整、严格、复杂：strict
 ```
 
 ## 预算推断
@@ -94,4 +99,13 @@ Agent：fastcar-cli auto-iterate --prototype --goal "验证订单状态机" --se
 
 用户：恢复登录修复任务
 Agent：先运行 fastcar-cli auto-iterate --list 匹配 session；如果唯一匹配 login-bugfix，则运行 fastcar-cli auto-iterate --resume login-bugfix
+
+用户：检查 login-bugfix 的 sub-agent 协议一致性
+Agent：fastcar-cli auto-iterate --validate-state login-bugfix
+
+用户：检查当前自动迭代 state 是否一致
+Agent：fastcar-cli auto-iterate --validate-state
+
+用户：校验 login-bugfix 整个自动迭代 session 是否一致
+Agent：fastcar-cli auto-iterate --validate-state login-bugfix
 ```

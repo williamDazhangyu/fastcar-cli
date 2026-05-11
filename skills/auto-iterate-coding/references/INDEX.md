@@ -22,6 +22,7 @@
 | `recursive-optimization.md` | 初版验证通过后优化 | 按需 | 有边界递归优化 |
 | `plain-optimization.md` | 低风险整理、类型/枚举/常量收敛 | 按需 | 朴素低风险优化 |
 | `progress-visualization.md` | 长任务、用户询问进度、最终图示 | 可选 | Mermaid 和纯文本进度图 |
+| `sub-agent-concurrency.md` | `子 Agent/并行：available`、探索/验证/需求/实现阶段、Autopilot、`--validate-state` | 按需 | 并发调度规则、四阶段 Fan-out、安全约束、合并规则、Session 隔离、session 基线与 sub-agent state 校验 |
 
 ## 推荐读取组合
 
@@ -30,3 +31,4 @@
 - Verify-only：`real-testing.md`、`stop-conditions.md`、`final-delivery.md`。
 - Prototype-only：`prototype-clarification.md`、必要时 `progress-visualization.md`。
 - Optimization-only：`recursive-optimization.md` 或 `plain-optimization.md`，再配合 `real-testing.md` 和 `stop-conditions.md`。
+- State / sub-agent 校验：`natural-language-routing.md`、`state-schema.md`、`sub-agent-concurrency.md`。
