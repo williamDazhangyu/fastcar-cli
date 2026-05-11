@@ -34,14 +34,14 @@ Commands:
 
   update:cos               更新 @fastcar/template-cos 的 target 文件夹
   auto-iterate             交互式生成 auto-iterate-coding 启动文件
-                           --mode strict|quick|verify|plan|optimize
-                           --strict / --quick / --verify / --plan-only / --optimize
+                           内置 Watchdog 状态模板守卫；不启动独立后台进程
+                           --mode strict|quick|diagnose|verify|plan|optimize|prototype
+                           --strict / --quick / --diagnose / --verify / --plan-only / --optimize / --prototype
                            --goal <text> 快速传入简短目标
-                           --session <name> 指定 session，避免覆盖历史任务
+                           --session <name> 指定 session，避免覆盖历史任务；自然语言路由必须显式传入
                            --max-iterations <n> 普通迭代预算
                            --autopilot-max-iterations <n> Autopilot 迭代预算
                            --list / --switch <name> / --resume <name>
-                           --no-latest 只写 session 文件，不同步 legacy 镜像
                            --yes, -y 非交互生成，适合 Agent 自然语言路由
                            --examples [关键词] 输出可复制的自然语言触发示例
                            -f, --from    从本地清单文档导入长需求
@@ -50,7 +50,7 @@ Commands:
                            使用 all 或 --all 安装全部 skills
                            -g, --global   安装到全局（默认）
                            -l, --local    安装到项目级
-                           -t, --target   目标 agent (kimi/claude/cursor)
+                           -t, --target   目标 agent (agents/codex/kimi/claude/cursor)
   skill uninstall <name>   卸载 FastCar skill
                            使用 all 或 --all 卸载全部 skills
   skill list               列出可用的 skills
@@ -81,7 +81,9 @@ Examples:
   $ fastcar-cli auto-iterate   # 选择模式并生成自动迭代开发状态和启动提示
   $ fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix --yes # 快速启动 session（非交互）
   $ fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --autopilot-max-iterations 5 # 最多自动迭代 5 轮
+  $ fastcar-cli auto-iterate --diagnose --goal "诊断登录偶发失败" --session login-diagnose # 诊断模式：先复现和假设验证
   $ fastcar-cli auto-iterate --verify --from docs/prd.md --session login-verify # Verify-only 验收 session
+  $ fastcar-cli auto-iterate --prototype --goal "验证订单状态机" --session order-prototype # 一次性原型澄清
   $ fastcar-cli auto-iterate --list # 列出 auto-iterate sessions
   $ fastcar-cli auto-iterate --examples # 输出自然语言触发示例
   $ fastcar-cli auto-iterate --examples 验收 # 按关键词检索触发示例
@@ -93,7 +95,8 @@ Examples:
   $ fastcar-cli skill install fastcar-framework       # 交互式安装
   $ fastcar-cli skill install fastcar-framework -g    # 全局安装
   $ fastcar-cli skill install fastcar-framework -l    # 本地安装
-  $ fastcar-cli skill install fastcar-framework -t kimi # 安装到 Kimi
+  $ fastcar-cli skill install fastcar-framework -t agents # 安装到通用 agents 目录
+  $ fastcar-cli skill install fastcar-framework -t kimi   # 安装到 Kimi 专用目录
   $ fastcar-cli skill install auto-iterate-coding     # 安装自动迭代编码 skill
   $ fastcar-cli skill install auto-iterate-coding -g  # 全局安装自动迭代编码 skill
   $ fastcar-cli skill install auto-iterate-coding -l  # 本地安装自动迭代编码 skill

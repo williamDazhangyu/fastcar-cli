@@ -248,7 +248,7 @@ async function installSkill(skillName, options = {}) {
       }
 
       // 确定目标
-      const target = options.target || 'kimi';
+      const target = options.target || 'agents';
       let targetPath;
       if (mode === 'local') {
         targetPath = getLocalPath(target);
@@ -366,7 +366,7 @@ async function installSkill(skillName, options = {}) {
     }
 
     // 确定目标
-    const target = options.target || 'kimi';
+    const target = options.target || 'agents';
 
     // 确定目标路径
     let targetPath;
@@ -424,7 +424,7 @@ async function uninstallSkill(skillName, options = {}) {
     }
 
     // 确定目标
-    const target = options.target || 'kimi';
+    const target = options.target || 'agents';
     
     // 确定目标路径
     let targetPath;
@@ -578,7 +578,7 @@ function listTargets() {
  */
 async function initSkill(options = {}) {
   try {
-    const target = options.target || 'kimi';
+    const target = options.target || 'agents';
     const localPath = getLocalPath(target);
 
     console.log(`🔧 正在初始化 ${target} 配置...`);

@@ -58,3 +58,40 @@ RED -> GREEN: test3 -> impl3
 ```
 
 如果没有正确 test seam，把它记录为架构摩擦。不要用脆弱 mock、测试私有方法或硬编码输出来制造虚假信心。
+
+## 行为优先
+
+测试应通过 public interface 验证可观察行为，而不是验证 implementation shape。
+
+优先测试：
+
+- 用户、调用方或 CLI 能观察到的输入输出。
+- 状态变化、错误行为、事件、HTTP 状态、生成文件或持久化结果。
+- 真实代码路径上的集成行为。
+
+避免测试：
+
+- 私有方法、内部调用顺序、临时数据结构、日志文本和 implementation helper。
+- 因重命名、拆函数或重排内部模块就会失败的细节。
+- 只为了让 mock 满足预期而写的测试。
+
+## Bug 修复路径
+
+修 bug 时先把 feedback loop 的最小复现转成回归测试，前提是存在正确 seam。
+
+流程：
+
+```text
+1. 用原始 feedback loop 复现用户问题
+2. 在正确 seam 上写最小失败测试
+3. 确认测试失败且失败模式对齐用户问题
+4. 做最小修复
+5. 运行回归测试
+6. 重新运行原始 feedback loop
+```
+
+如果没有正确 seam，不要硬测私有实现。把“没有正确 test seam”标为架构摩擦，并在 Requirement Coverage Matrix 中把相关验证标为 `not_verified` 或 `blocked`。
+
+## 重构门槛
+
+只有 GREEN 后才允许重构。每一步重构都必须保持验证通过，并且只做与当前目标相关的低风险整理。不要在 RED 状态或验证不可运行时做大范围抽象。

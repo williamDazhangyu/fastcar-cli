@@ -1,10 +1,13 @@
 {
   "name": "@fastcar/cli",
-  "version": "0.1.9",
+  "version": "0.1.11",
   "homepage": "https://william_zhong.coding.net/public/fast-car/fastcar-cli/git/files",
   "description": "fastcar-cli 脚手架快速搭建",
   "bin": {
     "fastcar-cli": "./bin/cli.js"
+  },
+  "scripts": {
+    "test": "node test/auto-iterate-doc-reliability.test.js"
   },
   "files": [
     "bin",

@@ -5,3 +5,5 @@ yarn.lock
 logs/*
 *.log
 package-lock.json
+skills/auto-iterate-coding/反馈.md
+skills/auto-iterate-coding/优化.md

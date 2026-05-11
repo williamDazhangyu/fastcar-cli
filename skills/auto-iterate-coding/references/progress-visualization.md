@@ -48,7 +48,9 @@
 
 ## Mermaid 进度图
 
-长任务和最终交付应包含 Mermaid 图。`small` 任务可用纯文本，除非用户要求 Mermaid。
+Mermaid 是推荐的可视化增强，不是硬性前提。长任务和最终交付可以包含 Mermaid 图；`small` 任务可只用纯文本，除非用户要求 Mermaid。
+
+如果当前 Agent、终端、平台或最终载体不适合渲染 Mermaid，必须提供等价的纯文本树，不要因为无法渲染 Mermaid 而省略阶段、计数、验证状态或停止原因。
 
 图中必须展示：
 
@@ -97,3 +99,24 @@ flowchart LR
 ```
 
 如果当前输出环境不适合 Mermaid，提供等价的纯文本树，但不要省略计数和优化方向。
+
+## 纯文本降级模板
+
+```text
+进度树
+1. 需求规格：passed / in_progress / blocked
+2. 架构确认：passed / not_needed / blocked
+3. 脚手架/模板：passed / not_needed / blocked
+4. 实现迭代：i / max
+   当前失败信号：
+   最近修改：
+5. 真实验证：passed / failed / not_verified / blocked
+   命令：
+   结果：
+6. 递归优化：j / max
+   当前优化方向：
+   保留/放弃：
+7. 交付：success / limited_success / stopped
+   交付可验证性：
+   停止原因：
+```

@@ -1,11 +1,21 @@
 # Auto Iterate Coding State Template
 
-将本模板复制为项目内 `.agent-state/auto-iterate-coding.md`，用于 Autopilot 或复杂任务跨会话恢复。
+将本模板复制为项目内 `.agent-state/auto-iterate/<session>/state.md`，用于 Autopilot 或复杂任务跨会话恢复。
 
 不要在状态文件中写入密钥、token、密码、连接串、大段日志或完整源码。
 
 ```text
 # Auto Iterate Coding State
+
+## At-a-Glance / 人类摘要
+tl;dr：整体 in_progress / blocked / passed；模式：
+进度：implementation current / max；optimization current / max
+需求：passed / not_verified / blocked / pending
+验证：最近命令；最近结果
+看门狗：clear / triggered；required_action：
+交付可验证性：verifiable / partially_verifiable / not_verifiable / unknown
+需要用户决策：
+下一步：
 
 ## Task
 用户目标：
@@ -13,6 +23,22 @@
 非目标：
 允许修改范围：
 兼容性约束：
+
+## Session / 会话
+session：
+状态文件：
+启动提示：
+current 指针：
+恢复优先级：当前消息显式 session > session state > current 指针 > 对话推断
+语言规则：
+
+## Mode / 模式
+模式：
+模式说明：
+Autopilot：true / false
+允许 Agent 推断流程清单：true / false
+允许修改文件：true / false
+模式执行规则：
 
 ## Agent Capability Summary
 读文件/搜索代码：available / unavailable / unknown
@@ -33,8 +59,11 @@ max_iterations：
 autopilot_max_iterations：
 implementation_iterations_used：
 optimization_iterations_used：
+total_cycles：
 remaining_implementation_iterations：
 remaining_optimization_iterations：
+预算追加记录：
+计数口径：实现迭代 = 修改 + 验证/记录 + 状态更新的闭环；只读探索、reconcile、上下文压缩和纯验证不计入实现迭代
 
 ## Recovery / Reconcile
 当前分支：
@@ -60,6 +89,27 @@ Autopilot：
 首个关键失败信号：
 未验证项：
 需要用户决策：
+反馈闭环：
+架构摩擦：none / suspected / confirmed
+原型状态：not_needed / proposed / active / absorbed / deleted / blocked
+
+## Watchdog
+enabled：true / false
+check_interval：每轮迭代前后、上下文压缩后、恢复后、最终交付前
+light_check：每轮必做，检查 no_progress_count / last_validation_result / state_drift / triggered
+full_check：每个 phase、每 3 轮、恢复后和交付前执行完整字段检查
+last_progress_iteration：
+last_progress_summary：
+last_validation_iteration：
+last_validation_command：
+last_validation_result：
+no_progress_count：current / max_no_progress_iterations
+unverified_iteration_count：
+state_drift：none / suspected / confirmed
+delivery_verifiability：verifiable / partially_verifiable / not_verifiable / unknown
+triggered：false / true
+trigger_reason：
+required_action：continue / narrow_scope / run_validation / reconcile / ask_user / stop
 
 ## Requirement Coverage Matrix
 REQ-001：
@@ -81,6 +131,8 @@ REQ-002：
 下一步：
 
 ## Definition of Done
+RCM 状态摘要：REQ 总数；passed / not_verified / blocked / pending / implemented
+派生规则：成功标准状态直接引用 Requirement Coverage Matrix 中对应关键 REQ 的状态和验证证据，不独立重复评估
 成功标准 1：passed / not_verified / blocked
 成功标准 2：passed / not_verified / blocked
 成功标准 3：passed / not_verified / blocked
@@ -88,6 +140,8 @@ REQ-002：
 沙箱验证：
 未验证项：
 Requirement Coverage Matrix 状态：
+交付可验证性：verifiable / partially_verifiable / not_verifiable / unknown
+看门狗状态：clear / triggered
 剩余风险：
 
 ## Decisions
@@ -98,6 +152,7 @@ Requirement Coverage Matrix 状态：
 
 ## Hypotheses
 已排除假设：
+排序候选假设：
 当前主要假设：
 下一步最小动作：
 
@@ -107,9 +162,18 @@ Requirement Coverage Matrix 状态：
 未运行验证及原因：
 沙箱验证：
 不可用能力导致的未验证项：
+最终交付可验证性：
+
+## Temporary Artifacts / Cleanup
+临时 debug 前缀：
+一次性 harness：
+原型文件或路由：
+待删除 artifacts：
+清理状态：pending / completed / blocked
 
 ## Context Handoff Summary
 目标：
+成功标准：
 当前状态：
 已完成：
 完整任务清单完成状态：
@@ -128,4 +192,6 @@ Requirement Coverage Matrix 状态：
 继续时不要依赖历史对话，只依赖本状态文件、当前代码和真实验证结果。
 从“下一步最小动作”继续，并在每轮迭代后更新本文件。
 如果 Requirement Coverage Matrix 中仍存在 pending / implemented / not_verified 的关键需求，不要按成功交付输出。
+如果 Watchdog triggered 为 true，先处理 required_action；交付可验证性为 not_verifiable 或 unknown 时，不要按成功交付输出。
+如果 Temporary Artifacts / Cleanup 中仍有未清理的 debug 日志、harness、原型路由或一次性文件，不要按成功交付输出，除非用户明确要求保留并已标记原因。
 ```

@@ -73,15 +73,13 @@ fastcar-cli auto-iterate --from docs/ai-checklist.md
 fastcar-cli auto-iterate -f docs/ai-checklist.md
 ```
 
-`fastcar-cli auto-iterate` 会交互式选择启动模式，询问 AI 实现流程清单或轻量目标，并生成 session 文件和当前活动镜像：
+`fastcar-cli auto-iterate` 会交互式选择启动模式，询问 AI 实现流程清单或轻量目标，并生成 session 文件和当前活动指针：
 
 - `.agent-state/auto-iterate/<session>/state.md`
 - `.agent-state/auto-iterate/<session>/start-prompt.md`
 - `.agent-state/auto-iterate-current.json`
-- `.agent-state/auto-iterate-coding.md`（当前活动 session 的 legacy 状态镜像）
-- `.agent-state/auto-iterate-start-prompt.md`（当前活动 session 的 legacy 启动提示镜像）
 
-生成后，把 `.agent-state/auto-iterate/<session>/start-prompt.md` 的内容发给 Agent。旧流程也可以继续使用 `.agent-state/auto-iterate-start-prompt.md`。
+生成后，把 `.agent-state/auto-iterate/<session>/start-prompt.md` 的内容发给 Agent。
 
 常用模式：
 
@@ -92,6 +90,9 @@ fastcar-cli auto-iterate --strict
 # 快速启动：小中型任务，Agent 先推断流程清单
 fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix --yes
 fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --autopilot-max-iterations 5 --yes
+
+# Diagnose：困难 bug / 性能回归，先建立反馈闭环
+fastcar-cli auto-iterate --diagnose --goal "诊断登录偶发失败" --session login-diagnose --yes
 
 # Verify-only：只检查/验收，不主动修改
 fastcar-cli auto-iterate --verify --from docs/prd.md --session login-verify
@@ -106,6 +107,9 @@ fastcar-cli auto-iterate --plan-only --goal "规划订单模块重构"
 
 # Optimization-only：先建立 baseline，再做有边界优化
 fastcar-cli auto-iterate --optimize --goal "优化查询性能"
+
+# Prototype-only：一次性原型澄清状态模型、数据模型、交互或 UI 方向
+fastcar-cli auto-iterate --prototype --goal "验证订单状态机"
 ```
 
 单独安装自动迭代编码 skill：
@@ -128,6 +132,8 @@ fastcar-cli skill install auto-iterate-coding --target codex
 
 如果 Agent 已读取 `auto-iterate-coding`，可以直接对 Agent 说下面这些大白话，Agent 应自动路由到对应的 `fastcar-cli auto-iterate ... --yes` 命令。
 
+自然语言路由必须每次生成独立 session：用户已指定时使用该 session；用户未指定时，由 Agent 根据模式和目标生成英文小写、数字和连字符组成的默认 session，并在命令中显式追加 `--session <name>`。
+
 ### 查看自然语言示例
 
 也可以用 CLI 直接输出可复制的自然语言触发语：
@@ -135,6 +141,8 @@ fastcar-cli skill install auto-iterate-coding --target codex
 ```bash
 fastcar-cli auto-iterate --examples
 fastcar-cli auto-iterate --examples 验收
+fastcar-cli auto-iterate --examples 诊断
+fastcar-cli auto-iterate --examples 原型
 fastcar-cli auto-iterate --examples 规划
 fastcar-cli auto-iterate --examples session
 ```
@@ -179,6 +187,16 @@ fastcar-cli auto-iterate --examples session
 帮我做一次 Verify-only，检查登录功能是否完整实现
 ```
 
+### Diagnose：困难 bug / 性能回归
+
+```text
+帮我诊断这个登录偶发失败问题，先建立复现闭环，session 叫 login-diagnose
+Diagnose 当前 npm test 失败，最多跑 8 轮，session 叫 test-diagnose
+调试订单导出性能回归，先建立 baseline 和可重复验证
+帮我 debug 支付回调重复处理问题，不要猜修复，先复现
+诊断这个 flaky e2e，尽量提高复现率并列出假设
+```
+
 ### Plan-only：只规划，不写代码
 
 ```text
@@ -187,6 +205,16 @@ fastcar-cli auto-iterate --examples session
 帮我制定支付模块改造计划，先不要实现
 Plan-only：分析如何实现消息通知功能
 只输出实现计划、风险和验证策略，不进入编码
+```
+
+### Prototype-only：一次性原型澄清
+
+```text
+先做一个逻辑原型验证订单状态机，不要直接实现生产代码
+Prototype：给设置页做 3 个 UI 方案，通过 variant 切换
+帮我做一次性原型，验证这个数据模型是否能表达退款流程
+先让我玩一下这个交互流程原型，结论确认后再实现
+做一个 UI 原型比较仪表盘的几种信息架构，不能影响生产构建
 ```
 
 ### Optimization-only：优化但保持行为不变
@@ -242,12 +270,12 @@ Plan-only：分析如何实现消息通知功能
 优化查询性能，session 叫 query-optimize
 ```
 
-### 不同步 latest 镜像
+### 独立 session
 
 ```text
-帮我快速启动自动迭代，修复登录失败，session 叫 login-bugfix，不要同步 latest
-创建一个独立 session 叫 payment-test，不要同步 latest 镜像
-按 docs/payment.md 完整实现，session 叫 payment-implement，不要更新当前活动任务
+帮我快速启动自动迭代，修复登录失败，session 叫 login-bugfix
+创建一个独立 session 叫 payment-test
+按 docs/payment.md 完整实现，session 叫 payment-implement
 ```
 
 ### 组合场景
@@ -276,10 +304,10 @@ Plan-only：分析如何实现消息通知功能
 
 | Agent | 推荐方式 |
 | --- | --- |
-| Codex | 将需要的 skill 目录放入 Codex skills 目录；每个目录保留 `SKILL.md`。 |
+| Codex | 使用默认目标或 `fastcar-cli skill install <name> --target codex`，写入通用 `.agents/skills` 目录；每个目录保留 `SKILL.md`。 |
 | Claude Code | 使用 `fastcar-cli skill install <name> --target claude`，或复制对应 skill 目录。 |
 | Cursor | 使用 `fastcar-cli skill install <name> --target cursor`，必要时把核心规则迁移到 Cursor rules。 |
-| Kimi Code | 使用默认目标：`fastcar-cli skill install <name>`。 |
+| Kimi Code | 推荐使用默认目标：`fastcar-cli skill install <name>`；如需写入 Kimi 专用目录，使用 `--target kimi`。 |
 | Gemini CLI | 直接读取 `AGENTS.md` 和对应 `SKILL.md`，或复制 skill 目录到团队约定位置。 |
 
 当前 CLI 内置安装目标以 `fastcar-cli skill targets` 输出为准；其他 Agent 可以直接复用本目录的 Markdown 结构。

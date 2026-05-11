@@ -5,6 +5,26 @@ const os = require('os');
  * 目标 AI Agent 配置
  */
 const TARGETS = {
+  agents: {
+    name: 'Generic Agent Skills',
+    description: 'Shared skills directory recognized by Codex and other OpenAI-compatible agents',
+    globalPaths: {
+      win32: path.join(os.homedir(), '.agents/skills'),
+      darwin: path.join(os.homedir(), '.agents/skills'),
+      linux: path.join(os.homedir(), '.agents/skills')
+    },
+    localPath: '.agents/skills'
+  },
+  codex: {
+    name: 'Codex',
+    description: 'OpenAI Codex agent skills using the shared agents directory',
+    globalPaths: {
+      win32: path.join(os.homedir(), '.agents/skills'),
+      darwin: path.join(os.homedir(), '.agents/skills'),
+      linux: path.join(os.homedir(), '.agents/skills')
+    },
+    localPath: '.agents/skills'
+  },
   kimi: {
     name: 'Kimi Code CLI',
     description: 'Kimi Code extension for VS Code',

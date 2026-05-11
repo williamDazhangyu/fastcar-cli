@@ -11,6 +11,7 @@ Fastcar 脚手架工具，用于快速初始化项目模板。
 - 🗜️ 项目打包（自动排除 devDependencies、日志文件）
 - 🔄 数据库表逆向生成
 - 🤖 AI Agent Skill 管理（支持 Kimi、Claude、Cursor）
+- 🔁 自动迭代编码 skill：支持有边界的实现、验证、修复、优化和 session 恢复
 
 ## 安装
 
@@ -116,10 +117,21 @@ fastcar-cli reverse
 
 #### 启动自动迭代开发
 
-`auto-iterate` 会交互式询问 AI 实现流程清单和迭代预算，并在当前项目生成 `.agent-state/auto-iterate-coding.md` 与 `.agent-state/auto-iterate-start-prompt.md`。
+`auto-iterate` 会交互式询问 AI 实现流程清单和迭代预算，并在当前项目生成独立 session 状态文件和启动提示。
 
 ```bash
 fastcar-cli auto-iterate
+```
+
+常用非交互模式：
+
+```bash
+fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix --yes
+fastcar-cli auto-iterate --diagnose --goal "诊断登录偶发失败" --session login-diagnose --yes
+fastcar-cli auto-iterate --verify --from docs/prd.md --session prd-check --yes
+fastcar-cli auto-iterate --plan-only --goal "规划订单模块重构" --session order-plan --yes
+fastcar-cli auto-iterate --optimize --goal "优化查询性能" --session query-optimize --yes
+fastcar-cli auto-iterate --prototype --goal "验证订单状态机" --session order-prototype --yes
 ```
 
 如果流程清单很长，也可以从本地文档导入：
@@ -129,7 +141,43 @@ fastcar-cli auto-iterate --from docs/ai-checklist.md
 fastcar-cli auto-iterate -f docs/ai-checklist.md
 ```
 
-生成后，把 `.agent-state/auto-iterate-start-prompt.md` 的内容发给 Agent，即可按 `auto-iterate-coding` skill 进入 Autopilot 自动化开发。
+生成后，把 `.agent-state/auto-iterate/<session>/start-prompt.md` 的内容发给 Agent，即可按 `auto-iterate-coding` skill 进入自动迭代流程。
+
+#### auto-iterate-coding 使用技巧与文档引用
+
+`auto-iterate-coding` 的完整协议以仓库内 `skills/auto-iterate-coding/` 为准，README 只保留发包用户最常用的入口说明。建议先阅读这些文档：
+
+- [skills/auto-iterate-coding/SKILL.md](./skills/auto-iterate-coding/SKILL.md)：主协议，定义触发词、模式选择、能力降级、状态维护、停止条件和最终交付规则。
+- [skills/auto-iterate-coding/references/natural-language-routing.md](./skills/auto-iterate-coding/references/natural-language-routing.md)：自然语言到 `fastcar-cli auto-iterate ...` 的路由规则。
+- [skills/auto-iterate-coding/references/state-schema.md](./skills/auto-iterate-coding/references/state-schema.md)：`.agent-state/auto-iterate/<session>/state.md` 的必需章节和一致性规则。
+- [skills/auto-iterate-coding/examples/state-template.md](./skills/auto-iterate-coding/examples/state-template.md)：Agent 手写或恢复状态时可参考的模板。
+- [skills/auto-iterate-coding/examples/end-to-end-scenarios.md](./skills/auto-iterate-coding/examples/end-to-end-scenarios.md)：端到端场景示例，展示启动、执行、验证和交付摘要。
+
+核心技巧如下：
+
+- 每个任务都显式指定 `--session <name>`，例如 `login-bugfix`、`prd-check`、`order-prototype`，避免多个任务覆盖同一份状态。
+- 简短 bug 或小功能用 `--quick`；复杂 PRD 或长清单用 `--strict --from <file>`；只验收不用改代码时用 `--verify`；只规划用 `--plan-only`；先复现 bug 用 `--diagnose`；一次性验证想法用 `--prototype`；保持行为不变的质量提升用 `--optimize`。
+- 自然语言路由时也要让 Agent 生成独立 session。例如“帮我快速启动自动迭代修复登录失败，session 叫 login-bugfix，最多跑 5 轮”应路由为 `fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --autopilot-max-iterations 5 --yes`。
+- `max_iterations` 和 `autopilot_max_iterations` 是预算，不是必须跑满的轮数。验证已通过、风险高于收益、缺少外部资源或达到预算时，Agent 应停止并说明状态。
+- 不要把静态阅读当作验证。Agent 必须优先运行真实命令，例如 `npm test`、`npm run build`、`npm run typecheck`；无法运行时要把相关需求标记为 `not_verified` 或 `blocked`。
+- 长任务要持续维护 `.agent-state/auto-iterate/<session>/state.md`。恢复任务时先运行 `fastcar-cli auto-iterate --resume <session>`，再把对应 `start-prompt.md` 发给 Agent。
+- 最终交付不要只看“测试通过”。Agent 应同时输出 Requirement Coverage Matrix、Definition of Done、Watchdog 状态、验证证据、未验证项和剩余风险。
+
+推荐工作流：
+
+```bash
+# 1. 安装 skill
+fastcar-cli skill install auto-iterate-coding
+
+# 2. 为当前任务生成独立 session
+fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --autopilot-max-iterations 5 --yes
+
+# 3. 把启动提示发给 Agent
+# .agent-state/auto-iterate/login-bugfix/start-prompt.md
+
+# 4. 中断后恢复
+fastcar-cli auto-iterate --resume login-bugfix
+```
 
 #### 列出可用的 skills
 
@@ -149,7 +197,7 @@ fastcar-cli skill targets
 # 交互式选择安装位置（全局/本地）
 fastcar-cli skill install fastcar-framework
 
-# 全局安装（默认）
+# 全局安装（默认写入通用 agents 目录，Codex/Kimi 等可识别）
 fastcar-cli skill install fastcar-framework --global
 fastcar-cli skill install fastcar-framework -g
 
@@ -168,6 +216,8 @@ fastcar-cli skill install all
 fastcar-cli skill install --all -g
 
 # 指定目标 agent
+fastcar-cli skill install fastcar-framework --target agents
+fastcar-cli skill install fastcar-framework --target codex
 fastcar-cli skill install fastcar-framework --target kimi
 fastcar-cli skill install fastcar-framework -t claude
 ```
