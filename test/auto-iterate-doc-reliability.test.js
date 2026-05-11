@@ -558,6 +558,9 @@ test("skill 文档不再引用 legacy 状态文件并保留无 CLI fallback", ()
   assertIncludes(skill, "无 CLI fallback", "SKILL.md");
   assertIncludes(skill, ".agent-state/auto-iterate/<session>/state.md", "SKILL.md");
   assertIncludes(skill, "不得伪造完成、验证或外部资源响应", "SKILL.md");
+  assertIncludes(skill, "必须先确认或创建 `auto-iterate/<session>/state.md`", "SKILL.md");
+  assertIncludes(skill, "只写 legacy mirror 不算完整状态持久化", "SKILL.md");
+  assertIncludes(skill, "状态持久化: degraded", "SKILL.md");
   assert.ok(
     !skill.includes(".agent-state/auto-iterate-coding.md"),
     "SKILL.md should not reference legacy state path",
@@ -566,6 +569,45 @@ test("skill 文档不再引用 legacy 状态文件并保留无 CLI fallback", ()
     !skill.includes(".agent-state/auto-iterate-start-prompt.md"),
     "SKILL.md should not reference legacy prompt path",
   );
+});
+
+test("state schema 强制 session 指针和交付前状态一致性检查", () => {
+  const schema = readRepoFile("skills/auto-iterate-coding/references/state-schema.md");
+
+  assertIncludes(schema, "缺少 `state.md`、`start-prompt.md` 或 current 指针", "state-schema.md");
+  assertIncludes(schema, "auto-iterate-current.json.stateFile", "state-schema.md");
+  assertIncludes(schema, "auto-iterate-current.json.session", "state-schema.md");
+  assertIncludes(schema, "交付前必须执行状态一致性检查", "state-schema.md");
+  assertIncludes(schema, "必须先进入 `reconcile`", "state-schema.md");
+});
+
+test("最少迭代轮次被定义为下限而不是仅执行或最大预算", () => {
+  const skill = readRepoFile("skills/auto-iterate-coding/SKILL.md");
+  const routing = readRepoFile(
+    "skills/auto-iterate-coding/references/natural-language-routing.md",
+  );
+  const template = readRepoFile(
+    "skills/auto-iterate-coding/examples/state-template.md",
+  );
+  const schema = readRepoFile("skills/auto-iterate-coding/references/state-schema.md");
+
+  assertIncludes(skill, "minimum_implementation_iterations", "SKILL.md");
+  assertIncludes(skill, "下限检查点", "SKILL.md");
+  assertIncludes(skill, "不是“仅 N 轮”或最大预算", "SKILL.md");
+  assertIncludes(skill, "不得为了凑轮数制造无效修改", "SKILL.md");
+
+  assertIncludes(routing, "最少迭代 N 次 / 至少跑 N 轮 / 最少 N 轮", "natural-language-routing.md");
+  assertIncludes(routing, "不得映射为 `--autopilot-max-iterations N`", "natural-language-routing.md");
+  assertIncludes(routing, "不要追加 `--autopilot-max-iterations 5`", "natural-language-routing.md");
+  assertIncludes(routing, "`A > B`", "natural-language-routing.md");
+
+  assertIncludes(template, "minimum_implementation_iterations：", "state-template.md");
+  assertIncludes(template, "最少/至少 N 轮是下限检查点", "state-template.md");
+
+  assertIncludes(schema, "minimum_implementation_iterations", "state-schema.md");
+  assertIncludes(schema, "不得写入或等同于 `max_iterations`", "state-schema.md");
+  assertIncludes(schema, "implementation_iterations_used >= minimum_implementation_iterations", "state-schema.md");
+  assertIncludes(schema, "不得把下限当成停止线", "state-schema.md");
 });
 
 async function main() {

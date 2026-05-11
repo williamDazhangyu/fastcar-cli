@@ -32,6 +32,7 @@
 | “恢复登录修复任务” | `fastcar-cli auto-iterate --resume <session>` |
 | “session 叫 login-bugfix” | 在命令中追加 `--session login-bugfix` |
 | “最多迭代 5 次” / “最多跑 5 轮” | 在命令中追加 `--autopilot-max-iterations 5` |
+| “最少迭代 5 次” / “至少跑 5 轮” / “最少 5 轮” | 不要映射为 `--autopilot-max-iterations 5`；启动后在 state 的 `minimum_implementation_iterations` 记录 5，并继续使用默认或用户另给的最大预算 |
 | “普通预算 50 轮” / “max_iterations 50” | 在命令中追加 `--max-iterations 50` |
 | “Autopilot 预算 10 轮” | 在命令中追加 `--autopilot-max-iterations 10` |
 
@@ -53,10 +54,14 @@
 ## 预算推断
 
 - 用户说“最多迭代 N 次 / 最多跑 N 轮 / 自动修 N 轮以内”时，优先映射为 `--autopilot-max-iterations N`。
+- 用户说“最少迭代 N 次 / 至少跑 N 轮 / 最少 N 轮”时，N 是下限检查点，不是上限预算；不得映射为 `--autopilot-max-iterations N`，也不得解释为“仅 N 轮”。
+- 当前 CLI 没有最小轮次参数时，先按正常模式启动命令，使用默认或用户另给的最大预算；启动后必须在 state 的 `minimum_implementation_iterations` 和预算追加记录中写入 N。
+- 用户同时给出“最少 A 轮”和“最多 B 轮”时，A 是下限、B 是上限；若 `A > B`，必须先请求用户澄清或追加最大预算，不得自动把 A 当成 B。
 - 用户明确说 `max_iterations`、普通预算、总预算时，映射为 `--max-iterations N`。
 - 用户同时给出普通预算和 Autopilot 预算时，同时追加两个参数。
 - 用户没有给预算时，不要追问，使用 CLI 默认值。
-- 迭代次数是安全预算，不是必须执行次数；不要为了消耗预算而继续修改。
+- 未带“最少/至少”修饰的迭代次数是安全预算，不是必须执行次数；不要为了消耗预算而继续修改。
+- 达到 `minimum_implementation_iterations` 前，不能只因局部测试通过就交付；如果完整任务已通过，剩余轮次应转为有意义的验证、清理、边界检查或风险复核，不能制造无效 patch。
 
 ## Session 推断
 
@@ -74,6 +79,9 @@ Agent：fastcar-cli auto-iterate --quick --goal "修复登录失败" --session l
 
 用户：帮我快速启动自动迭代，修复登录失败，最多跑 5 轮，session 叫 login-bugfix
 Agent：fastcar-cli auto-iterate --quick --goal "修复登录失败" --autopilot-max-iterations 5 --session login-bugfix --yes
+
+用户：帮我快速启动自动迭代，修复登录失败，最少跑 5 轮，session 叫 login-bugfix
+Agent：fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --yes；启动后在 state 记录 `minimum_implementation_iterations：5`，不要追加 `--autopilot-max-iterations 5`
 
 用户：帮我验收 docs/prd.md，不要改代码，session 叫 prd-check
 Agent：fastcar-cli auto-iterate --verify --from docs/prd.md --session prd-check --yes

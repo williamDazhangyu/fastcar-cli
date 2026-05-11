@@ -57,6 +57,8 @@ git 状态/diff：available / unavailable / unknown
 ## Budgets
 max_iterations：
 autopilot_max_iterations：
+minimum_implementation_iterations：
+minimum_iteration_policy：最少/至少 N 轮是下限检查点，不是上限或仅执行 N 轮；达到下限后仍按 RCM、Watchdog、验证结果和剩余预算继续或停止
 implementation_iterations_used：
 optimization_iterations_used：
 total_cycles：
