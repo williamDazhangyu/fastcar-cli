@@ -13,7 +13,7 @@
 | 3 | `## Session / 会话` | 必填；记录 session、状态文件、启动提示、current 指针和恢复优先级 | CLI 初始化 |
 | 4 | `## Mode / 模式` | 必填；记录模式、Autopilot、推断权限和修改权限 | CLI 初始化 |
 | 5 | `## Agent Capability Summary` | 必填；启动后由 Agent 探测并更新 | Agent |
-| 6 | `## Sub-Agent Dispatch / 子 Agent 调度` | 按需；子 Agent 并发启用时维护；每轮 dispatch 和 merge 后更新 | CLI 初始化，Agent 更新 |
+| 6 | `## Sub-Agent Dispatch / 子 Agent 调度` | 必填；记录子 Agent 并发状态、active/history 列表、计数和预算参数；每轮 dispatch 和 merge 后更新 | CLI 初始化，Agent 更新 |
 | 7 | `## Budgets` | 必填；记录预算、已用轮次、剩余轮次和预算追加记录 | CLI 初始化，Agent 更新 |
 | 8 | `## Recovery / Reconcile` | 必填；恢复 session 前必须更新 | Agent |
 | 9 | `## Current State` | 必填；每轮实现、优化、压缩、停止和交付前更新 | Agent |
