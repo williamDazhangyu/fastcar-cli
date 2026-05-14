@@ -29,7 +29,7 @@
 | “先做原型验证状态机” / “做一次性原型” | `fastcar-cli auto-iterate --prototype --goal "<目标>" --session <session> --yes` |
 | “试几个 UI 方案” / “做 UI 原型” | `fastcar-cli auto-iterate --prototype --goal "<目标>" --session <session> --yes` |
 | “优化这个模块” / “提升性能但别改行为” | `fastcar-cli auto-iterate --optimize --goal "<目标>" --session <session> --yes` |
-| “校验自动迭代 state” / “检查 session 是否一致” / “检查 sub-agent 协议一致性” | 如果能确定 session 或 state 路径，调用 `fastcar-cli auto-iterate --validate-state <session|state.md>`；不能确定时先运行 `--list` 或询问 |
+| “校验自动迭代 state” / “检查 session 是否一致” / “检查 sub-agent 协议一致性” | 如果能确定 session 或 state 路径，调用 `fastcar-cli auto-iterate --validate-state <session|state.md|state.json>`；不能确定时先运行 `--list` 或询问 |
 | “校验当前自动迭代 state” / “检查当前 session 状态” | `fastcar-cli auto-iterate --validate-state` |
 | “列出自动迭代任务” | `fastcar-cli auto-iterate --list` |
 | “切换到登录修复任务” | `fastcar-cli auto-iterate --switch <session>` |

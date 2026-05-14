@@ -149,8 +149,8 @@ fastcar-cli auto-iterate -f docs/ai-checklist.md
 
 - [skills/auto-iterate-coding/SKILL.md](./skills/auto-iterate-coding/SKILL.md)：主协议，定义触发词、模式选择、能力降级、状态维护、停止条件和最终交付规则。
 - [skills/auto-iterate-coding/references/natural-language-routing.md](./skills/auto-iterate-coding/references/natural-language-routing.md)：自然语言到 `fastcar-cli auto-iterate ...` 的路由规则。
-- [skills/auto-iterate-coding/references/state-schema.md](./skills/auto-iterate-coding/references/state-schema.md)：`.agent-state/auto-iterate/<session>/state.md` 的必需章节和一致性规则。
-- [skills/auto-iterate-coding/examples/state-template.md](./skills/auto-iterate-coding/examples/state-template.md)：Agent 手写或恢复状态时可参考的模板。
+- [skills/auto-iterate-coding/references/state-schema.md](./skills/auto-iterate-coding/references/state-schema.md)：`.agent-state/auto-iterate/<session>/state.json` 的强约束字段、生成视图和一致性规则。
+- [skills/auto-iterate-coding/examples/state-template.md](./skills/auto-iterate-coding/examples/state-template.md)：`state.md` 人类阅读视图的渲染模板。
 - [skills/auto-iterate-coding/examples/end-to-end-scenarios.md](./skills/auto-iterate-coding/examples/end-to-end-scenarios.md)：端到端场景示例，展示启动、执行、验证和交付摘要。
 
 核心技巧如下：
@@ -160,7 +160,7 @@ fastcar-cli auto-iterate -f docs/ai-checklist.md
 - 自然语言路由时也要让 Agent 生成独立 session。例如“帮我快速启动自动迭代修复登录失败，session 叫 login-bugfix，最多跑 5 轮”应路由为 `fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --autopilot-max-iterations 5 --yes`。
 - `max_iterations` 和 `autopilot_max_iterations` 是预算，不是必须跑满的轮数。验证已通过、风险高于收益、缺少外部资源或达到预算时，Agent 应停止并说明状态。
 - 不要把静态阅读当作验证。Agent 必须优先运行真实命令，例如 `npm test`、`npm run build`、`npm run typecheck`；无法运行时要把相关需求标记为 `not_verified` 或 `blocked`。
-- 长任务要持续维护 `.agent-state/auto-iterate/<session>/state.md`。恢复任务时先运行 `fastcar-cli auto-iterate --resume <session>`，再把对应 `start-prompt.md` 发给 Agent。
+- 长任务要持续维护 `.agent-state/auto-iterate/<session>/state.json`，并刷新生成视图 `.agent-state/auto-iterate/<session>/state.md`。恢复任务时先运行 `fastcar-cli auto-iterate --resume <session>`，该命令会执行 strict state 门禁；再把对应 `start-prompt.md` 发给 Agent。
 - 最终交付不要只看“测试通过”。Agent 应同时输出 Requirement Coverage Matrix、Definition of Done、Watchdog 状态、验证证据、未验证项和剩余风险。
 
 推荐工作流：

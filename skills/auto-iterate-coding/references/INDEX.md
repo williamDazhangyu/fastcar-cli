@@ -10,7 +10,7 @@
 | `real-testing.md` | 需要验证、沙箱、外部资源判断 | 必读 | 区分真实验证、沙箱验证和未验证项 |
 | `stop-conditions.md` | 每轮继续前、预算耗尽、阻塞、风险上升 | 必读 | 判断继续、收窄、请求用户或提前停止 |
 | `final-delivery.md` | 交付前 | 必读 | 成功交付、有限成功、提前停止和验证证据 |
-| `state-schema.md` | 维护、恢复或校验 session state | 必读 | 固定 state.md 必需章节和一致性规则 |
+| `state-schema.md` | 维护、恢复或校验 session state | 必读 | 固定 state.json 强约束、state.md 生成视图和兼容恢复规则 |
 | `tdd-vertical-slices.md` | 新功能、bug 修复、需要 test-first | 按需 | 行为测试、tracer bullet、避免横向切片 |
 | `test-quality.md` | 测试设计或评审 | 按需 | 判断测试是否验证行为而非实现细节 |
 | `mocking-boundaries.md` | 需要 mock、替身或外部依赖 | 按需 | 决定 mock 边界和真实依赖替代 |

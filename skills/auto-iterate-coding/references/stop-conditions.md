@@ -37,6 +37,8 @@
 - 状态文件中的 `下一步`、`剩余任务`、`未完成 TODO` 或 `已知限制` 仍包含用户目标内的必要工作。
 - 最终交付成果无法被当前环境验证，或缺少必须的验收数据、命令、权限、外部服务、数据库、密钥、沙箱替代或用户决策。
 - 原型能运行或某个方案看起来可行，但尚未被用户确认、吸收为生产实现并完成验证。
+- 所有 REQ passed 但 Watchdog.fresh_eyes_required = true。
+- 所有 REQ passed 但 validation_hardening 未达到最小轮次、缺少 boundary / negative / regression 维度，或状态仍为 pending / found_issue。
 
 ## 停止时输出
 

@@ -87,6 +87,7 @@ function sessionPaths(projectDir, session) {
   return {
     current: path.join(stateRoot, "auto-iterate-current.json"),
     sessionDir,
+    stateJson: path.join(sessionDir, "state.json"),
     state: path.join(sessionDir, "state.md"),
     prompt: path.join(sessionDir, "start-prompt.md"),
   };
@@ -96,6 +97,7 @@ function readSession(projectDir, session) {
   const paths = sessionPaths(projectDir, session);
   return {
     paths,
+    stateJson: JSON.parse(fs.readFileSync(paths.stateJson, "utf8")),
     state: fs.readFileSync(paths.state, "utf8"),
     prompt: fs.readFileSync(paths.prompt, "utf8"),
     current: JSON.parse(fs.readFileSync(paths.current, "utf8")),
@@ -505,6 +507,39 @@ test("state-schema、state-template 与 CLI 初始 state 的 18 个章节保持�
   assertIncludes(state, "交付可验证性：unknown", "state.md");
 });
 
+test("auto-iterate session 生成机器权威 state.json 和 Markdown 视图", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 state json",
+    "--session",
+    "state-json-check",
+    "--yes",
+  ]);
+
+  const { state, stateJson, current, prompt } = readSession(projectDir, "state-json-check");
+  assert.strictEqual(stateJson.schemaVersion, 1);
+  assert.strictEqual(stateJson.session.session, "state-json-check");
+  assert.strictEqual(
+    stateJson.session.stateJsonFile,
+    ".agent-state/auto-iterate/state-json-check/state.json",
+  );
+  assert.strictEqual(
+    current.stateJsonFile,
+    ".agent-state/auto-iterate/state-json-check/state.json",
+  );
+  assertIncludes(state, "GENERATED FILE, DO NOT EDIT", "state.md");
+  assertIncludes(state, "机器权威状态为 .agent-state/auto-iterate/state-json-check/state.json", "state.md");
+  assertIncludes(prompt, "Session 机器状态：.agent-state/auto-iterate/state-json-check/state.json", "start-prompt.md");
+  assertIncludes(prompt, "Session 状态视图：.agent-state/auto-iterate/state-json-check/state.md", "start-prompt.md");
+  assertIncludes(prompt, "先读取它作为本 session 的机器权威恢复状态", "start-prompt.md");
+  assertIncludes(prompt, "再刷新 .agent-state/auto-iterate/state-json-check/state.md 生成视图", "start-prompt.md");
+  assertNotIncludes(prompt, "Session 状态文件：.agent-state/auto-iterate/state-json-check/state.md", "start-prompt.md");
+  assertNotIncludes(prompt, "优先更新 session 状态文件 .agent-state/auto-iterate/state-json-check/state.md", "start-prompt.md");
+});
+
 test("references INDEX 索引的文档真实存在并覆盖关键模式组合", () => {
   const index = readRepoFile("skills/auto-iterate-coding/references/INDEX.md");
   const referencesDir = path.join(
@@ -568,7 +603,7 @@ test("自然语言路由文档覆盖 CLI 支持的模式、预算和 session 规
   assertIncludes(routing, "不要覆盖历史 session", "natural-language-routing.md");
   assertIncludes(routing, "auto-iterate 激活声明", "natural-language-routing.md");
   assertIncludes(routing, "不得把当前会话内的多轮修改称为完整 auto-iterate session", "natural-language-routing.md");
-  assertIncludes(routing, "fastcar-cli auto-iterate --validate-state <session|state.md>", "natural-language-routing.md");
+  assertIncludes(routing, "fastcar-cli auto-iterate --validate-state <session|state.md|state.json>", "natural-language-routing.md");
   assertIncludes(routing, "fastcar-cli auto-iterate --validate-state`", "natural-language-routing.md");
   assertIncludes(routing, "state 校验：validate-state", "natural-language-routing.md");
   assertIncludes(routing, "检查 login-bugfix 的 sub-agent 协议一致性", "natural-language-routing.md");
@@ -594,9 +629,10 @@ test("skill 文档不再引用 legacy 状态文件并保留无 CLI fallback", ()
   const skill = readRepoFile("skills/auto-iterate-coding/SKILL.md");
 
   assertIncludes(skill, "无 CLI fallback", "SKILL.md");
+  assertIncludes(skill, ".agent-state/auto-iterate/<session>/state.json", "SKILL.md");
   assertIncludes(skill, ".agent-state/auto-iterate/<session>/state.md", "SKILL.md");
   assertIncludes(skill, "不得伪造完成、验证或外部资源响应", "SKILL.md");
-  assertIncludes(skill, "必须先确认或创建 `auto-iterate/<session>/state.md`", "SKILL.md");
+  assertIncludes(skill, "必须先确认或创建 `auto-iterate/<session>/state.json`", "SKILL.md");
   assertIncludes(skill, "只写 legacy mirror 不算完整状态持久化", "SKILL.md");
   assertIncludes(skill, "状态持久化: degraded", "SKILL.md");
   assertIncludes(skill, "## 激活态声明", "SKILL.md");
@@ -615,7 +651,8 @@ test("skill 文档不再引用 legacy 状态文件并保留无 CLI fallback", ()
 test("state schema 强制 session 指针和交付前状态一致性检查", () => {
   const schema = readRepoFile("skills/auto-iterate-coding/references/state-schema.md");
 
-  assertIncludes(schema, "缺少 `state.md`、`start-prompt.md` 或 current 指针", "state-schema.md");
+  assertIncludes(schema, "缺少 `state.json`、`state.md`、`start-prompt.md` 或 current 指针", "state-schema.md");
+  assertIncludes(schema, "auto-iterate-current.json.stateJsonFile", "state-schema.md");
   assertIncludes(schema, "auto-iterate-current.json.stateFile", "state-schema.md");
   assertIncludes(schema, "auto-iterate-current.json.session", "state-schema.md");
   assertIncludes(schema, "交付前必须执行状态一致性检查", "state-schema.md");
@@ -623,7 +660,34 @@ test("state schema 强制 session 指针和交付前状态一致性检查", () =
   assertIncludes(schema, "`fastcar-cli auto-iterate --validate-state` 的校验基线", "state-schema.md");
   assertIncludes(schema, "session 基线一致性", "state-schema.md");
   assertIncludes(schema, "sub-agent 协议一致性", "state-schema.md");
+  assertIncludes(schema, "旧 `state.md`-only session 降级恢复", "state-schema.md");
+  assertIncludes(schema, "`--validate-state --strict-state` 时仍应把缺失 `state.json` 报为错误", "state-schema.md");
   assertNotIncludes(schema, "未来 `fastcar-cli auto-iterate --validate-state`", "state-schema.md");
+});
+
+test("auto-iterate 文档统一 state.json 权威源和 state.md 视图", () => {
+  const skill = readRepoFile("skills/auto-iterate-coding/SKILL.md");
+  const routing = readRepoFile("skills/auto-iterate-coding/references/natural-language-routing.md");
+  const concurrency = readRepoFile("skills/auto-iterate-coding/references/sub-agent-concurrency.md");
+  const autopilot = readRepoFile("skills/auto-iterate-coding/examples/autopilot-start.md");
+  const scenarios = readRepoFile("skills/auto-iterate-coding/examples/end-to-end-scenarios.md");
+
+  for (const content of [skill, routing, concurrency, autopilot, scenarios]) {
+    assertIncludes(content, "state.json", "auto-iterate docs");
+  }
+
+  for (const unexpected of [
+    "更新 state.md",
+    "写入 state.md",
+    "读取 `.agent-state/auto-iterate/login-bugfix/state.md`",
+    "fastcar-cli auto-iterate --validate-state [session|state.md]",
+  ]) {
+    assertNotIncludes(`${skill}\n${routing}\n${concurrency}\n${autopilot}\n${scenarios}`, unexpected, "auto-iterate docs");
+  }
+
+  assertIncludes(concurrency, "state.json、state.md、start-prompt.md、auto-iterate-current.json", "sub-agent-concurrency.md");
+  assertIncludes(autopilot, "缺少 `state.json` 的旧 session 可降级读取 `state.md`", "autopilot-start.md");
+  assertIncludes(scenarios, "state.json 已更新，state.md 生成视图已刷新", "end-to-end-scenarios.md");
 });
 
 test("子 Agent 并发协议使用现行状态模板字段且禁止旧字段回流", () => {
@@ -726,7 +790,7 @@ test("子 Agent 并发协议使用现行状态模板字段且禁止旧字段回�
     "最小合格返回示例",
     "不合格返回示例",
     "failure_reason=incomplete_result",
-    "fastcar-cli auto-iterate --validate-state [session|state.md]",
+    "fastcar-cli auto-iterate --validate-state [session|state.md|state.json]",
     "完整 auto-iterate session 基线",
     "session 基线校验覆盖",
     "不负责启动、停止或调度子 Agent",
@@ -946,8 +1010,8 @@ test("validate-state 校验完整 auto-iterate session 基线一致性", () => {
     .replace("required_action：continue", "required_action：reconcile")
     .replace("delivery_verifiability：unknown", "delivery_verifiability：verifiable")
     .replace(
-      "Requirement Coverage Matrix 状态：未提取完整矩阵，REQ-BOOTSTRAP pending\n交付可验证性：unknown",
-      "Requirement Coverage Matrix 状态：未提取完整矩阵，REQ-BOOTSTRAP pending\n交付可验证性：verifiable",
+      "Requirement Coverage Matrix 状态：未提取完整矩阵，REQ-BOOTSTRAP pending\n验证加固：pending\n交付可验证性：unknown",
+      "Requirement Coverage Matrix 状态：未提取完整矩阵，REQ-BOOTSTRAP pending\n验证加固：pending\n交付可验证性：verifiable",
     );
   fs.writeFileSync(paths.state, invalidState, "utf8");
   fs.writeFileSync(
@@ -977,6 +1041,108 @@ test("validate-state 校验完整 auto-iterate session 基线一致性", () => {
   assertIncludes(invalidOutput.stdout, "Watchdog.delivery_verifiability=verifiable", "validate-state stdout");
   assertIncludes(invalidOutput.stdout, "DoD 标记为 verifiable", "validate-state stdout");
   assertIncludes(invalidOutput.stdout, "下一步: 先修正 state", "validate-state stdout");
+});
+
+test("validate-state strict 校验 state.json 强约束", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 strict state json",
+    "--session",
+    "strict-json",
+    "--yes",
+  ]);
+
+  const validOutput = runAutoIterate(projectDir, [
+    "--validate-state",
+    "strict-json",
+    "--strict-state",
+  ]);
+  assertIncludes(validOutput.stdout, "state.json 强约束校验通过", "validate-state stdout");
+
+  const { paths, stateJson } = readSession(projectDir, "strict-json");
+  stateJson.budgets.totalCycles = 9;
+  stateJson.watchdog.deliveryVerifiability = "done";
+  fs.writeFileSync(paths.stateJson, `${JSON.stringify(stateJson, null, 2)}\n`, "utf8");
+
+  const invalidOutput = runAutoIterateRaw(projectDir, [
+    "--validate-state",
+    "strict-json",
+    "--strict-state",
+  ]);
+  assert.strictEqual(invalidOutput.status, 1, "invalid state.json should fail strict validate");
+  assertIncludes(invalidOutput.stdout, "state.json 强约束校验发现错误", "validate-state stdout");
+  assertIncludes(invalidOutput.stdout, "state.json.budgets.totalCycles=9", "validate-state stdout");
+  assertIncludes(invalidOutput.stdout, "state.json.watchdog.deliveryVerifiability=done", "validate-state stdout");
+});
+
+test("resume 前执行 strict state 门禁", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 resume 门禁",
+    "--session",
+    "resume-gate",
+    "--yes",
+  ]);
+
+  const { paths, stateJson } = readSession(projectDir, "resume-gate");
+  stateJson.requirements[0].status = "finished";
+  fs.writeFileSync(paths.stateJson, `${JSON.stringify(stateJson, null, 2)}\n`, "utf8");
+
+  const output = runAutoIterateRaw(projectDir, ["--resume", "resume-gate"]);
+  assert.strictEqual(output.status, 1, "resume should fail when strict state gate fails");
+  assertIncludes(output.stdout, "resume 已被 strict state 门禁阻止", "resume stdout");
+  assertIncludes(output.stdout, "state.json.requirements[0].status=finished", "resume stdout");
+});
+
+test("resume 兼容旧 state.md-only session 并提示降级恢复", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证旧 session resume",
+    "--session",
+    "legacy-md-only",
+    "--yes",
+  ]);
+
+  const { paths } = readSession(projectDir, "legacy-md-only");
+  fs.unlinkSync(paths.stateJson);
+
+  const output = runAutoIterate(projectDir, ["--resume", "legacy-md-only"]);
+  assertIncludes(output.stdout, "按旧 state.md-only session 降级恢复", "resume stdout");
+  assertIncludes(output.stdout, "已准备恢复 session", "resume stdout");
+  assertIncludes(output.stdout, "legacy-md-only", "resume stdout");
+});
+
+test("validate-state strict 区分 state.json 缺失和解析失败", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 json parse error",
+    "--session",
+    "json-parse-error",
+    "--yes",
+  ]);
+
+  const { paths } = readSession(projectDir, "json-parse-error");
+  fs.writeFileSync(paths.stateJson, "{ invalid json", "utf8");
+
+  const output = runAutoIterateRaw(projectDir, [
+    "--validate-state",
+    "json-parse-error",
+    "--strict-state",
+  ]);
+  assert.strictEqual(output.status, 1, "invalid JSON should fail strict validate");
+  assertIncludes(output.stdout, "无法解析机器权威 state.json", "validate-state stdout");
 });
 
 test("最少迭代轮次被定义为下限而不是仅执行或最大预算", () => {

@@ -10,6 +10,8 @@
 
 成功交付前还必须通过交付可验证性检查：最终交付成果必须能被当前环境中的真实验证、用户确认的沙箱验证或明确可复现的验收步骤证明。无法验证、验证条件未知或看门狗处于 triggered 状态时，不得使用成功交付模板。
 
+成功交付前必须完成交付前验证加固：所有关键 REQ `passed` 后，至少完成 `minimum_validation_hardening_iterations`，并覆盖 boundary / negative / regression 维度。无法覆盖的维度必须明确标记为 `blocked / not_available / user_accepted_limited`，否则不得使用成功交付模板。
+
 成功交付前必须完成临时产物清理：
 
 - 删除或吸收一次性原型、prototype route、variant switcher、临时 TUI 外壳和 harness。
@@ -27,6 +29,8 @@
 可视化进度图：
 实现迭代总数：
 递归优化轮次：
+验证加固轮次：
+验证加固覆盖维度：
 总循环次数：
 保留的优化：
 放弃的优化及原因：

@@ -11,8 +11,8 @@
 默认参数：
 
 ```text
-optimization_iterations = 10
-max_no_improvement_iterations = 2
+optimization_iterations = 12
+max_no_improvement_iterations = 3
 ```
 
 ## 优化循环
@@ -34,6 +34,7 @@ max_no_improvement_iterations = 2
 
 每轮只优化一个主要维度：
 
+- 实现深度：补全关键错误处理、边界保护和初版中遗漏的已知限制。
 - 正确性：行为更符合需求和边界情况。
 - 测试覆盖：增加真实、有价值、面向行为的测试。
 - 架构一致性：更符合用户确认的架构和代码落点。

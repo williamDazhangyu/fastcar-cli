@@ -1,18 +1,22 @@
 # Auto Iterate Coding State Template
 
-将本模板复制为项目内 `.agent-state/auto-iterate/<session>/state.md`，用于 Autopilot 或复杂任务跨会话恢复。
+本模板用于渲染项目内 `.agent-state/auto-iterate/<session>/state.md`，用于 Autopilot 或复杂任务跨会话恢复的人类阅读视图。
+
+机器权威状态必须保存在 `.agent-state/auto-iterate/<session>/state.json`。`state.md` 必须由 `state.json` 渲染生成，并在顶部标注 `GENERATED FILE, DO NOT EDIT`；Agent 或 CLI 更新状态时应先写入并校验 `state.json`，再刷新 `state.md`。
 
 不要在状态文件中写入密钥、token、密码、连接串、大段日志或完整源码。
 
 ```text
 # Auto Iterate Coding State
 
+> GENERATED FILE, DO NOT EDIT. 机器权威状态为 .agent-state/auto-iterate/<session>/state.json；本 Markdown 仅用于人类阅读和 legacy 兼容。
+
 ## At-a-Glance / 人类摘要
 tl;dr：整体 in_progress / blocked / passed；模式：
 进度：implementation current / max；optimization current / max
 需求：passed / not_verified / blocked / pending
 验证：最近命令；最近结果
-看门狗：clear / triggered；required_action：
+看门狗：clear / triggered；required_action：；fresh_eyes：false / true
 交付可验证性：verifiable / partially_verifiable / not_verifiable / unknown
 需要用户决策：
 下一步：
@@ -99,12 +103,15 @@ autopilot_max_iterations：
 minimum_implementation_iterations：
 minimum_iteration_policy：最少/至少 N 轮是下限检查点，不是上限或仅执行 N 轮；达到下限后仍按 RCM、Watchdog、验证结果和剩余预算继续或停止
 implementation_iterations_used：
+validation_hardening_iterations_used：
+minimum_validation_hardening_iterations：
 optimization_iterations_used：
 total_cycles：
 remaining_implementation_iterations：
+remaining_validation_hardening_iterations：
 remaining_optimization_iterations：
 预算追加记录：
-计数口径：实现迭代 = 修改 + 验证/记录 + 状态更新的闭环；只读探索、reconcile、上下文压缩和纯验证不计入实现迭代
+计数口径：实现迭代 = 修改 + 验证/记录 + 状态更新的闭环；验证加固迭代 = 所有关键 REQ passed 后主动寻找遗漏的边界/反例/回归验证；只读探索、reconcile、上下文压缩和纯重复验证不计入实现迭代
 
 ## Recovery / Reconcile
 当前分支：
@@ -137,7 +144,7 @@ Autopilot：
 ## Watchdog
 enabled：true / false
 check_interval：每轮迭代前后、上下文压缩后、恢复后、最终交付前
-light_check：每轮必做，检查 no_progress_count / last_validation_result / state_drift / triggered
+light_check：每轮必做，检查 no_progress_count / last_validation_result / state_drift / triggered / fresh_eyes_required / new_test_count
 full_check：每个 phase、每 3 轮、恢复后和交付前执行完整字段检查
 last_progress_iteration：
 last_progress_summary：
@@ -150,7 +157,16 @@ state_drift：none / suspected / confirmed
 delivery_verifiability：verifiable / partially_verifiable / not_verifiable / unknown
 triggered：false / true
 trigger_reason：
-required_action：continue / narrow_scope / run_validation / reconcile / ask_user / stop
+required_action：continue / narrow_scope / run_validation / reconcile / ask_user / stop / context_compress_and_review
+fresh_eyes_required：false / true
+fresh_eyes_status：本轮复查发现 / 无新发现
+new_test_count：0
+new_test_target：所有 passed REQ 至少各有 1 个新增测试
+validation_hardening_status：pending / in_progress / found_issue / passed / blocked / not_available / user_accepted_limited
+validation_hardening_dimensions_done：boundary / negative / regression / compatibility / concurrency / permission / data / ui / integration
+validation_hardening_required：boundary / negative / regression
+validation_hardening_cost_policy：优先局部最小可证伪验证；重型 e2e / 全量 CI 只在相关风险、影响面较大或最终交付门禁时运行
+heavy_validation_deferred：无 / 命令 + 原因 + 风险 + 用户可复现步骤
 
 ## Requirement Coverage Matrix
 REQ-001：
@@ -181,6 +197,7 @@ RCM 状态摘要：REQ 总数；passed / not_verified / blocked / pending / impl
 沙箱验证：
 未验证项：
 Requirement Coverage Matrix 状态：
+验证加固：pending / passed / blocked / not_available / user_accepted_limited
 交付可验证性：verifiable / partially_verifiable / not_verifiable / unknown
 看门狗状态：clear / triggered
 剩余风险：
@@ -239,5 +256,7 @@ Requirement Coverage Matrix 状态：
 从“下一步最小动作”继续，并在每轮迭代后更新本文件。
 如果 Requirement Coverage Matrix 中仍存在 pending / implemented / not_verified 的关键需求，不要按成功交付输出。
 如果 Watchdog triggered 为 true，先处理 required_action；交付可验证性为 not_verifiable 或 unknown 时，不要按成功交付输出。
+如果 Watchdog.fresh_eyes_required 为 true，必须先设置 triggered=true、required_action=context_compress_and_review，并完成上下文压缩与新鲜视角复查后再继续或交付。
+如果所有关键 REQ 已 passed，必须先完成 validation_hardening：至少达到 minimum_validation_hardening_iterations，并覆盖 boundary / negative / regression 维度；无法执行时标记 blocked 或 not_available，不得静默跳过。
 如果 Temporary Artifacts / Cleanup 中仍有未清理的 debug 日志、harness、原型路由或一次性文件，不要按成功交付输出，除非用户明确要求保留并已标记原因。
 ```

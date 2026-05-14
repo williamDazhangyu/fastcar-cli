@@ -6,8 +6,8 @@
 请使用 auto-iterate-coding skill，进入 Autopilot 全自动迭代模式。
 
 请严格按 auto-iterate-coding/SKILL.md 执行：
-- 先完成能力探测、session state 读取/创建、reconcile 和 Requirement Coverage Matrix。
-- 每轮按真实 feedback loop 推进，实现后运行可用验证，并更新 state.md 的 At-a-Glance、Budgets、Current State、Watchdog、RCM 和 DoD。
+- 先完成能力探测、session `state.json` 读取/创建、reconcile 和 Requirement Coverage Matrix；缺少 `state.json` 的旧 session 可降级读取 `state.md`，但要标记 degraded。
+- 每轮按真实 feedback loop 推进，实现后运行可用验证，并更新 `state.json` 的 At-a-Glance、Budgets、Current State、Watchdog、RCM 和 DoD，再刷新 `state.md` 生成视图。
 - 如果 remaining_implementation_iterations = 0，先请求我追加预算，不要自动继续。
 - 不要把阶段完成、最小纵切通过或原型可行误判为完整交付。
 - 最终按 references/final-delivery.md 输出成功交付、有限成功或提前停止。
@@ -38,7 +38,7 @@ AI 实现流程清单：
 [是否允许联网、数据库、密钥、mock、sandbox、新依赖]
 
 交付格式：
-最终输出实现总结、关键修改、完整任务清单完成状态、Requirement Coverage Matrix、Definition of Done、验证证据、未验证项、剩余任务、风险、验收建议，以及当前 session state 的最终状态摘要。
+最终输出实现总结、关键修改、完整任务清单完成状态、Requirement Coverage Matrix、Definition of Done、验证证据、未验证项、剩余任务、风险、验收建议，以及当前 session `state.json` / `state.md` 的最终状态摘要。
 
 迭代预算：
 max_iterations = 100
@@ -83,4 +83,3 @@ npm run typecheck
 可以使用本地测试数据库、fixture 或 mock server。
 不要新增依赖，除非先说明原因并等待我确认。
 ```
-

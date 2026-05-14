@@ -1,9 +1,0 @@
-{
-  "session": "optimize-validate-state-session-check",
-  "mode": "optimize",
-  "modeLabel": "Optimization-only",
-  "status": "in_progress",
-  "stateFile": ".agent-state/auto-iterate/optimize-validate-state-session-check/state.md",
-  "promptFile": ".agent-state/auto-iterate/optimize-validate-state-session-check/start-prompt.md",
-  "updatedAt": "2026-05-11T14:58:59.914Z"
-}

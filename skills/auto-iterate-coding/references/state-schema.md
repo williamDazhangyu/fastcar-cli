@@ -1,10 +1,16 @@
 # State Schema
 
-本文件冻结 session-only `state.md` 的顶层章节，作为 Agent 手写状态、CLI 生成状态和 `fastcar-cli auto-iterate --validate-state` 的校验基线。
+本文件冻结 session-only 状态结构，作为 Agent 状态维护、CLI 生成状态和 `fastcar-cli auto-iterate --validate-state` 的校验基线。
 
-状态文件路径固定为 `.agent-state/auto-iterate/<session>/state.md`。旧版 `.agent-state/auto-iterate-coding.md` 不属于当前 schema。
+状态文件路径固定为 `.agent-state/auto-iterate/<session>/state.json`。`state.json` 是机器权威状态源；`.agent-state/auto-iterate/<session>/state.md` 是由 CLI / Agent 从 JSON 渲染出的只读人类视图，必须标注 `GENERATED FILE, DO NOT EDIT`。旧版 `.agent-state/auto-iterate-coding.md` 不属于当前 schema。
 
-## 必需章节
+## 权威文件
+
+- `state.json`：唯一可编辑状态源，包含 `schemaVersion`、task、session、mode、budgets、currentState、watchdog、requirements、decisions、validation、cleanup 等结构化字段。
+- `state.md`：生成视图，用于人类阅读和 legacy 兼容；不得作为机器恢复、交付门禁或并发调度的唯一依据。
+- `auto-iterate-current.json`：当前 session 指针，必须记录 `stateJsonFile`、`stateFile`、`promptFile` 和 `session`。
+
+## state.md 必需章节
 
 | 顺序 | 章节 | 要求 | 维护者 |
 | --- | --- | --- | --- |
@@ -29,9 +35,13 @@
 
 ## 一致性规则
 
-- Autopilot、medium/large、多轮自动迭代和用户指定 session 的任务必须存在独立 session 目录；缺少 `state.md`、`start-prompt.md` 或 current 指针时，状态持久化只能标记为 `degraded`，不得按完整自动迭代完成交付。
+- Autopilot、medium/large、多轮自动迭代和用户指定 session 的任务必须存在独立 session 目录；缺少 `state.json`、`state.md`、`start-prompt.md` 或 current 指针时，状态持久化只能标记为 `degraded`，不得按完整自动迭代完成交付。
+- `state.json.schemaVersion` 必须匹配当前 CLI 支持版本；不匹配时必须先迁移或停止恢复。
+- `state.json` 中的枚举、数字、布尔、数组和对象字段必须满足强类型校验；不得把 Markdown 中的自由文本作为机器权威状态。
+- 写入 `state.json` 必须使用临时文件加原子 rename；写入后必须校验通过，再渲染 `state.md`。
+- `auto-iterate-current.json.stateJsonFile` 必须存在，且指向 `.agent-state/auto-iterate/<session>/state.json`。
 - `auto-iterate-current.json.stateFile` 必须存在，且指向 `.agent-state/auto-iterate/<session>/state.md`；`promptFile` 必须存在，且指向同一 session 的 `start-prompt.md`。
-- `auto-iterate-current.json.session` 必须与 `state.md` 的 `## Session / 会话` 中的 session 一致。
+- `auto-iterate-current.json.session` 必须与 `state.json.session.session` 和 `state.md` 的 `## Session / 会话` 中的 session 一致。
 - 交付前必须执行状态一致性检查：session 指针、state 文件、prompt 文件、迭代计数、最近验证命令、最近验证结果和 RCM/DoD 状态均一致；任一不一致时必须先进入 `reconcile`。
 - `At-a-Glance` 的进度、需求计数、验证状态、看门狗状态和交付可验证性必须与 `Budgets`、`Requirement Coverage Matrix`、`Watchdog`、`Validation` 一致。
 - `Definition of Done` 的成功标准状态必须引用 RCM 中对应关键 REQ 的状态和验证证据；RCM 与 DoD 不一致时，以 RCM 为准并重新派生 DoD。
@@ -42,6 +52,8 @@
 - 同时存在最小下限和最大预算时，必须满足 `minimum_implementation_iterations <= max_iterations`；若不满足，必须进入 `ask_user` 或预算追加流程。
 - `remaining_implementation_iterations = 0` 时，恢复 session 后必须先请求用户追加预算，不得自动继续修改。
 - `Watchdog.triggered = true` 时，必须先处理 `required_action`。
+- 所有关键 REQ 均为 `passed` 且 `remaining_implementation_iterations > 0` 时，`Watchdog.fresh_eyes_required` 必须为 `true`，`Watchdog.triggered` 必须为 `true`，且 `required_action` 必须为 `context_compress_and_review`；Agent 不得在此时跳过上下文压缩直接交付。
+- 所有关键 REQ 均为 `passed` 且 fresh-eyes 已处理后，必须完成 `validation_hardening` 门禁：`validation_hardening_iterations_used >= minimum_validation_hardening_iterations`，并覆盖 `boundary / negative / regression`；无法覆盖时必须把 `validation_hardening_status` 标记为 `blocked / not_available / user_accepted_limited` 并记录原因。
 - `delivery_verifiability = not_verifiable / unknown` 时，不允许按成功交付输出。
 - `Temporary Artifacts / Cleanup` 未完成且没有用户确认保留理由时，不允许按成功交付输出。
 - `Sub-Agent Dispatch` 中 `active_sub_agents` 的 `files_assigned` 在不同子 Agent 间不得重叠（coder 类型必须互斥；explore 类型允许重叠）。
@@ -52,8 +64,13 @@
 
 ## validate-state 校验基线
 
-`fastcar-cli auto-iterate --validate-state [session|state.md]` 当前执行只读校验，不修改 state，也不创建 session。它校验两层内容：
+`fastcar-cli auto-iterate --validate-state [session|state.md|state.json]` 当前执行只读校验，不修改 state，也不创建 session。追加 `--strict-state` 时，缺失 `state.json`、强类型不匹配、枚举非法、预算关系错误或 warning 均会作为错误阻止恢复。
 
+兼容旧 session：`fastcar-cli auto-iterate --resume <session>` 在恢复门禁中允许缺少 `state.json` 的旧 `state.md`-only session 降级恢复，并必须输出 degraded 提示；但显式执行 `--validate-state --strict-state` 时仍应把缺失 `state.json` 报为错误，方便迁移前审计。
+
+它校验三层内容：
+
+- `state.json` 强约束：schemaVersion、必填对象、字段类型、枚举值、预算计数、RCM 状态、Watchdog 交付可验证性、session 路径和 current 指针。
 - session 基线一致性：18 个章节、session 路径、`start-prompt.md`、`auto-iterate-current.json`、预算计数、最少轮次、Watchdog、RCM/DoD、Validation 和临时产物清理状态。
 - sub-agent 协议一致性：`Sub-Agent Dispatch`、`Decisions` 中的并发确认、coder 文件 ownership、active/history 计数、merge 状态和 RCM 推进风险。
 

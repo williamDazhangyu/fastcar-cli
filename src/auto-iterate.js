@@ -5,8 +5,10 @@ const inquirer = require("inquirer");
 const STATE_DIR = ".agent-state";
 const SESSION_ROOT_DIR = "auto-iterate";
 const CURRENT_FILE = "auto-iterate-current.json";
+const SESSION_STATE_JSON_FILE = "state.json";
 const SESSION_STATE_FILE = "state.md";
 const SESSION_PROMPT_FILE = "start-prompt.md";
+const STATE_SCHEMA_VERSION = 1;
 
 const REQUIRED_STATE_SECTIONS = [
   "## At-a-Glance / 人类摘要",
@@ -168,6 +170,7 @@ function parseArgs(args = []) {
     switchSession: null,
     resumeSession: null,
     validateState: null,
+    strictState: false,
     maxIterations: null,
     autopilotMaxIterations: null,
     yes: false,
@@ -250,6 +253,11 @@ function parseArgs(args = []) {
 
     if (arg.startsWith("--validate-state=")) {
       options.validateState = arg.slice("--validate-state=".length) || "__current__";
+      return;
+    }
+
+    if (arg === "--strict-state" || arg === "--strict-validate" || arg === "--strict-validation") {
+      options.strictState = true;
       return;
     }
 
@@ -463,6 +471,7 @@ function getSessionPaths(sessionName) {
     ...paths,
     session,
     sessionDir,
+    sessionStateJsonPath: path.join(sessionDir, SESSION_STATE_JSON_FILE),
     sessionStatePath: path.join(sessionDir, SESSION_STATE_FILE),
     sessionPromptPath: path.join(sessionDir, SESSION_PROMPT_FILE),
   };
@@ -586,6 +595,157 @@ function addWarning(issues, message) {
   addIssue(issues, "warning", message);
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function requirePlainObject(issues, value, label) {
+  if (!isPlainObject(value)) {
+    addError(issues, `${label} 必须是对象`);
+    return false;
+  }
+  return true;
+}
+
+function requireArray(issues, value, label) {
+  if (!Array.isArray(value)) {
+    addError(issues, `${label} 必须是数组`);
+    return false;
+  }
+  return true;
+}
+
+function requireNonEmptyString(issues, value, label) {
+  if (typeof value !== "string" || !value) {
+    addError(issues, `${label} 必须是非空字符串`);
+    return false;
+  }
+  return true;
+}
+
+function requireBoolean(issues, value, label) {
+  if (typeof value !== "boolean") {
+    addError(issues, `${label} 必须是 boolean`);
+    return false;
+  }
+  return true;
+}
+
+function requireNonNegativeInteger(issues, value, label) {
+  if (!Number.isInteger(value) || value < 0) {
+    addError(issues, `${label} 必须是非负整数`);
+    return false;
+  }
+  return true;
+}
+
+function requireEnumValue(issues, value, allowedValues, label) {
+  if (!allowedValues.includes(value)) {
+    addError(issues, `${label}=${value || "missing"} 不是合法值`);
+    return false;
+  }
+  return true;
+}
+
+function requireFields(issues, source, fieldNames, labelPrefix, validator) {
+  fieldNames.forEach((fieldName) => {
+    validator(issues, source ? source[fieldName] : undefined, `${labelPrefix}.${fieldName}`);
+  });
+}
+
+function requireNonNegativeIntegerFields(issues, source, fieldNames, labelPrefix) {
+  requireFields(issues, source, fieldNames, labelPrefix, requireNonNegativeInteger);
+}
+
+function requireBooleanFields(issues, source, fieldNames, labelPrefix) {
+  requireFields(issues, source, fieldNames, labelPrefix, requireBoolean);
+}
+
+function requireNonEmptyStringFields(issues, source, fieldNames, labelPrefix) {
+  requireFields(issues, source, fieldNames, labelPrefix, requireNonEmptyString);
+}
+
+function addPathMismatchError(issues, label, actualPath, expectedPath) {
+  addError(issues, `${label}=${actualPath || "missing"}，未指向 ${expectedPath}`);
+}
+
+function requireNormalizedPath(issues, actualPath, expectedPath, label) {
+  if (normalizeRelativePathForCompare(actualPath) !== expectedPath) {
+    addPathMismatchError(issues, label, actualPath, expectedPath);
+    return false;
+  }
+  return true;
+}
+
+function validateBudgetRelationships(issues, budgets, labelPrefix) {
+  if (budgets.minimumImplementationIterations !== null &&
+    (!Number.isInteger(budgets.minimumImplementationIterations) || budgets.minimumImplementationIterations < 1)) {
+    addError(issues, `${labelPrefix}.minimumImplementationIterations 必须为 null 或正整数`);
+  }
+  if (Number.isInteger(budgets.totalCycles) &&
+    Number.isInteger(budgets.implementationIterationsUsed) &&
+    Number.isInteger(budgets.optimizationIterationsUsed) &&
+    budgets.totalCycles !== budgets.implementationIterationsUsed + budgets.optimizationIterationsUsed) {
+    addError(issues, `${labelPrefix}.totalCycles=${budgets.totalCycles}，但 implementationIterationsUsed + optimizationIterationsUsed=${budgets.implementationIterationsUsed + budgets.optimizationIterationsUsed}`);
+  }
+  if (Number.isInteger(budgets.minimumImplementationIterations) &&
+    Number.isInteger(budgets.maxIterations) &&
+    budgets.minimumImplementationIterations > budgets.maxIterations) {
+    addError(issues, `${labelPrefix}.minimumImplementationIterations=${budgets.minimumImplementationIterations} 大于 maxIterations=${budgets.maxIterations}`);
+  }
+}
+
+function countJsonRequirementStates(requirements) {
+  const counts = {
+    passed: 0,
+    pending: 0,
+    implemented: 0,
+    notVerified: 0,
+    blocked: 0,
+  };
+  requirements.forEach((item) => {
+    if (item.status === "passed") {
+      counts.passed += 1;
+    } else if (item.status === "pending") {
+      counts.pending += 1;
+    } else if (item.status === "implemented") {
+      counts.implemented += 1;
+    } else if (item.status === "not_verified") {
+      counts.notVerified += 1;
+    } else if (item.status === "blocked") {
+      counts.blocked += 1;
+    }
+  });
+  return counts;
+}
+
+function hasOpenRequirementCounts(counts) {
+  return counts.pending > 0 ||
+    counts.implemented > 0 ||
+    counts.notVerified > 0 ||
+    counts.blocked > 0;
+}
+
+function compareCurrentPointerToExpected(issues, current, expectedSession, expectedStatePath, expectedPromptPath, stateFileInState, promptFileInState) {
+  const currentStateFile = normalizeRelativePathForCompare(current.stateFile);
+  const currentPromptFile = normalizeRelativePathForCompare(current.promptFile);
+  if (currentStateFile !== expectedStatePath) {
+    addError(issues, `auto-iterate-current.json.stateFile=${current.stateFile}，未指向 ${expectedStatePath}`);
+  }
+  if (currentPromptFile !== expectedPromptPath) {
+    addError(issues, `auto-iterate-current.json.promptFile=${current.promptFile}，未指向 ${expectedPromptPath}`);
+  }
+  if (stateFileInState && currentStateFile !== normalizeRelativePathForCompare(stateFileInState)) {
+    addError(issues, `auto-iterate-current.json.stateFile=${current.stateFile}，与 Session.状态文件=${stateFileInState} 不一致`);
+  }
+  if (promptFileInState && currentPromptFile !== normalizeRelativePathForCompare(promptFileInState)) {
+    addError(issues, `auto-iterate-current.json.promptFile=${current.promptFile}，与 Session.启动提示=${promptFileInState} 不一致`);
+  }
+  if (current.session !== expectedSession) {
+    addError(issues, `current.session=${current.session || "unknown"} 与 state.md session=${expectedSession} 不一致`);
+  }
+}
+
 async function resolveStateFileForValidation(target) {
   const paths = getStatePaths();
   if (!target || target === "__current__") {
@@ -595,6 +755,9 @@ async function resolveStateFileForValidation(target) {
     }
     return {
       stateFile: path.resolve(process.cwd(), current.stateFile),
+      stateJsonFile: current.stateJsonFile
+        ? path.resolve(process.cwd(), current.stateJsonFile)
+        : path.resolve(process.cwd(), current.stateFile).replace(/state\.md$/, "state.json"),
       current,
       currentPath: paths.currentPath,
       session: current.session || "unknown",
@@ -602,9 +765,17 @@ async function resolveStateFileForValidation(target) {
     };
   }
 
-  if (target.endsWith(".md") || target.includes("/") || target.includes("\\")) {
+  if (target.endsWith(".md") || target.endsWith(".json") || target.includes("/") || target.includes("\\")) {
+    const resolved = path.resolve(process.cwd(), target);
+    const stateFile = target.endsWith(".json")
+      ? resolved.replace(/state\.json$/, "state.md")
+      : resolved;
+    const stateJsonFile = target.endsWith(".json")
+      ? resolved
+      : resolved.replace(/state\.md$/, "state.json");
     return {
-      stateFile: path.resolve(process.cwd(), target),
+      stateFile,
+      stateJsonFile,
       current: await readJsonFile(paths.currentPath),
       currentPath: paths.currentPath,
       session: null,
@@ -618,6 +789,7 @@ async function resolveStateFileForValidation(target) {
   }
   return {
     stateFile: sessionPaths.sessionStatePath,
+    stateJsonFile: sessionPaths.sessionStateJsonPath,
     current: await readJsonFile(paths.currentPath),
     currentPath: paths.currentPath,
     session: sessionPaths.session,
@@ -777,6 +949,14 @@ function parseStateBoolean(section, fieldName, fallback = false) {
   return fallback;
 }
 
+function parseStateList(section, fieldName) {
+  const value = parseScalar(section, fieldName, "");
+  return String(value)
+    .split(/[、,，/]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function normalizeRelativePathForCompare(filePath) {
   return String(filePath || "").replace(/\\/g, "/").replace(/^\.\//, "");
 }
@@ -873,20 +1053,7 @@ async function validateSessionStateBaseline(content, stateInfo) {
   if (!stateInfo.current || !stateInfo.current.stateFile) {
     addWarning(issues, "缺少 auto-iterate-current.json 或 current.stateFile，无法确认当前活动 session");
   } else if (expectedSession && stateInfo.current.session === expectedSession) {
-    const currentStateFile = normalizeRelativePathForCompare(stateInfo.current.stateFile);
-    const currentPromptFile = normalizeRelativePathForCompare(stateInfo.current.promptFile);
-    if (currentStateFile !== expectedStatePath) {
-      addError(issues, `auto-iterate-current.json.stateFile=${stateInfo.current.stateFile}，未指向 ${expectedStatePath}`);
-    }
-    if (currentPromptFile !== expectedPromptPath) {
-      addError(issues, `auto-iterate-current.json.promptFile=${stateInfo.current.promptFile}，未指向 ${expectedPromptPath}`);
-    }
-    if (stateFileInState && currentStateFile !== normalizeRelativePathForCompare(stateFileInState)) {
-      addError(issues, `auto-iterate-current.json.stateFile=${stateInfo.current.stateFile}，与 Session.状态文件=${stateFileInState} 不一致`);
-    }
-    if (promptFileInState && currentPromptFile !== normalizeRelativePathForCompare(promptFileInState)) {
-      addError(issues, `auto-iterate-current.json.promptFile=${stateInfo.current.promptFile}，与 Session.启动提示=${promptFileInState} 不一致`);
-    }
+    compareCurrentPointerToExpected(issues, stateInfo.current, expectedSession, expectedStatePath, expectedPromptPath, stateFileInState, promptFileInState);
   } else if (stateInfo.targetType === "current" && expectedSession && stateInfo.current.session !== expectedSession) {
     addError(issues, `current.session=${stateInfo.current.session || "unknown"} 与 state.md session=${expectedSession} 不一致`);
   } else if (stateInfo.targetType === "session" && expectedSession && stateInfo.current.session !== expectedSession) {
@@ -899,6 +1066,8 @@ async function validateSessionStateBaseline(content, stateInfo) {
   const totalCycles = parseStateNumber(budgets, "total_cycles", 0);
   const remainingImplementation = parseStateNumber(budgets, "remaining_implementation_iterations", 0);
   const maxIterations = parseStateNumber(budgets, "max_iterations", 0);
+  const validationHardeningUsed = parseStateNumber(budgets, "validation_hardening_iterations_used", 0);
+  const minimumValidationHardening = parseStateNumber(budgets, "minimum_validation_hardening_iterations", 0);
   const minimumIterationsValue = parseScalar(budgets, "minimum_implementation_iterations", "未启用");
   const minimumIterations = /^\d+/.test(minimumIterationsValue)
     ? parseStateNumber(budgets, "minimum_implementation_iterations", 0)
@@ -972,6 +1141,37 @@ async function validateSessionStateBaseline(content, stateInfo) {
     addError(issues, "DoD.看门狗状态=triggered，必须先处理停止/恢复动作");
   }
 
+  const freshEyesRequired = parseStateBoolean(watchdog, "fresh_eyes_required", false);
+  const allPassedNoOpen = !hasOpenRequirements && hasPassedRequirements;
+  const validationHardeningStatus = parseScalar(watchdog, "validation_hardening_status", "");
+  const validationHardeningDimensions = parseStateList(watchdog, "validation_hardening_dimensions_done");
+  const requiredValidationDimensions = ["boundary", "negative", "regression"];
+  const validationHardeningFinished = /passed|blocked|not_available|user_accepted_limited/.test(validationHardeningStatus);
+  if (allPassedNoOpen && remainingImplementation > 0 && !freshEyesRequired && !validationHardeningFinished) {
+    addError(issues, `所有 REQ passed 且 remaining_implementation_iterations=${remainingImplementation} > 0，但 Watchdog.fresh_eyes_required != true；交付前必须设为 true 并执行 context_compress_and_review`);
+  }
+  if (freshEyesRequired && requiredAction !== "context_compress_and_review") {
+    addError(issues, `Watchdog.fresh_eyes_required=true，但 required_action=${requiredAction || "unknown"} 不是 context_compress_and_review`);
+  }
+  if (freshEyesRequired && !watchdogTriggered) {
+    addError(issues, "Watchdog.fresh_eyes_required=true 时，Watchdog.triggered 必须为 true，确保先处理 context_compress_and_review");
+  }
+  if (allPassedNoOpen && !freshEyesRequired) {
+    if (minimumValidationHardening > 0 && validationHardeningUsed < minimumValidationHardening) {
+      addError(issues, `所有 REQ passed 后必须完成验证加固：validation_hardening_iterations_used=${validationHardeningUsed} 小于 minimum_validation_hardening_iterations=${minimumValidationHardening}`);
+    }
+    const missingDimensions = requiredValidationDimensions.filter((dimension) => !validationHardeningDimensions.includes(dimension));
+    if (missingDimensions.length > 0 && !/blocked|not_available|user_accepted_limited/.test(validationHardeningStatus)) {
+      addError(issues, `验证加固缺少维度 ${missingDimensions.join(", ")}；必须补充边界/反例/回归验证，或把 validation_hardening_status 标记为 blocked/not_available/user_accepted_limited 并说明原因`);
+    }
+  }
+
+  const newTestCount = parseStateNumber(watchdog, "new_test_count", -1);
+  const passedReqs = requirementCounts.passed;
+  if (newTestCount >= 0 && passedReqs > newTestCount && remainingImplementation > 0) {
+    addWarning(issues, `RCM 有 ${passedReqs} 条 passed 需求，但 Watchdog.new_test_count=${newTestCount}；建议 narrow_scope 补测试或记录不写原因`);
+  }
+
   const validation = extractFirstSection(content, ["## Validation / 验证", "## Validation"]);
   const validationVerifiability = parseScalar(validation, "最终交付可验证性", "");
   const passedValidation = parseScalar(validation, "已通过验证", "");
@@ -995,7 +1195,7 @@ async function validateSessionStateBaseline(content, stateInfo) {
   return { issues };
 }
 
-async function validateState(target) {
+async function validateState(target, options = {}) {
   let stateInfo;
   try {
     stateInfo = await resolveStateFileForValidation(target);
@@ -1012,18 +1212,52 @@ async function validateState(target) {
     return;
   }
 
+  const stateJsonRead = await readJsonFileWithError(stateInfo.stateJsonFile);
+  const stateJson = stateJsonRead.data;
+  const stateJsonExists = await pathExists(stateInfo.stateJsonFile);
+  const missingStateJsonAllowed = options.allowMissingStateJson && !stateJsonExists;
+  const stateJsonIssues = stateJson
+    ? validateStateJsonModel(stateJson, { session: stateInfo.session })
+    : [{
+        severity: options.strict && !missingStateJsonAllowed ? "error" : "warning",
+        message: stateJsonExists
+          ? `无法解析机器权威 state.json: ${toRelative(stateInfo.stateJsonFile)} (${stateJsonRead.error.message})`
+          : missingStateJsonAllowed
+            ? `缺少机器权威 state.json: ${toRelative(stateInfo.stateJsonFile)}；按旧 state.md-only session 降级恢复`
+            : `缺少机器权威 state.json: ${toRelative(stateInfo.stateJsonFile)}`,
+      }];
   const sessionValidation = await validateSessionStateBaseline(content, stateInfo);
   const subAgentValidation = validateSubAgentDispatchState(content);
-  const issues = [...sessionValidation.issues, ...subAgentValidation.issues];
+  const issues = [...stateJsonIssues, ...sessionValidation.issues, ...subAgentValidation.issues];
+  if (options.strict) {
+    issues.forEach((issue) => {
+      if (issue.severity === "warning" &&
+        !issue.message.includes("当前活动 session 是") &&
+        !issue.message.includes("按旧 state.md-only session 降级恢复") &&
+        !issue.message.includes("delivery_verifiability=unknown") &&
+        !issue.message.includes("DoD.交付可验证性=unknown")) {
+        issue.severity = "error";
+        issue.message = `strict: ${issue.message}`;
+      }
+    });
+  }
   console.log(`State: ${toRelative(stateInfo.stateFile)}`);
+  console.log(`State JSON: ${toRelative(stateInfo.stateJsonFile)}`);
   if (issues.length === 0) {
+    console.log("✅ state.json 强约束校验通过");
     console.log("✅ auto-iterate session state 校验通过");
     console.log("✅ sub-agent state 校验通过");
-    return;
+    return { ok: true, degraded: false };
   }
 
   const hasError = issues.some((issue) => issue.severity === "error");
   console.log(hasError ? "❌ auto-iterate session state 校验发现错误:" : "⚠️ auto-iterate session state 校验发现警告:");
+  if (stateJsonIssues.length === 0) {
+    console.log("✅ state.json 强约束校验通过");
+  } else {
+    const hasStateJsonError = stateJsonIssues.some((issue) => issue.severity === "error");
+    console.log(hasStateJsonError ? "❌ state.json 强约束校验发现错误:" : "⚠️ state.json 强约束校验发现警告:");
+  }
   if (subAgentValidation.issues.length === 0) {
     console.log("✅ sub-agent state 校验通过");
   } else {
@@ -1036,12 +1270,16 @@ async function validateState(target) {
   });
   console.log(
     hasError
-      ? "下一步: 先修正 state 中的 session 指针、预算/看门狗或 Sub-Agent Dispatch / Decisions，再重新运行 --validate-state。"
+      ? "下一步: 先修正 state.json / state.md 中的 session 指针、预算/看门狗或 Sub-Agent Dispatch / Decisions，再重新运行 --validate-state。"
       : "下一步: 建议在下一轮 dispatch、迭代或交付前同步这些 session 状态字段。",
   );
   if (hasError) {
     process.exitCode = 1;
   }
+  return {
+    ok: !hasError,
+    degraded: stateJsonIssues.some((issue) => issue.message.includes("按旧 state.md-only session 降级恢复")),
+  };
 }
 
 async function readJsonFile(filePath) {
@@ -1052,22 +1290,127 @@ async function readJsonFile(filePath) {
   }
 }
 
+async function readJsonFileWithError(filePath) {
+  try {
+    return {
+      data: JSON.parse(await fs.promises.readFile(filePath, "utf8")),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      data: null,
+      error,
+    };
+  }
+}
+
+async function writeJsonFileAtomic(filePath, data) {
+  const tmpPath = `${filePath}.tmp`;
+  await fs.promises.writeFile(
+    tmpPath,
+    `${JSON.stringify(data, null, 2)}\n`,
+    "utf8",
+  );
+  await fs.promises.rename(tmpPath, filePath);
+}
+
+function validateStateJsonModel(state, expected = {}) {
+  const issues = [];
+  const enumValues = {
+    requirementStatus: ["pending", "implemented", "passed", "blocked", "not_verified"],
+    deliveryVerifiability: ["verifiable", "partially_verifiable", "not_verifiable", "unknown"],
+    requiredAction: ["continue", "narrow_scope", "run_validation", "reconcile", "ask_user", "stop", "context_compress_and_review"],
+    cleanupStatus: ["pending", "completed", "blocked"],
+  };
+
+  if (!requirePlainObject(issues, state, "state.json")) {
+    return issues;
+  }
+  if (state.schemaVersion !== STATE_SCHEMA_VERSION) {
+    addError(issues, `state.json.schemaVersion=${state.schemaVersion || "missing"}，期望 ${STATE_SCHEMA_VERSION}`);
+  }
+
+  const requiredObjects = ["task", "session", "mode", "budgets", "currentState", "watchdog", "decisions", "validation", "cleanup"];
+  requiredObjects.forEach((key) => {
+    requirePlainObject(issues, state[key], `state.json.${key}`);
+  });
+  requireArray(issues, state.requirements, "state.json.requirements");
+
+  const session = state.session || {};
+  requireNonEmptyStringFields(issues, session, ["session", "stateJsonFile", "stateFile", "promptFile", "currentFile"], "state.json.session");
+  if (expected.session && session.session !== expected.session) {
+    addError(issues, `state.json.session.session=${session.session || "missing"}，期望 ${expected.session}`);
+  }
+  if (session.session) {
+    const expectedStateJson = `.agent-state/auto-iterate/${session.session}/state.json`;
+    const expectedStateMd = `.agent-state/auto-iterate/${session.session}/state.md`;
+    const expectedPrompt = `.agent-state/auto-iterate/${session.session}/start-prompt.md`;
+    requireNormalizedPath(issues, session.stateJsonFile, expectedStateJson, "state.json.session.stateJsonFile");
+    requireNormalizedPath(issues, session.stateFile, expectedStateMd, "state.json.session.stateFile");
+    requireNormalizedPath(issues, session.promptFile, expectedPrompt, "state.json.session.promptFile");
+  }
+
+  const mode = state.mode || {};
+  if (!mode.mode || !MODE_CONFIGS[mode.mode]) {
+    addError(issues, `state.json.mode.mode=${mode.mode || "missing"} 不是有效模式`);
+  }
+  requireBooleanFields(issues, mode, ["autopilot", "allowAgentInference", "allowModify"], "state.json.mode");
+
+  const budgets = state.budgets || {};
+  requireNonNegativeIntegerFields(issues, budgets, [
+    "maxIterations",
+    "autopilotMaxIterations",
+    "implementationIterationsUsed",
+    "validationHardeningIterationsUsed",
+    "minimumValidationHardeningIterations",
+    "optimizationIterationsUsed",
+    "totalCycles",
+    "remainingImplementationIterations",
+    "remainingValidationHardeningIterations",
+  ], "state.json.budgets");
+  validateBudgetRelationships(issues, budgets, "state.json.budgets");
+
+  const watchdog = state.watchdog || {};
+  requireEnumValue(issues, watchdog.deliveryVerifiability, enumValues.deliveryVerifiability, "state.json.watchdog.deliveryVerifiability");
+  requireEnumValue(issues, watchdog.requiredAction, enumValues.requiredAction, "state.json.watchdog.requiredAction");
+  requireBooleanFields(issues, watchdog, ["enabled", "triggered", "freshEyesRequired"], "state.json.watchdog");
+
+  const requirements = Array.isArray(state.requirements) ? state.requirements : [];
+  const requirementCounts = countJsonRequirementStates(requirements);
+  requirements.forEach((item, index) => {
+    if (!requirePlainObject(issues, item, `state.json.requirements[${index}]`)) {
+      return;
+    }
+    requireNonEmptyStringFields(issues, item, ["id", "summary", "type", "status", "evidence", "blockedReason", "nextStep"], `state.json.requirements[${index}]`);
+    requireEnumValue(issues, item.status, enumValues.requirementStatus, `state.json.requirements[${index}].status`);
+    requireArray(issues, item.relatedFiles, `state.json.requirements[${index}].relatedFiles`);
+  });
+  if (hasOpenRequirementCounts(requirementCounts) && watchdog.deliveryVerifiability === "verifiable") {
+    addError(issues, "state.json.requirements 仍有开放项，但 watchdog.deliveryVerifiability=verifiable");
+  }
+
+  const validation = state.validation || {};
+  requireEnumValue(issues, validation.finalVerifiability, enumValues.deliveryVerifiability, "state.json.validation.finalVerifiability");
+  requireArray(issues, validation.commands, "state.json.validation.commands");
+  const cleanup = state.cleanup || {};
+  requireEnumValue(issues, cleanup.status, enumValues.cleanupStatus, "state.json.cleanup.status");
+
+  return issues;
+}
+
 async function writeCurrentFile(sessionPaths, answers) {
   const current = {
     session: sessionPaths.session,
     mode: answers.mode,
     modeLabel: answers.modeLabel,
     status: "in_progress",
+    stateJsonFile: toRelative(sessionPaths.sessionStateJsonPath),
     stateFile: toRelative(sessionPaths.sessionStatePath),
     promptFile: toRelative(sessionPaths.sessionPromptPath),
     updatedAt: new Date().toISOString(),
   };
 
-  await fs.promises.writeFile(
-    sessionPaths.currentPath,
-    `${JSON.stringify(current, null, 2)}\n`,
-    "utf8",
-  );
+  await writeJsonFileAtomic(sessionPaths.currentPath, current);
   return current;
 }
 
@@ -1104,6 +1447,7 @@ async function getSessionSummaries() {
       mode: extractStateField(content, /模式：([^\n]+)/),
       phase: extractStateField(content, /当前阶段：([^\n]+)/),
       status: extractStateField(content, /整体完成状态：([^\n]+)/),
+      stateJsonFile: toRelative(sessionPaths.sessionStateJsonPath),
       stateFile: toRelative(sessionPaths.sessionStatePath),
       promptFile: toRelative(sessionPaths.sessionPromptPath),
       current: current && current.session === entry.name,
@@ -1138,6 +1482,23 @@ async function activateSession(sessionName, action = "switch") {
     console.log(`   期望状态文件: ${toRelative(sessionPaths.sessionStatePath)}`);
     return;
   }
+  if (action === "resume") {
+    const previousExitCode = process.exitCode;
+    process.exitCode = 0;
+    const validationResult = await validateState(sessionPaths.session, {
+      strict: true,
+      allowMissingStateJson: true,
+    });
+    if (!validationResult || !validationResult.ok) {
+      console.log("❌ resume 已被 strict state 门禁阻止。请先修正 state.json/state.md 后再恢复。");
+      process.exitCode = 1;
+      return;
+    }
+    process.exitCode = previousExitCode;
+    if (validationResult.degraded) {
+      console.log("⚠️  当前 session 缺少 state.json，已按旧 state.md-only session 降级恢复；建议恢复后生成 state.json。");
+    }
+  }
 
   const stateContent = await fs.promises.readFile(
     sessionPaths.sessionStatePath,
@@ -1164,6 +1525,7 @@ function withSessionDefaults(answers, sessionPaths) {
   return {
     ...answers,
     session: sessionPaths.session,
+    sessionStateJsonFile: toRelative(sessionPaths.sessionStateJsonPath),
     sessionStateFile: toRelative(sessionPaths.sessionStatePath),
     sessionPromptFile: toRelative(sessionPaths.sessionPromptPath),
     currentFile: toRelative(sessionPaths.currentPath),
@@ -1211,6 +1573,7 @@ function buildModeInstructions(answers) {
       return `严格启动模式：
 - 按用户提供的完整流程清单执行。
 - 先提取 Requirement Coverage Matrix，再探索现有实现、制定垂直切片计划、实现、验证、修复和优化。
+- 所有关键 REQ passed 后，必须进入 validation_hardening 交付前验证加固：至少 2 轮，覆盖 boundary / negative / regression；发现问题就新增或重开 REQ，无法验证则标记 blocked / not_available。
 - 不要把单个阶段、子任务或最小纵切通过误判为整体完成。`;
   }
 }
@@ -1245,6 +1608,117 @@ function withModeDefaults(answers) {
   };
 }
 
+function buildStateModel(rawAnswers) {
+  const answers = withModeDefaults(rawAnswers);
+  const remainingImplementationIterations = answers.autopilot
+    ? answers.autopilotMaxIterations
+    : answers.maxIterations;
+  const minimumValidationHardeningIterations = answers.mode === "strict" ? 2 : 1;
+
+  return {
+    schemaVersion: STATE_SCHEMA_VERSION,
+    generatedFileNotice: "state.json is the machine-authoritative auto-iterate state; state.md is generated for human reading.",
+    task: {
+      goal: answers.goal || "未指定",
+      successCriteria: normalizeLines(answers.successCriteria),
+      nonGoals: normalizeLines(answers.nonGoals),
+      allowedScope: answers.allowedScope || "未指定",
+      compatibility: normalizeLines(answers.compatibility),
+    },
+    session: {
+      session: answers.session || "default",
+      stateJsonFile: answers.sessionStateJsonFile || ".agent-state/auto-iterate/default/state.json",
+      stateFile: answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md",
+      promptFile: answers.sessionPromptFile || ".agent-state/auto-iterate/default/start-prompt.md",
+      currentFile: answers.currentFile || ".agent-state/auto-iterate-current.json",
+    },
+    mode: {
+      mode: answers.mode,
+      label: answers.modeLabel,
+      description: answers.modeDescription,
+      autopilot: answers.autopilot,
+      allowAgentInference: Boolean(answers.allowAgentInference),
+      allowModify: answers.allowModify !== false,
+      instructions: answers.modeInstructions,
+    },
+    budgets: {
+      maxIterations: answers.maxIterations,
+      autopilotMaxIterations: answers.autopilotMaxIterations,
+      minimumImplementationIterations: null,
+      implementationIterationsUsed: 0,
+      validationHardeningIterationsUsed: 0,
+      minimumValidationHardeningIterations,
+      optimizationIterationsUsed: 0,
+      totalCycles: 0,
+      remainingImplementationIterations,
+      remainingValidationHardeningIterations: minimumValidationHardeningIterations,
+      remainingOptimizationIterations: null,
+    },
+    currentState: {
+      currentPhase: answers.currentPhase,
+      currentTask: answers.currentTask,
+      nextAction: answers.nextAction,
+      overallStatus: "in_progress",
+      recentChanges: "无",
+      keyFiles: "未探索",
+      lastValidationCommand: "未运行",
+      lastValidationResult: "未运行",
+    },
+    watchdog: {
+      enabled: true,
+      stateDrift: "none",
+      deliveryVerifiability: "unknown",
+      triggered: false,
+      requiredAction: "continue",
+      freshEyesRequired: false,
+      validationHardeningStatus: "pending",
+      validationHardeningDimensionsDone: [],
+      newTestCount: 0,
+    },
+    requirements: [
+      {
+        id: "REQ-BOOTSTRAP",
+        summary: "启动后必须先从用户目标、成功标准、原始清单文档和当前模式提取完整 Requirement Coverage Matrix",
+        type: "验证",
+        status: "pending",
+        relatedFiles: [answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"],
+        evidence: "无",
+        blockedReason: "无",
+        nextStep: "读取原始清单和当前代码，拆分 REQ-001...REQ-N，并在实现或验证前更新本矩阵",
+      },
+    ],
+    decisions: {
+      compatibility: normalizeLines(answers.compatibility),
+      constraints: normalizeLines(answers.constraints),
+      parallelWriteAllowed: false,
+      parallelWriteConfirmation: "未确认；同 worktree 下不得并发 coder 写入",
+      coderFileOwnership: "未分配",
+      fallbackStrategy: "能力不足、无隔离或用户未确认时串行执行",
+    },
+    validation: {
+      passed: [],
+      failed: [],
+      notRunReason: "尚未开始",
+      finalVerifiability: "unknown",
+      commands: normalizeLines(answers.validationCommands),
+    },
+    cleanup: {
+      status: "pending",
+      artifactsToDelete: "无",
+      prototypeFiles: answers.mode === "prototype" ? "待创建并明确标记" : "无",
+    },
+    sourceChecklist: answers.sourceChecklist
+      ? {
+          path: answers.sourceChecklistPath,
+          content: answers.sourceChecklist,
+        }
+      : null,
+    deliveryFormat: answers.deliveryFormat || DEFAULT_DELIVERY_FORMAT,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 function buildStateContent(rawAnswers) {
   const answers = withModeDefaults(rawAnswers);
   const sourceChecklist = answers.sourceChecklist
@@ -1256,6 +1730,8 @@ function buildStateContent(rawAnswers) {
     : answers.maxIterations;
 
   return `# 自动迭代编码状态
+
+> GENERATED FILE, DO NOT EDIT. 机器权威状态为 ${answers.sessionStateJsonFile || ".agent-state/auto-iterate/default/state.json"}；本 Markdown 仅用于人类阅读和 legacy 兼容。
 ${sourceChecklist}
 
 ## At-a-Glance / 人类摘要
@@ -1363,12 +1839,15 @@ autopilot_max_iterations：${answers.autopilotMaxIterations}
 minimum_implementation_iterations：未启用
 minimum_iteration_policy：最少/至少 N 轮是下限检查点，不是上限或仅执行 N 轮；达到下限后仍按 RCM、Watchdog、验证结果和剩余预算继续或停止
 implementation_iterations_used：0
+validation_hardening_iterations_used：0
+minimum_validation_hardening_iterations：${answers.mode === "strict" ? "2" : "1"}
 optimization_iterations_used：0
 total_cycles：0
 remaining_implementation_iterations：${remainingImplementationIterations}
+remaining_validation_hardening_iterations：${answers.mode === "strict" ? "2" : "1"}
 remaining_optimization_iterations：未开始
 预算追加记录：无；如果恢复时 remaining_implementation_iterations = 0，必须先请求用户追加预算，历史计数不清零
-计数口径：实现迭代 = 修改 + 验证/记录 + 状态更新的闭环；只读探索、reconcile、上下文压缩、向用户提问和纯验证不计入实现迭代
+计数口径：实现迭代 = 修改 + 验证/记录 + 状态更新的闭环；验证加固迭代 = 所有关键 REQ passed 后主动寻找遗漏的边界/反例/回归验证；只读探索、reconcile、上下文压缩、向用户提问和纯重复验证不计入实现迭代
 
 ## Recovery / Reconcile / 恢复一致性检查
 当前分支：待检查
@@ -1401,7 +1880,7 @@ Autopilot：${autopilotText}
 ## Watchdog / 看门狗
 enabled：true
 check_interval：每轮迭代前后、上下文压缩后、恢复后、最终交付前
-light_check：每轮必做，检查 no_progress_count / last_validation_result / state_drift / triggered
+light_check：每轮必做，检查 no_progress_count / last_validation_result / state_drift / triggered / fresh_eyes_required / new_test_count
 full_check：每个 phase、每 3 轮、恢复后和交付前执行完整字段检查
 last_progress_iteration：0
 last_progress_summary：CLI 已生成初始状态，Agent 尚未开始执行
@@ -1415,6 +1894,14 @@ delivery_verifiability：unknown
 triggered：false
 trigger_reason：无
 required_action：continue
+fresh_eyes_required：false
+new_test_count：0
+new_test_target：所有 passed REQ 至少各有 1 个本轮新增的行为测试或等价验证命令；未补测试的 REQ 必须在已知限制中记录原因
+validation_hardening_status：pending
+validation_hardening_dimensions_done：无
+validation_hardening_required：boundary / negative / regression；有 UI、权限、并发、数据迁移或外部服务时追加对应维度
+validation_hardening_cost_policy：优先局部最小可证伪验证；重型 e2e / 全量 CI 只在相关风险、影响面较大或最终交付门禁时运行
+heavy_validation_deferred：无
 
 ## Requirement Coverage Matrix / 需求覆盖矩阵
 REQ-BOOTSTRAP：
@@ -1436,6 +1923,7 @@ ${normalizeLines(answers.successCriteria)
 沙箱验证：未运行
 未验证项：全部成功标准尚未验证
 Requirement Coverage Matrix 状态：未提取完整矩阵，REQ-BOOTSTRAP pending
+验证加固：pending
 交付可验证性：unknown
 看门狗状态：clear
 剩余风险：尚未开始执行
@@ -1499,6 +1987,8 @@ Watchdog：enabled，交付前必须从 unknown 更新为 verifiable / partially
 从“下一步最小动作”继续，并在每轮迭代后更新本文件。
 如果 Requirement Coverage Matrix 中仍存在 pending / implemented / not_verified 的关键需求，不要按成功交付输出。
 如果 Watchdog triggered 为 true，先处理 required_action；交付可验证性为 not_verifiable 或 unknown 时，不要按成功交付输出。
+如果 Watchdog.fresh_eyes_required 为 true，必须先设置 triggered=true、required_action=context_compress_and_review，并完成上下文压缩与新鲜视角复查后再继续或交付。
+如果所有关键 REQ 已 passed，必须先完成 validation_hardening：至少达到 minimum_validation_hardening_iterations，并覆盖 boundary / negative / regression 维度；无法执行时标记 blocked 或 not_available，不得静默跳过。
 如果 Temporary Artifacts / Cleanup 中仍有未清理的 debug 日志、harness、原型路由或一次性文件，不要按成功交付输出，除非用户明确要求保留并已标记原因。
 `;
 }
@@ -1526,13 +2016,14 @@ ${startModeLine}
 ${answers.modeDescription}
 
 当前 session：${answers.session || "default"}
-Session 状态文件：${answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"}
+Session 机器状态：${answers.sessionStateJsonFile || ".agent-state/auto-iterate/default/state.json"}
+Session 状态视图：${answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"}
 Session 启动提示：${answers.sessionPromptFile || ".agent-state/auto-iterate/default/start-prompt.md"}
 Current 指针：${answers.currentFile || ".agent-state/auto-iterate-current.json"}
 
 Auto-iterate 激活声明：
-开始执行前，请先在对话中用 1-3 行明确声明本任务已经进入 auto-iterate-coding 激活态，并列出 mode、session、state 文件、current 指针和下一步最小动作。
-如果不能读取或写入 session state、start-prompt 或 current 指针，必须把状态持久化标记为 degraded / not_available，并说明原因；不得把普通对话内多轮修改称为完整 auto-iterate session。
+开始执行前，请先在对话中用 1-3 行明确声明本任务已经进入 auto-iterate-coding 激活态，并列出 mode、session、state.json、state.md、current 指针和下一步最小动作。
+如果不能读取或写入 session state.json、state.md、start-prompt 或 current 指针，必须把状态持久化标记为 degraded / not_available，并说明原因；不得把普通对话内多轮修改称为完整 auto-iterate session。
 后续每轮进展摘要和最终交付都必须引用当前 session，避免把“多轮迭代开发”误判为未激活持久化任务。
 
 模式执行规则：
@@ -1546,14 +2037,16 @@ ${answers.modeInstructions}
 如果子 Agent/并行为 available，请先读取 references/sub-agent-concurrency.md，并按“启用门禁与平台适配”“调度流程”和 Sub-Agent Result Schema 维护 Sub-Agent Dispatch；state 字段结构以 examples/state-template.md 为唯一来源，不得自行添加协议旧字段。
 sub-agent 是 Agent 工具执行自动迭代时的协议增强，不是 fastcar-cli 内置运行时；小任务、单文件修改、ownership 不清晰或验证副作用不明时默认串行执行。
 启用任何 coder/background 并发前，请同步维护 Decisions 中的并发决策：parallel_write_allowed、parallel_write_confirmation、coder_file_ownership 和 fallback_strategy；未声明共享文件 owner 或验证副作用时不得并发执行。
-每轮并发 dispatch 前必须建立轻量 baseline，例如 git status、已有 diff 摘要或关键文件 mtime；merge 后必须由父 Agent 执行 Quality Gate，更新 active_sub_agents、sub_agent_history、Watchdog、Budgets 和 RCM。检测到 state.md 在子 Agent 运行期间被外部修改时，先进入 reconcile，不得继续 dispatch。
+每轮并发 dispatch 前必须建立轻量 baseline，例如 git status、已有 diff 摘要或关键文件 mtime；merge 后必须由父 Agent 执行 Quality Gate，先更新 state.json 中的 active_sub_agents、sub_agent_history、Watchdog、Budgets 和 RCM，再刷新 state.md 生成视图。检测到 state.json 或 state.md 在子 Agent 运行期间被外部修改时，先进入 reconcile，不得继续 dispatch。
 默认并发上限：explore 最多 4，需求提取和 background verify 最多 3，coder 默认最多 2；quick 模式默认只启用 explore/background 并发，只有文件 ownership、用户确认、baseline 和 Quality Gate 均明确时才允许 coder 并发。
 请不要依赖历史对话作为唯一上下文。
-如果存在 ${answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"}，请先读取它作为本 session 的恢复状态。
+如果存在 ${answers.sessionStateJsonFile || ".agent-state/auto-iterate/default/state.json"}，请先读取它作为本 session 的机器权威恢复状态；缺少 state.json 的旧 session 才降级读取 ${answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"}。
 恢复前执行 reconcile 检查：当前分支、git 状态/diff 摘要、状态文件与当前代码是否一致、是否存在上次停止后的外部修改、最近验证能否重新运行。
-每完成一轮实现迭代、递归优化、上下文压缩、提前停止或成功交付前，都要优先更新 session 状态文件 ${answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"}；如果当前环境不能写状态文件，请在对话内维护同等结构的 Iteration State。
-请启用并维护 Watchdog 状态；每轮迭代前后、上下文压缩后、恢复后和最终交付前都要检查无进展、验证缺失、状态漂移和交付可验证性，并把 required_action 写回状态文件。
-如果 Watchdog 触发 run_validation、reconcile、ask_user 或 stop，必须先处理 required_action，不得绕过；交付可验证性为 not_verifiable 或 unknown 时，不要按成功交付输出。
+每完成一轮实现迭代、递归优化、上下文压缩、提前停止或成功交付前，都要优先更新 session 机器状态文件 ${answers.sessionStateJsonFile || ".agent-state/auto-iterate/default/state.json"}，再刷新 ${answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"} 生成视图；如果当前环境不能写状态文件，请在对话内维护同等结构的 Iteration State。
+请启用并维护 Watchdog 状态；每轮迭代前后、上下文压缩后、恢复后和最终交付前都要检查无进展、验证缺失、状态漂移和交付可验证性，并把 required_action 写回 state.json 后刷新 state.md。
+如果 Watchdog 触发 run_validation、reconcile、ask_user、context_compress_and_review 或 stop，必须先处理 required_action，不得绕过；交付可验证性为 not_verifiable 或 unknown 时，不要按成功交付输出。
+当 Watchdog.fresh_eyes_required = true 时：所有 REQ 已 passed 但仍有剩余实现预算。请执行上下文压缩，输出 Context Handoff Summary，清空对话中的实现细节。以"新接手项目的开发者"视角重新审视全部代码和 RCM。发现遗漏 → 创建新 REQ，重置 fresh_eyes_required = false，继续迭代。无遗漏 → fresh_eyes_required = false，继续优化或交付。
+当所有关键 REQ passed 且 fresh_eyes_required 已处理后，必须进入 validation_hardening 交付前验证加固。验证加固不消耗实现迭代预算；每轮选择一个攻击式验证维度（boundary、negative、regression，必要时追加 compatibility、concurrency、permission、data、ui），优先用局部最小可证伪验证补充真实测试或等价验证命令。重型 e2e / 全量 CI 不得每轮机械重复，只有相关风险、影响面较大或最终交付门禁需要时运行；如因耗时延后，记录 heavy_validation_deferred、原因和用户可复现命令。发现问题时新增或重开 REQ 并回到实现；无新发现时更新 validation_hardening_iterations_used、validation_hardening_dimensions_done 和验证证据。未达到 minimum_validation_hardening_iterations 或缺少必需维度时，不得按成功交付输出。
 当上下文变长、完成 3-5 轮迭代、进入新阶段或开始重复尝试时，请输出并使用 Context Handoff Summary 继续。
 请维护完整任务清单、已完成任务、当前任务、剩余任务和整体完成状态；剩余任务非空时不得按成功交付停止，只能继续迭代或按提前停止汇报。
 修 bug、性能回归或验证失败时，请先建立能复现目标问题的 feedback loop；无法建立时停止并说明尝试过什么、缺少什么 artifact 或环境。
@@ -2523,7 +3016,7 @@ async function initAutoIterate(args = []) {
   }
 
   if (options.validateState) {
-    await validateState(options.validateState);
+    await validateState(options.validateState, { strict: options.strictState });
     return;
   }
 
@@ -2573,7 +3066,20 @@ async function initAutoIterate(args = []) {
 
   await fs.promises.mkdir(sessionPaths.sessionDir, { recursive: true });
   await fs.promises.mkdir(sessionPaths.stateDir, { recursive: true });
+  const stateModel = buildStateModel(answers);
+  const stateModelIssues = validateStateJsonModel(stateModel, {
+    session: sessionPaths.session,
+  });
+  if (stateModelIssues.some((issue) => issue.severity === "error")) {
+    console.log("❌ 生成 state.json 失败，结构化状态未通过校验:");
+    stateModelIssues.forEach((issue) => {
+      console.log(`- ${issue.severity.toUpperCase()}: ${issue.message}`);
+    });
+    process.exitCode = 1;
+    return;
+  }
   const promptContent = buildPromptContent(answers);
+  await writeJsonFileAtomic(sessionPaths.sessionStateJsonPath, stateModel);
   await fs.promises.writeFile(
     sessionPaths.sessionStatePath,
     buildStateContent(answers),

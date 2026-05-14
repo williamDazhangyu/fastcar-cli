@@ -14,6 +14,7 @@ description: TypeScript 编码规范与最佳实践。Use when writing or review
 - 复杂交叉类型在 2 处及以上使用时，应提取类型别名或接口。
 - 状态、类型、模式等离散字段优先使用字符串枚举。
 - 异步等待类代码避免裸写 `while + sleep` 轮询，优先表达为“等待事件、超时、取消、异常”的组合。
+- 业务代码和适配器代码严禁默认使用 `yield`、`yield*`、生成器函数或 `while (true)` 这类旧式控制流；优先改成回调式、Promise 式或封装好的等待原语。
 - 实现核心功能、逻辑较复杂或容易产生歧义的代码块时，必须添加必要注释说明意图、边界和关键约束。
 - 不要为了减少代码行数牺牲类型可读性。
 
@@ -193,17 +194,15 @@ const timeout = setTimeout(() => {
 }, timeoutMs);
 
 try {
-    for await (const event of this.generationService.watchTaskEvents(actor, body.id, {
+    await this.generationService.pollTaskEvents(actor, body.id, {
         cursor,
         signal: controller.signal,
-    })) {
-        this.writeSseEvent(ctx, event);
-        cursor = event.id;
-
-        if (terminalTypes.has(event.type)) {
-            break;
-        }
-    }
+        onEvent: async (event) => {
+            this.writeSseEvent(ctx, event);
+            cursor = event.id;
+            return !terminalTypes.has(event.type);
+        },
+    });
 } finally {
     clearTimeout(timeout);
 }
@@ -211,24 +210,41 @@ try {
 
 ### 次优但可接受：把轮询隐藏在等待函数里
 ```typescript
-const event = await this.generationService.waitTaskEvent(actor, body.id, cursor, {
+const result = await this.generationService.pollTaskEvents(actor, body.id, {
+    cursor,
     signal: controller.signal,
-    timeoutMs: 500,
+    onEvent: async (event) => {
+        this.writeSseEvent(ctx, event);
+        cursor = event.id;
+        return true;
+    },
 });
 
-if (event) {
-    this.writeSseEvent(ctx, event);
-    cursor = event.id;
+if (result.reason === "timedOut") {
+    this.writeTimeoutEvent(ctx);
 }
 ```
 
 ### 规范建议
-1. **业务层表达意图**：优先写成 `watchTaskEvents`、`waitTaskEvent`、`waitUntilReady`，不要在业务层暴露 `while + sleep`
+1. **业务层表达意图**：优先写成 `pollTaskEvents`、`waitTaskEvent`、`waitUntilReady`，不要在业务层暴露 `while + sleep`
 2. **等待必须可取消**：异步等待函数应支持 `AbortSignal`，并在连接关闭、请求取消或任务终止时释放资源
 3. **超时集中管理**：使用 `setTimeout`、`AbortController` 或统一超时工具表达 deadline，避免循环里反复 `Date.now()`
 4. **异常路径明确**：等待失败应抛出领域错误或写出错误事件，不要让异常隐式穿透到框架默认处理
 5. **终止条件类型化**：任务成功、失败、取消等终态优先使用枚举或常量集合，不要在多处散落字符串字面量
 6. **轮询留在基础设施层**：如果底层只能轮询，把轮询封装在 service/helper 内部；调用方只消费事件或等待结果
+7. **避免生成器旧写法**：不要为了“可迭代”而使用 `yield`、`yield*`、`async *` 或 `for await` 作为默认实现，除非它们能明显提升接口语义且不会让流程控制分散
+
+### 推荐的回调式封装
+```typescript
+await this.streamService.pollStream({
+    signal: controller.signal,
+    timeoutMs: 30000,
+    onChunk: async (chunk) => {
+        this.writeChunk(ctx, chunk);
+        return chunk.type !== "done";
+    },
+});
+```
 
 ---
 

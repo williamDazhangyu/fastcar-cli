@@ -75,9 +75,12 @@ fastcar-cli auto-iterate -f docs/ai-checklist.md
 
 `fastcar-cli auto-iterate` 会交互式选择启动模式，询问 AI 实现流程清单或轻量目标，并生成 session 文件和当前活动指针：
 
+- `.agent-state/auto-iterate/<session>/state.json`
 - `.agent-state/auto-iterate/<session>/state.md`
 - `.agent-state/auto-iterate/<session>/start-prompt.md`
 - `.agent-state/auto-iterate-current.json`
+
+其中 `state.json` 是机器权威状态源，`state.md` 是生成的人类阅读视图。
 
 生成后，把 `.agent-state/auto-iterate/<session>/start-prompt.md` 的内容发给 Agent。
 
