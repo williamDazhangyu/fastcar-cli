@@ -13,11 +13,27 @@
 - 调用命令或无 CLI fallback 创建状态后，必须先在对话中输出 auto-iterate 激活声明，列出 mode、session、state 文件、current 指针、状态持久化能力和下一步最小动作。
 - 如果没有 session state、start-prompt 或 current 指针，不得把当前会话内的多轮修改称为完整 auto-iterate session；必须标记为 degraded / not_available。
 
+## Goal 术语边界
+
+本协议中的 `goal` 可能出现在不同上下文，含义不同。Agent 必须先判断用户说的是哪一种，不得把一种 `goal` 能力伪装成另一种：
+
+- `fastcar-cli auto-iterate --goal "<目标>"`：这是 fastcar-cli 的目标文本参数，只负责把简短目标写入自动迭代 session 和启动提示。
+- `Goal: <文本>` 或 `Goal：<文本>`：这是普通提示词内容。fastcar-cli 可以把位置参数里的该前缀清洗成目标文本，但除非当前客户端明确提供 Goal 入口，否则它不会自动启用客户端的 Goal 模式。
+- Codex 客户端 Goal 入口：这是 Codex 客户端 UI 或宿主环境提供的任务目标入口。协议只能建议用户把自动迭代启动提示放入该入口，不能通过提示词或 `fastcar-cli --goal` 强制启用。
+- “Codex goal 处理/接手”：在本路由文档中仅作为用户口语，等价于派发给 Codex worker / dispatch；默认映射为 `fastcar-cli auto-iterate --dispatch ... --agent codex ...`，不是声明已经启用 Codex 客户端 Goal 模式。
+
+执行规则：
+
+- 如果当前环境的 `codex --help` / `codex exec --help` 没有暴露 `goal` 子命令或 `--goal` 参数，必须说明 CLI 不支持显式 Codex Goal 模式；改用普通 prompt、`codex exec` 或 `fastcar-cli auto-iterate --goal`。
+- 如果用户明确要求“启用 Codex Goal 模式”，但当前环境只有普通聊天或 CLI，必须说明无法由协议强制启用客户端 UI Goal；只能按自动迭代协议执行或生成可粘贴到客户端 Goal 入口的文本。
+- 如果用户只是说“让 auto-iterate goal 处理”，按父任务启动映射为 `--goal` 参数。
+- 如果用户说“让 Codex goal 处理 <session> 的 <REQ>”，按 Codex worker dispatch 处理，并优先 dry-run 生成 prompt。
+
 ## 映射表
 
 | 用户说法 | Agent 应调用 |
 | --- | --- |
-| “快速开始修这个问题” / “开一个自动迭代任务” | `fastcar-cli auto-iterate --quick --goal "<目标>" --session <session> --yes` |
+| “快速开始修这个问题” / “开一个自动迭代任务” / “让 auto-iterate goal 处理 <目标>” / “启动 auto-iterate goal：<目标>” | `fastcar-cli auto-iterate --quick --goal "<目标>" --session <session> --yes` |
 | “完整实现这个文档” / “把文档里的需求都做完” | 如果能确定文档路径，调用 `fastcar-cli auto-iterate --strict --from <文档路径> --session <session> --yes`；不能确定时先搜索或询问文档路径 |
 | “完整实现 docs” / “实现 docs 文档” | 先确认 `docs` 是文件还是目录；如果是目录，先找候选需求文档，不要盲目把目录当文件传给 `--from` |
 | “根据 docs/prd.md 全部实现” / “按 docs/prd.md 做完” | `fastcar-cli auto-iterate --strict --from docs/prd.md --session <session> --yes` |
@@ -31,6 +47,8 @@
 | “优化这个模块” / “提升性能但别改行为” | `fastcar-cli auto-iterate --optimize --goal "<目标>" --session <session> --yes` |
 | “校验自动迭代 state” / “检查 session 是否一致” / “检查 sub-agent 协议一致性” | 如果能确定 session 或 state 路径，调用 `fastcar-cli auto-iterate --validate-state <session|state.md|state.json>`；不能确定时先运行 `--list` 或询问 |
 | “校验当前自动迭代 state” / “检查当前 session 状态” | `fastcar-cli auto-iterate --validate-state` |
+| “让 Codex goal 处理 REQ-001” / “派发给 Codex worker” | 将“Codex goal”理解为 Codex worker / dispatch 口语，不是客户端 Goal 模式；调用 `fastcar-cli auto-iterate --dispatch <session> --agent codex --task "<子任务>" --files "<白名单>" --verify-command "<验证命令>" --dry-run`；确认 prompt 后再去掉 `--dry-run` 并配置 `AUTO_ITERATE_CODEX_CMD` |
+| “让 Claude Code 处理 REQ-001” / “派发给 Gemini/Kimi/Cursor worker” | `fastcar-cli auto-iterate --dispatch <session> --agent <claude|gemini|kimi|cursor|windsurf|copilot|jules|devin|openhands|replit> --task "<子任务>" --files "<白名单>" --verify-command "<验证命令>" --dry-run`；确认 prompt 后再配置对应 `AUTO_ITERATE_<AGENT>_CMD` |
 | “列出自动迭代任务” | `fastcar-cli auto-iterate --list` |
 | “切换到登录修复任务” | `fastcar-cli auto-iterate --switch <session>` |
 | “恢复登录修复任务” | `fastcar-cli auto-iterate --resume <session>` |
@@ -45,15 +63,16 @@
 ```text
 1. state 校验：validate-state
 2. session 管理：列出 / 切换 / 恢复
-3. 明确禁止修改：verify 或 plan-only
-4. 明确要求诊断、debug、复现、flaky、性能回归：diagnose
-5. 明确要求原型、试方案、验证状态机、验证数据模型：prototype
-6. 明确要求规划：plan-only
-7. 明确要求验收/检查完成度：verify
-8. 明确要求优化/重构且保持行为：optimize
-9. 提供长文档、PRD、issue 路径：优先 --from
-10. 默认小中型目标：quick
-11. 明确生产、完整、严格、复杂：strict
+3. 明确派发给 Codex / worker / goal：dispatch；这里的 goal 是口语，不等于 Codex 客户端 Goal 模式
+4. 明确禁止修改：verify 或 plan-only
+5. 明确要求诊断、debug、复现、flaky、性能回归：diagnose
+6. 明确要求原型、试方案、验证状态机、验证数据模型：prototype
+7. 明确要求规划：plan-only
+8. 明确要求验收/检查完成度：verify
+9. 明确要求优化/重构且保持行为：optimize
+10. 提供长文档、PRD、issue 路径：优先 --from
+11. 默认小中型目标：quick
+12. 明确生产、完整、严格、复杂：strict
 ```
 
 ## 预算推断
@@ -82,8 +101,14 @@
 用户：帮我快速启动自动迭代，修复登录失败，session 叫 login-bugfix
 Agent：fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --yes
 
+用户：让 auto-iterate goal 处理：修复登录失败，session 叫 login-bugfix
+Agent：fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --yes
+
+用户：启动 auto-iterate goal：按 docs/impl/agent-generation-contract-P0-spec.md 有界自动迭代实现 Agent 生图 P0，session 叫 agent-generation-p0
+Agent：fastcar-cli auto-iterate --quick --goal "按 docs/impl/agent-generation-contract-P0-spec.md 有界自动迭代实现 Agent 生图 P0" --session agent-generation-p0 --yes
+
 用户：帮我快速启动自动迭代，修复登录失败，最多跑 5 轮，session 叫 login-bugfix
-Agent：fastcar-cli auto-iterate --quick --goal "修复登录失败" --autopilot-max-iterations 5 --session login-bugfix --yes
+Agent：fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --autopilot-max-iterations 5 --yes
 
 用户：帮我快速启动自动迭代，修复登录失败，最少跑 5 轮，session 叫 login-bugfix
 Agent：fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --yes；启动后在 state 记录 `minimum_implementation_iterations：5`，不要追加 `--autopilot-max-iterations 5`
@@ -108,4 +133,28 @@ Agent：fastcar-cli auto-iterate --validate-state
 
 用户：校验 login-bugfix 整个自动迭代 session 是否一致
 Agent：fastcar-cli auto-iterate --validate-state login-bugfix
+
+用户：让 Codex goal 处理 login-bugfix 的 REQ-001，只能改 src/auth.js 和 test/auth.test.js
+Agent：fastcar-cli auto-iterate --dispatch login-bugfix --agent codex --task "处理 REQ-001" --files "src/auth.js,test/auth.test.js" --verify-command "npm test" --dry-run
+
+用户：派发给 Codex worker：session 是 login-bugfix，任务是修复登录 token 过期问题，只允许改 src/auth.js,test/auth.test.js，跑 npm test
+Agent：fastcar-cli auto-iterate --dispatch login-bugfix --agent codex --task "修复登录 token 过期问题" --files "src/auth.js,test/auth.test.js" --verify-command "npm test" --dry-run
+
+用户：让 Codex goal 接手当前自动迭代任务的 REQ-002，文件白名单是 src/auto-iterate.js 和 test/auto-iterate-doc-reliability.test.js，先生成 worker prompt 不实际执行
+Agent：fastcar-cli auto-iterate --dispatch --agent codex --task "处理 REQ-002" --files "src/auto-iterate.js,test/auto-iterate-doc-reliability.test.js" --verify-command "npm test" --dry-run
+
+用户：用 Codex worker 处理 dispatch-codex 这个 session 的“补充 resume 降级测试”，只能改 test/auto-iterate-doc-reliability.test.js，验证命令 npm test
+Agent：fastcar-cli auto-iterate --dispatch dispatch-codex --agent codex --task "补充 resume 降级测试" --files "test/auto-iterate-doc-reliability.test.js" --verify-command "npm test" --dry-run
+
+用户：确认 prompt 后，让本地 Codex 真实执行这个 worker
+Agent：先在当前 shell 设置 `AUTO_ITERATE_CODEX_CMD='codex exec --cd . --sandbox workspace-write -o "{result}" - < "{prompt}"'`，再运行同一条 `--dispatch ...` 命令并去掉 `--dry-run`
+
+用户：确认 prompt 后，让本地 Kimi 真实执行这个 worker
+Agent：先在当前 shell 设置 `AUTO_ITERATE_KIMI_CMD='powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:PYTHONUTF8=''1''; kimi --work-dir . --print --final-message-only --prompt (Get-Content -Raw -Encoding UTF8 ''{prompt}'') | Set-Content -Encoding UTF8 ''{result}''"'`，再运行同一条 `--dispatch ... --agent kimi ...` 命令并去掉 `--dry-run`
+
+父任务启动推荐句式：让 auto-iterate goal 处理：<目标>，session 叫 <session>。
+
+子任务派发推荐句式：让 Codex worker 处理 <session> 的 <REQ 或子任务>，只能改 <文件白名单>，验证命令 <命令>，先 dry-run。兼容旧口语“让 Codex goal 处理”，但必须按 dispatch 解释，不得声称已启用 Codex 客户端 Goal 模式。
+
+真实执行句式：确认 prompt 后用本地 Codex/Kimi 执行；如果没有配置 `AUTO_ITERATE_CODEX_CMD` 或 `AUTO_ITERATE_KIMI_CMD`，先只生成 prompt，不要猜测交互式命令。
 ```

@@ -42,6 +42,8 @@ Commands:
                            --max-iterations <n> 普通迭代预算
                            --autopilot-max-iterations <n> Autopilot 迭代预算
                            --list / --switch <name> / --resume <name>
+                           --dispatch <session> --agent codex|claude|gemini|kimi|cursor|windsurf|copilot|jules|devin|openhands|replit --task <text> --files <glob[,glob]> [--dry-run]
+                           --verify-command <cmd> dispatch worker 的验证命令
                            --yes, -y 非交互生成，适合 Agent 自然语言路由
                            --examples [关键词] 输出可复制的自然语言触发示例
                            -f, --from    从本地清单文档导入长需求
@@ -90,6 +92,7 @@ Examples:
   $ fastcar-cli auto-iterate --switch login-verify # 切换当前 session
   $ fastcar-cli auto-iterate --resume login-bugfix # 恢复指定 session
   $ fastcar-cli auto-iterate --validate-state login-bugfix # 只读校验 session 基线和 sub-agent 协议一致性
+  $ fastcar-cli auto-iterate --dispatch login-bugfix --agent codex --task "修复 REQ-001" --files "src/auth.js,test/auth.test.js" --dry-run # 生成本地 Agent worker prompt
   $ fastcar-cli auto-iterate --mode plan --goal "设计支付模块" # Plan-only 规划模式
   $ fastcar-cli auto-iterate --from docs/ai-checklist.md # 从本地清单文档生成
 

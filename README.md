@@ -143,6 +143,8 @@ fastcar-cli auto-iterate -f docs/ai-checklist.md
 
 生成后，把 `.agent-state/auto-iterate/<session>/start-prompt.md` 的内容发给 Agent，即可按 `auto-iterate-coding` skill 进入自动迭代流程。
 
+注意：Codex 客户端的 Goal 入口、提示词里的 `Goal:` 前缀、以及 `fastcar-cli auto-iterate --goal` 不是同一个东西。`--goal` 只是 fastcar-cli 的目标文本参数；普通聊天里写 `Goal:` 最多被 CLI 清洗为目标文本，不会自动启用客户端 Goal 模式。只有当前客户端明确提供 Goal 输入/任务入口时，把启动提示放进去才算使用客户端 Goal。
+
 #### auto-iterate-coding 使用技巧与文档引用
 
 `auto-iterate-coding` 的完整协议以仓库内 `skills/auto-iterate-coding/` 为准，README 只保留发包用户最常用的入口说明。建议先阅读这些文档：

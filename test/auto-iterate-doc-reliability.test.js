@@ -46,6 +46,39 @@ function makeProject() {
   return projectDir;
 }
 
+function makeGitProject() {
+  const projectDir = makeProject();
+  fs.writeFileSync(path.join(projectDir, "README.md"), "# fixture\n", "utf8");
+  let result = spawnSync("git", ["init"], {
+    cwd: projectDir,
+    encoding: "utf8",
+  });
+  assert.strictEqual(result.status, 0, `git init failed\n${result.stderr}`);
+  result = spawnSync("git", ["add", "."], {
+    cwd: projectDir,
+    encoding: "utf8",
+  });
+  assert.strictEqual(result.status, 0, `git add failed\n${result.stderr}`);
+  result = spawnSync(
+    "git",
+    [
+      "-c",
+      "user.name=FastCar Test",
+      "-c",
+      "user.email=fastcar-test@example.invalid",
+      "commit",
+      "-m",
+      "fixture",
+    ],
+    {
+      cwd: projectDir,
+      encoding: "utf8",
+    },
+  );
+  assert.strictEqual(result.status, 0, `git commit failed\n${result.stderr}`);
+  return projectDir;
+}
+
 function runAutoIterate(cwd, args) {
   const result = spawnSync(process.execPath, [cliPath, "auto-iterate", ...args], {
     cwd,
@@ -212,6 +245,27 @@ test("quick 模式生成 session-only 状态、启动提示和 current 指针", 
     ".agent-state/auto-iterate/login-bugfix/state.md",
     "prompt",
   );
+});
+
+test("quick 模式从 Goal 前缀位置参数推断用户目标", () => {
+  const projectDir = makeProject();
+  const goal = "按 docs/impl/agent-generation-contract-P0-spec.md 有界自动迭代实现 Agent 生图 P0";
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    `Goal：${goal}`,
+    "--session",
+    "goal-prefix",
+    "--yes",
+  ]);
+
+  const { state, stateJson, prompt } = readSession(projectDir, "goal-prefix");
+
+  assert.strictEqual(stateJson.task.goal, goal);
+  assertIncludes(state, `用户目标：\n${goal}`, "state.md");
+  assertIncludes(prompt, `用户目标：\n${goal}`, "start-prompt.md");
+  assertNotIncludes(state, "用户目标：\n未指定目标", "state.md");
+  assertNotIncludes(prompt, "用户目标：\n未指定目标", "start-prompt.md");
 });
 
 test("verify 模式保持只读约束并导入 PRD 原文", () => {
@@ -591,6 +645,7 @@ test("自然语言路由文档覆盖 CLI 支持的模式、预算和 session 规
     "--list",
     "--switch",
     "--resume",
+    "--dispatch",
     "--autopilot-max-iterations",
     "--max-iterations",
     "--session <session>",
@@ -611,6 +666,53 @@ test("自然语言路由文档覆盖 CLI 支持的模式、预算和 session 规
   assertIncludes(routing, "`--validate-state` 复用已有 session 或 state 文件，不创建新 session", "natural-language-routing.md");
   assertIncludes(routing, "检查当前自动迭代 state 是否一致", "natural-language-routing.md");
   assertIncludes(routing, "校验 login-bugfix 整个自动迭代 session 是否一致", "natural-language-routing.md");
+  assertIncludes(routing, "让 auto-iterate goal 处理 <目标>", "natural-language-routing.md");
+  assertIncludes(routing, "启动 auto-iterate goal：<目标>", "natural-language-routing.md");
+  assertIncludes(routing, "Goal 术语边界", "natural-language-routing.md");
+  assertIncludes(routing, "Codex 客户端 Goal 入口", "natural-language-routing.md");
+  assertIncludes(routing, "它不会自动启用客户端的 Goal 模式", "natural-language-routing.md");
+  assertIncludes(routing, "不能通过提示词或 `fastcar-cli --goal` 强制启用", "natural-language-routing.md");
+  assertIncludes(routing, "不是声明已经启用 Codex 客户端 Goal 模式", "natural-language-routing.md");
+  assertIncludes(routing, "让 auto-iterate goal 处理：修复登录失败", "natural-language-routing.md");
+  assertIncludes(routing, "父任务启动推荐句式：让 auto-iterate goal 处理：<目标>", "natural-language-routing.md");
+  assertIncludes(routing, "fastcar-cli auto-iterate --dispatch <session> --agent codex", "natural-language-routing.md");
+  assertIncludes(routing, "AUTO_ITERATE_CODEX_CMD", "natural-language-routing.md");
+  assertIncludes(routing, "--agent <claude|gemini|kimi|cursor|windsurf|copilot|jules|devin|openhands|replit>", "natural-language-routing.md");
+  assertIncludes(routing, "AUTO_ITERATE_<AGENT>_CMD", "natural-language-routing.md");
+  assertIncludes(routing, "派发给 Codex worker：session 是 login-bugfix", "natural-language-routing.md");
+  assertIncludes(routing, "让 Codex goal 接手当前自动迭代任务的 REQ-002", "natural-language-routing.md");
+  assertIncludes(routing, "用 Codex worker 处理 dispatch-codex 这个 session", "natural-language-routing.md");
+  assertIncludes(routing, "确认 prompt 后，让本地 Codex 真实执行这个 worker", "natural-language-routing.md");
+  assertIncludes(routing, "codex exec --cd . --sandbox workspace-write", "natural-language-routing.md");
+  assertIncludes(routing, "确认 prompt 后，让本地 Kimi 真实执行这个 worker", "natural-language-routing.md");
+  assertIncludes(routing, "kimi --work-dir . --print --final-message-only", "natural-language-routing.md");
+  assertIncludes(routing, "子任务派发推荐句式：让 Codex worker 处理 <session> 的 <REQ 或子任务>", "natural-language-routing.md");
+  assertIncludes(routing, "兼容旧口语“让 Codex goal 处理”", "natural-language-routing.md");
+  assertIncludes(routing, "不得声称已启用 Codex 客户端 Goal 模式", "natural-language-routing.md");
+  assertIncludes(routing, "真实执行句式：确认 prompt 后用本地 Codex/Kimi 执行", "natural-language-routing.md");
+});
+
+test("examples 命令输出 auto-iterate goal 父任务启动示例", () => {
+  const projectDir = makeProject();
+  const output = runAutoIterate(projectDir, ["--examples", "auto-iterate goal"]);
+
+  assertIncludes(output.stdout, "快速启动开发任务", "examples stdout");
+  assertIncludes(output.stdout, "让 auto-iterate goal 处理：修复登录失败问题", "examples stdout");
+  assertIncludes(output.stdout, "启动 auto-iterate goal：修复支付回调重复处理问题", "examples stdout");
+  assertNotIncludes(output.stdout, "未找到匹配的自然语言场景", "examples stdout");
+});
+
+test("examples 命令输出 Codex worker / dispatch 派发自然语言示例", () => {
+  const projectDir = makeProject();
+  const output = runAutoIterate(projectDir, ["--examples", "Codex"]);
+
+  assertIncludes(output.stdout, "Codex worker / dispatch 派发", "examples stdout");
+  assertIncludes(output.stdout, "不表示已启用 Codex 客户端 Goal 模式", "examples stdout");
+  assertIncludes(output.stdout, "让 Codex goal 处理 login-bugfix 的 REQ-001", "examples stdout");
+  assertIncludes(output.stdout, "让 Codex goal 接手当前自动迭代任务的 REQ-002", "examples stdout");
+  assertIncludes(output.stdout, "确认 prompt 后，让本地 Codex 真实执行这个 worker", "examples stdout");
+  assertIncludes(output.stdout, "AUTO_ITERATE_CODEX_CMD", "examples stdout");
+  assertNotIncludes(output.stdout, "未找到匹配的自然语言场景", "examples stdout");
 });
 
 test("README 引用的 auto-iterate-coding 文档均存在", () => {
@@ -623,6 +725,22 @@ test("README 引用的 auto-iterate-coding 文档均存在", () => {
   for (const link of links) {
     assert.ok(fs.existsSync(path.join(repoRoot, link)), `README link missing ${link}`);
   }
+
+  assertIncludes(readme, "Codex 客户端的 Goal 入口、提示词里的 `Goal:` 前缀、以及 `fastcar-cli auto-iterate --goal` 不是同一个东西", "README.md");
+  assertIncludes(readme, "最多被 CLI 清洗为目标文本，不会自动启用客户端 Goal 模式", "README.md");
+});
+
+test("skills README 同步 auto-iterate goal 边界和 session 示例", () => {
+  const skillsReadme = readRepoFile("skills/README.md");
+
+  assertIncludes(skillsReadme, "Codex 客户端的 Goal 入口、提示词里的 `Goal:` 前缀、以及 `fastcar-cli auto-iterate --goal` 不是同一个东西", "skills/README.md");
+  assertIncludes(skillsReadme, "最多被 CLI 清洗为目标文本，不会自动启用客户端 Goal 模式", "skills/README.md");
+  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --autopilot-max-iterations 5 --yes', "skills/README.md");
+  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --plan-only --goal "订单模块重构" --session order-plan --yes', "skills/README.md");
+  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --plan-only --goal "设计支付模块" --session payment-plan', "skills/README.md");
+  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --optimize --goal "优化查询性能" --session query-optimize', "skills/README.md");
+  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --prototype --goal "验证订单状态机" --session order-prototype', "skills/README.md");
+  assertNotIncludes(skillsReadme, '--mode plan --goal "设计支付模块"', "skills/README.md");
 });
 
 test("skill 文档不再引用 legacy 状态文件并保留无 CLI fallback", () => {
@@ -726,6 +844,19 @@ test("子 Agent 并发协议使用现行状态模板字段且禁止旧字段回�
     "### 委派 Prompt 模板",
     "Platform Adapter",
     "Sub-Agent Result Schema",
+    "本地 CLI Worker Adapter",
+    "fastcar-cli auto-iterate --dispatch <session> --agent <agent>",
+    "AUTO_ITERATE_CODEX_CMD",
+    "AUTO_ITERATE_CLAUDE_CMD",
+    "AUTO_ITERATE_GEMINI_CMD",
+    "AUTO_ITERATE_KIMI_CMD",
+    "AUTO_ITERATE_OPENHANDS_CMD",
+    "codex exec --cd . --sandbox workspace-write",
+    "kimi --work-dir . --print --final-message-only",
+    "模板缺失时不得留下半成品 worktree",
+    "不能把 dry-run 当作真实 worker 完成",
+    "`claude` / `claude-code`",
+    "`gemini` / `gemini-cli`",
     "contract-only",
     "验证副作用",
     "quick / strict / diagnose / plan / optimize / prototype",
@@ -980,6 +1111,232 @@ test("validate-state 只读检查 sub-agent 协议违规", () => {
     ".agent-state/auto-iterate/missing-session/state.md",
     "validate-state stdout",
   );
+});
+
+test("dispatch dry-run 生成 Codex worker prompt 并更新 sub-agent state", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 Codex worker dispatch",
+    "--session",
+    "dispatch-codex",
+    "--yes",
+  ]);
+
+  const dispatchOutput = runAutoIterate(projectDir, [
+    "--dispatch",
+    "dispatch-codex",
+    "--agent",
+    "codex",
+    "--task",
+    "修复 REQ-001",
+    "--files",
+    "src/auth.js,test/auth.test.js",
+    "--verify-command",
+    "npm test",
+    "--dry-run",
+  ]);
+  assertIncludes(dispatchOutput.stdout, "已准备 Codex worker dispatch", "dispatch stdout");
+  assertIncludes(dispatchOutput.stdout, "Dry run: 未启动外部 Codex。", "dispatch stdout");
+
+  const { paths, state, stateJson } = readSession(projectDir, "dispatch-codex");
+  const dispatchDir = path.join(paths.sessionDir, "dispatch");
+  const promptFiles = fs.readdirSync(dispatchDir).filter((item) => item.endsWith(".prompt.md"));
+  assert.strictEqual(promptFiles.length, 1, "dispatch should create one worker prompt");
+  const prompt = fs.readFileSync(path.join(dispatchDir, promptFiles[0]), "utf8");
+
+  assertIncludes(prompt, "你的角色：父 Agent 委派的 coder 子任务执行者", "worker prompt");
+  assertIncludes(prompt, "禁止读取或写入 .agent-state/ 下任何文件", "worker prompt");
+  assertIncludes(prompt, "允许修改文件：src/auth.js, test/auth.test.js", "worker prompt");
+  assertIncludes(prompt, "验证命令：npm test", "worker prompt");
+  assertIncludes(prompt, "Sub-Agent Result Schema", "worker prompt");
+
+  assertIncludes(state, "current_phase：implement", "state.md");
+  assertIncludes(state, "type：coder", "state.md");
+  assertIncludes(state, "task：修复 REQ-001", "state.md");
+  assertIncludes(state, "files_assigned：src/auth.js,test/auth.test.js", "state.md");
+  assertIncludes(state, "parallel_write_allowed：true", "state.md");
+  assertIncludes(state, "coder_file_ownership：codex-dispatch-codex-", "state.md");
+  assert.strictEqual(stateJson.subAgentDispatch.currentPhase, "implement");
+  assert.strictEqual(stateJson.subAgentDispatch.activeSubAgents[0].type, "coder");
+  assert.deepStrictEqual(stateJson.subAgentDispatch.activeSubAgents[0].filesAssigned, [
+    "src/auth.js",
+    "test/auth.test.js",
+  ]);
+
+  const validateOutput = runAutoIterate(projectDir, [
+    "--validate-state",
+    "dispatch-codex",
+  ]);
+  assertIncludes(validateOutput.stdout, "sub-agent state 校验通过", "validate-state stdout");
+});
+
+test("dispatch dry-run 支持主流本地 agent adapter", () => {
+  for (const agent of ["claude", "gemini", "kimi", "cursor", "windsurf", "copilot", "jules", "devin", "openhands", "replit"]) {
+    const projectDir = makeProject();
+    const session = `dispatch-${agent}`;
+
+    runAutoIterate(projectDir, [
+      "--quick",
+      "--goal",
+      `验证 ${agent} worker dispatch`,
+      "--session",
+      session,
+      "--yes",
+    ]);
+
+    const output = runAutoIterate(projectDir, [
+      "--dispatch",
+      session,
+      "--agent",
+      agent,
+      "--task",
+      "处理 REQ-001",
+      "--files",
+      "src/a.js",
+      "--verify-command",
+      "npm test",
+      "--dry-run",
+    ]);
+    assertIncludes(output.stdout, `Agent: ${agent}`, "dispatch stdout");
+
+    const { stateJson } = readSession(projectDir, session);
+    assert.strictEqual(stateJson.subAgentDispatch.activeSubAgents[0].type, "coder");
+    assert.ok(
+      stateJson.subAgentDispatch.activeSubAgents[0].id.startsWith(`${agent}-`),
+      `agent id should include ${agent}`,
+    );
+  }
+});
+
+test("dispatch 非 dry-run 缺少命令模板时不会创建 worktree", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 dispatch 命令模板门禁",
+    "--session",
+    "dispatch-template-gate",
+    "--yes",
+  ]);
+
+  const output = runAutoIterateRaw(projectDir, [
+    "--dispatch",
+    "dispatch-template-gate",
+    "--agent",
+    "codex",
+    "--task",
+    "处理 REQ-001",
+    "--files",
+    "README.md",
+    "--verify-command",
+    "npm test",
+  ]);
+
+  assert.strictEqual(output.status, 1, "missing command template should fail");
+  assertIncludes(output.stdout, "未设置 AUTO_ITERATE_CODEX_CMD", "dispatch stdout");
+  assert.ok(
+    !fs.existsSync(path.join(projectDir, ".agent-state", "auto-iterate", "dispatch-template-gate", "worktrees")),
+    "missing template should not create worktrees",
+  );
+});
+
+test("dispatch 非 dry-run 保留 agent 写入的 result 并追加命令审计", () => {
+  const projectDir = makeGitProject();
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 dispatch result 合并",
+    "--session",
+    "dispatch-result-merge",
+    "--yes",
+  ]);
+
+  const command = [
+    JSON.stringify(process.execPath),
+    "-e",
+    JSON.stringify([
+      "const fs=require('fs');",
+      "fs.writeFileSync(process.argv[2], 'agent says completed\\n', 'utf8');",
+      "console.log('worker stdout ok');",
+    ].join("")),
+    "placeholder",
+    "{result}",
+  ].join(" ");
+  const output = spawnSync(
+    process.execPath,
+    [
+      cliPath,
+      "auto-iterate",
+      "--dispatch",
+      "dispatch-result-merge",
+      "--agent",
+      "codex",
+      "--task",
+      "处理 REQ-001",
+      "--files",
+      "README.md",
+      "--verify-command",
+      "npm test",
+      "--timeout",
+      "20",
+    ],
+    {
+      cwd: projectDir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CI: "1",
+        FORCE_COLOR: "0",
+        AUTO_ITERATE_CODEX_CMD: command,
+      },
+    },
+  );
+
+  assert.strictEqual(
+    output.status,
+    0,
+    `dispatch should pass\nSTDOUT:\n${output.stdout}\nSTDERR:\n${output.stderr}`,
+  );
+  assertIncludes(output.stdout, "Worktree:", "dispatch stdout");
+  const { paths, stateJson } = readSession(projectDir, "dispatch-result-merge");
+  const resultFile = path.join(
+    projectDir,
+    stateJson.subAgentDispatch.activeSubAgents[0].resultFile,
+  );
+  const result = fs.readFileSync(resultFile, "utf8");
+  assertIncludes(result, "agent_result：", "dispatch result");
+  assertIncludes(result, "agent says completed", "dispatch result");
+  assertIncludes(result, "command_audit：", "dispatch result");
+  assertIncludes(result, "exit_code：0", "dispatch result");
+  assertIncludes(result, "signal：none", "dispatch result");
+  assertIncludes(result, "error：none", "dispatch result");
+  assertIncludes(result, "worker stdout ok", "dispatch result");
+  assert.strictEqual(stateJson.subAgentDispatch.activeSubAgents[0].status, "completed");
+  assert.strictEqual(stateJson.subAgentDispatch.completedCount, 1);
+  assert.ok(
+    fs.existsSync(path.join(paths.sessionDir, "worktrees")),
+    "non dry-run should create isolated worktree",
+  );
+
+  const secondDispatch = runAutoIterateRaw(projectDir, [
+    "--dispatch",
+    "dispatch-result-merge",
+    "--agent",
+    "codex",
+    "--task",
+    "处理 REQ-002",
+    "--files",
+    "README.md",
+    "--verify-command",
+    "npm test",
+    "--dry-run",
+  ]);
+  assert.strictEqual(secondDispatch.status, 1, "active sub-agent should block new dispatch");
+  assertIncludes(secondDispatch.stdout, "存在未合并的 active_sub_agents", "dispatch stdout");
 });
 
 test("validate-state 校验完整 auto-iterate session 基线一致性", () => {

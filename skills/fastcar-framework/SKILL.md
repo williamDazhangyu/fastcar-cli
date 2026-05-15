@@ -18,6 +18,7 @@ FastCar 是基于 TypeScript 的 Node.js 企业级应用开发框架，采用 Io
 - 使用 `@ValidForm` + `@Rule()` 后，Controller 参数已经被 FastCar 按规则校验并格式化，不要再写 `DTO.from(body).toInput()` 之类的二次转换。
 - 示例代码必须保留关键 import，尤其是 `Context` 从 `koa` 导入。
 - `@fastcar/*` 模块必须使用 TypeScript 静态 `import`，不要使用 CommonJS `require()`。
+- 静态权限门禁（如角色、系统管理员、固定 permission）应优先在 Controller 方法上通过装饰器声明；不要把 `requireRole`、`requireSystemAdmin` 等入口级权限 guard 写在 Service 中。
 
 ## 核心概念
 
@@ -124,6 +125,47 @@ class ItemController {
 - 第一个参数为请求数据（GET 的 query / POST 的 body / 路径参数）
 - 第二个参数为 Koa 上下文 `ctx: Context`，**可省略**
 - `Context` 需从 `koa` 导入：`import { Context } from "koa"`
+
+**权限声明边界：**
+
+- 入口级权限尽可能放在 Controller：例如角色白名单、系统管理员、固定 permission 等静态门禁，应由项目自定义的 `@RequireRole(...)`、`@RequireSystemAdmin()`、`@RequirePermission(...)` 等方法级装饰器声明。
+- Service 不应直接写 `requireRole(ctx, ...)`、`requireSystemAdmin(ctx)` 这类静态入口门禁；Service 只保留业务规则、资源归属、租户隔离、状态机校验、动态权限和一致性保护。
+- 如果权限依赖目标资源、请求体、数据库状态或运行时工具定义，例如“admin 不能提升 owner”“最后 owner 不能删除”“只能操作本人资产”“工具按 requiredRole 动态过滤”，可以保留在 Service 或领域层。
+
+❌ **错误：**
+```typescript
+@Service
+class ItemService {
+  async create(ctx: ActorContext, body: CreateItemDTO) {
+    requireRole(ctx, [Role.owner, Role.admin, Role.editor]);
+    return this.repository.save(body);
+  }
+}
+```
+
+✅ **正确：**
+```typescript
+@Controller
+@REQUEST("/api/items")
+class ItemController {
+  @Autowired
+  private service!: ItemService;
+
+  @RequireRole(Role.owner, Role.admin, Role.editor)
+  @ValidForm
+  @POST()
+  async create(@Rule() body: CreateItemDTO, ctx: Context) {
+    return this.service.create(getActor(ctx), body);
+  }
+}
+
+@Service
+class ItemService {
+  async create(ctx: ActorContext, body: CreateItemDTO) {
+    return this.repository.saveForOrganization(ctx.organizationId, body);
+  }
+}
+```
 
 ### 数据库 (@fastcar/mysql)
 

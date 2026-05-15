@@ -16,6 +16,10 @@
 - 每个 `SKILL.md` 必须包含 frontmatter：`name` 和 `description`。
 - `description` 应同时说明中文用途和英文触发场景，便于不同 Agent 检索。
 - 文档结构优先使用：适用场景、先读规则、核心示例、禁止事项、验证建议。
+- 交互式 skill 应采用小步增量协议：一次只写一个可检查单元，等待用户选择或确认后再继续。
+- 修改用户可能同时编辑的文件前，必须重新从磁盘读取并保留用户改动；不要盲目覆盖整篇文档。
+- 原始材料、PRD、issue 和输入清单默认视为只读输入；除非用户明确要求，不要直接改写来源文件。
+- 实验性或未稳定的 skill 不要放在 `skills/` 一级目录，避免被 `skill list` 和 `skill install all` 当作可发布 skill。
 - 示例代码必须包含关键 import，不要依赖 Agent 猜测 API 来源。
 - FastCar Koa 示例禁止使用 `@Body`、`@Param`、`@Query`。
 - 数据库示例必须在数据库层完成分页、聚合、分组和 JOIN。
@@ -47,9 +51,9 @@ Agent 应自动转换为类似命令：
 
 ```bash
 fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --yes
-fastcar-cli auto-iterate --quick --goal "修复登录失败" --autopilot-max-iterations 5 --yes
+fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --autopilot-max-iterations 5 --yes
 fastcar-cli auto-iterate --verify --from docs/prd.md --session prd-check --yes
-fastcar-cli auto-iterate --plan-only --goal "订单模块重构" --yes
+fastcar-cli auto-iterate --plan-only --goal "订单模块重构" --session order-plan --yes
 fastcar-cli auto-iterate --resume login-bugfix
 fastcar-cli auto-iterate --list
 ```
@@ -63,7 +67,7 @@ fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session log
 fastcar-cli auto-iterate --verify --from docs/prd.md --session login-verify
 fastcar-cli auto-iterate --list
 fastcar-cli auto-iterate --resume login-bugfix
-fastcar-cli auto-iterate --mode plan --goal "设计支付模块"
+fastcar-cli auto-iterate --plan-only --goal "设计支付模块" --session payment-plan
 ```
 
 如果 AI 实现流程清单很长，可以从本地文档导入：
@@ -84,6 +88,8 @@ fastcar-cli auto-iterate -f docs/ai-checklist.md
 
 生成后，把 `.agent-state/auto-iterate/<session>/start-prompt.md` 的内容发给 Agent。
 
+注意：Codex 客户端的 Goal 入口、提示词里的 `Goal:` 前缀、以及 `fastcar-cli auto-iterate --goal` 不是同一个东西。`--goal` 只是 fastcar-cli 的目标文本参数；普通聊天里写 `Goal:` 最多被 CLI 清洗为目标文本，不会自动启用客户端 Goal 模式。只有当前客户端明确提供 Goal 输入/任务入口时，把启动提示放进去才算使用客户端 Goal。
+
 常用模式：
 
 ```bash
@@ -92,7 +98,7 @@ fastcar-cli auto-iterate --strict
 
 # 快速启动：小中型任务，Agent 先推断流程清单
 fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix --yes
-fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --autopilot-max-iterations 5 --yes
+fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix --autopilot-max-iterations 5 --yes
 
 # Diagnose：困难 bug / 性能回归，先建立反馈闭环
 fastcar-cli auto-iterate --diagnose --goal "诊断登录偶发失败" --session login-diagnose --yes
@@ -106,13 +112,13 @@ fastcar-cli auto-iterate --switch login-verify
 fastcar-cli auto-iterate --resume login-bugfix
 
 # Plan-only：只规划，不写代码
-fastcar-cli auto-iterate --plan-only --goal "规划订单模块重构"
+fastcar-cli auto-iterate --plan-only --goal "规划订单模块重构" --session order-plan
 
 # Optimization-only：先建立 baseline，再做有边界优化
-fastcar-cli auto-iterate --optimize --goal "优化查询性能"
+fastcar-cli auto-iterate --optimize --goal "优化查询性能" --session query-optimize
 
 # Prototype-only：一次性原型澄清状态模型、数据模型、交互或 UI 方向
-fastcar-cli auto-iterate --prototype --goal "验证订单状态机"
+fastcar-cli auto-iterate --prototype --goal "验证订单状态机" --session order-prototype
 ```
 
 单独安装自动迭代编码 skill：

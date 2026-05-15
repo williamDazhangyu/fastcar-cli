@@ -61,6 +61,53 @@
 
 如果平台不提供可审计的 cancel/close 能力，超时后必须把该子 Agent 标记为 `failed`，并在后续 Quality Gate 中检查其可能写入的文件；不能假设它已经停止。
 
+### 本地 CLI Worker Adapter
+
+`fastcar-cli auto-iterate --dispatch <session> --agent <agent> --task "<子任务>" --files "<白名单>" --verify-command "<验证命令>" --dry-run` 用于生成本地 Agent worker prompt，并由父 Agent 更新 `state.json` / `state.md` 的 dispatch 视图。`--dry-run` 只生成 prompt，不启动外部 Agent，适合先审查任务边界。
+
+去掉 `--dry-run` 时，CLI 只通过对应环境变量启动外部 Agent 命令模板。模板可使用 `{prompt}`、`{result}`、`{session}`、`{agentId}` 占位符；未配置时不得猜测平台命令，只输出 degraded 提示并停止。
+
+这些环境变量由启动 `fastcar-cli auto-iterate --dispatch ...` 的当前 shell 读取，不是写入 Codex、Kimi 或其他 Agent 自身配置。非 dry-run 会先检查命令模板，再创建隔离 git worktree；模板缺失时不得留下半成品 worktree。
+
+支持的本地 worker agent：
+
+| `--agent` | 命令模板环境变量 |
+| --- | --- |
+| `codex` | `AUTO_ITERATE_CODEX_CMD` |
+| `claude` / `claude-code` | `AUTO_ITERATE_CLAUDE_CMD` |
+| `gemini` / `gemini-cli` | `AUTO_ITERATE_GEMINI_CMD` |
+| `kimi` / `kimi-code` | `AUTO_ITERATE_KIMI_CMD` |
+| `cursor` | `AUTO_ITERATE_CURSOR_CMD` |
+| `windsurf` / `cascade` | `AUTO_ITERATE_WINDSURF_CMD` |
+| `copilot` | `AUTO_ITERATE_COPILOT_CMD` |
+| `jules` | `AUTO_ITERATE_JULES_CMD` |
+| `devin` | `AUTO_ITERATE_DEVIN_CMD` |
+| `openhands` | `AUTO_ITERATE_OPENHANDS_CMD` |
+| `replit` | `AUTO_ITERATE_REPLIT_CMD` |
+
+本地非交互模板示例：
+
+```powershell
+$env:AUTO_ITERATE_CODEX_CMD='codex exec --cd . --sandbox workspace-write -o "{result}" - < "{prompt}"'
+$env:AUTO_ITERATE_KIMI_CMD='powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:PYTHONUTF8=''1''; kimi --work-dir . --print --final-message-only --prompt (Get-Content -Raw -Encoding UTF8 ''{prompt}'') | Set-Content -Encoding UTF8 ''{result}''"'
+```
+
+```bash
+export AUTO_ITERATE_CODEX_CMD='codex exec --cd . --sandbox workspace-write -o "{result}" - < "{prompt}"'
+export AUTO_ITERATE_KIMI_CMD='kimi --work-dir . --print --final-message-only --prompt "$(cat "{prompt}")" > "{result}"'
+```
+
+Codex 推荐使用 `codex exec`，因为它是非交互入口且支持把最后回复写入 `-o/--output-last-message`。Kimi 推荐使用 `kimi --print --final-message-only --prompt ...`，因为 `--print` 是非交互入口。真实运行仍可能因未登录、模型配置、网络、审批策略或平台版本失败；父 Agent 必须把这类失败记录为 `blocked` 或 `not_verified`，不能把 dry-run 当作真实 worker 完成。
+
+Windows 上不要优先使用 `kimi --input-format text < "{prompt}"` 读取包含中文的 worker prompt；Kimi 1.41.0 在该路径下可能触发 UnicodeEncodeError。若 result 中中文被终端编码影响，父 Agent 仍应以 `exit_code`、`status`、`validation`、`files_changed` 等结构字段和 command audit 作为 Quality Gate 输入，并在风险中记录编码问题。
+
+CLI adapter 的边界：
+
+- 必须显式提供 `--files` 修改白名单；无白名单不得 dispatch coder。
+- worker prompt 必须声明禁止读取或写入 `.agent-state/`。
+- worker 不拥有完成判定权；父 Agent 仍需执行 Quality Gate、验证和 state 更新。
+- `state.json` 可以记录实现用的 `subAgentDispatch` 审计对象，但协议语义仍以 `Sub-Agent Dispatch / 子 Agent 调度` 视图和 `state-schema.md` 门禁为准。
+
 ### Codex 一轮并发示例
 
 以下示例说明 Codex 类平台的一轮并发探索；其他平台按等价能力映射：
