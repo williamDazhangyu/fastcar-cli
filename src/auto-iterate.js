@@ -10,6 +10,15 @@ const SESSION_STATE_JSON_FILE = "state.json";
 const SESSION_STATE_FILE = "state.md";
 const SESSION_PROMPT_FILE = "start-prompt.md";
 const STATE_SCHEMA_VERSION = 1;
+const ENGINE_PHASES = [
+  "requirement",
+  "contract",
+  "baseline",
+  "coding",
+  "validation",
+  "cleanup",
+  "delivery",
+];
 
 const REQUIRED_STATE_SECTIONS = [
   "## At-a-Glance / 人类摘要",
@@ -21,13 +30,24 @@ const REQUIRED_STATE_SECTIONS = [
   "## Budgets / 预算",
   "## Recovery / Reconcile / 恢复一致性检查",
   "## Current State / 当前状态",
+  "## Phase Gate / 阶段门禁",
+  "## Implementation Contract / 实现契约",
+  "## Baseline / 修改前基线",
+  "## Iteration Policy / 迭代策略",
+  "## Task Profile / 任务画像",
+  "## Decision Request / 用户确认请求",
   "## Watchdog / 看门狗",
   "## Requirement Coverage Matrix / 需求覆盖矩阵",
   "## Definition of Done / 完成定义",
   "## Decisions / 已确认决策",
   "## Hypotheses / 假设",
   "## Validation / 验证",
+  "## Post-Change Validation / 修改后验证",
+  "## Delta Assessment / 差异评估",
+  "## Diff Budget / 变更预算审计",
   "## Temporary Artifacts / Cleanup / 临时产物清理",
+  "## Delivery Evidence / 交付证据",
+  "## Post-Agent Validation Gate / Agent 后置校验门禁",
   "## Context Handoff Summary / 上下文交接摘要",
   "## Resume Prompt / 恢复提示",
 ];
@@ -886,6 +906,13 @@ function requireEnumValue(issues, value, allowedValues, label) {
   return true;
 }
 
+function requireNullableNonEmptyString(issues, value, label) {
+  if (value === null) {
+    return true;
+  }
+  return requireNonEmptyString(issues, value, label);
+}
+
 function requireFields(issues, source, fieldNames, labelPrefix, validator) {
   fieldNames.forEach((fieldName) => {
     validator(issues, source ? source[fieldName] : undefined, `${labelPrefix}.${fieldName}`);
@@ -902,6 +929,10 @@ function requireBooleanFields(issues, source, fieldNames, labelPrefix) {
 
 function requireNonEmptyStringFields(issues, source, fieldNames, labelPrefix) {
   requireFields(issues, source, fieldNames, labelPrefix, requireNonEmptyString);
+}
+
+function requireNullableNonEmptyStringFields(issues, source, fieldNames, labelPrefix) {
+  requireFields(issues, source, fieldNames, labelPrefix, requireNullableNonEmptyString);
 }
 
 function addPathMismatchError(issues, label, actualPath, expectedPath) {
@@ -956,6 +987,347 @@ function countJsonRequirementStates(requirements) {
     }
   });
   return counts;
+}
+
+function defaultPhaseEntryCriteria(phase) {
+  const criteria = {
+    requirement: ["读取用户目标和原始清单", "提取 Requirement Coverage Matrix"],
+    contract: ["RCM 已提取", "明确目标、范围、非目标、成功标准和验证计划"],
+    baseline: ["Implementation Contract 已批准或无开放问题", "识别可运行验证命令"],
+    coding: ["baseline 已运行或有结构化 skip/not_available 原因", "本轮目标唯一且在变更预算内"],
+    validation: ["本轮修改完成", "运行 post-change 验证或记录不可用原因"],
+    cleanup: ["验证结果已归因", "无新增 regression 未处理"],
+    delivery: ["关键 REQ passed", "cleanup completed", "postAgentValidationGate passed"],
+  };
+  return criteria[phase] || [];
+}
+
+function defaultPhaseExitCriteria(phase) {
+  const criteria = {
+    requirement: ["RCM 覆盖原始需求和验收标准"],
+    contract: ["implementationContract.status=approved"],
+    baseline: ["baseline.status 为 passed/failed/skipped_with_reason/not_available"],
+    coding: ["只完成一个最小目标修改并更新状态"],
+    validation: ["记录 baseline/post-change/delta 结果"],
+    cleanup: ["cleanup.status=completed 或有用户确认保留理由"],
+    delivery: ["deliveryEvidence ready/delivered 且 validate-state --strict-state 通过"],
+  };
+  return criteria[phase] || [];
+}
+
+function defaultPhaseBlockingRules(phase) {
+  const rules = {
+    requirement: ["缺少 RCM 不得进入 contract"],
+    contract: ["缺少 Implementation Contract 不得进入 coding", "成功标准为空必须 ask_user"],
+    baseline: ["无 baseline 且无 skipReason 不得进入 coding 或声称验证有效"],
+    coding: ["一轮多目标、超预算或范围扩大必须 stop/replan/ask_user"],
+    validation: ["validation unknown 或新增 regression 不得进入 cleanup/delivery"],
+    cleanup: ["cleanup pending 或临时 artifact 未解释不得 delivery"],
+    delivery: ["finalVerifiability unknown、RCM 开放项或 postAgentValidationGate 失败不得交付"],
+  };
+  return rules[phase] || [];
+}
+
+function hasValidatedBaseline(baseline) {
+  return Boolean(baseline) &&
+    (baseline.status === "passed" || baseline.status === "failed" || baseline.status === "skipped_with_reason" || baseline.status === "not_available") &&
+    Boolean(baseline.reason);
+}
+
+function validatePhaseGateModel(issues, phaseGate) {
+  const gateStatusValues = ["pending", "passed", "blocked", "skipped_with_reason"];
+  if (!requirePlainObject(issues, phaseGate, "state.json.phaseGate")) {
+    return;
+  }
+  requireEnumValue(issues, phaseGate.currentPhase, ENGINE_PHASES, "state.json.phaseGate.currentPhase");
+  requireBooleanFields(issues, phaseGate, ["canProceed"], "state.json.phaseGate");
+  requireArray(issues, phaseGate.blockingReasons, "state.json.phaseGate.blockingReasons");
+  requireArray(issues, phaseGate.gates, "state.json.phaseGate.gates");
+  if (!Array.isArray(phaseGate.gates)) {
+    return;
+  }
+
+  const seenPhases = new Set();
+  phaseGate.gates.forEach((gate, index) => {
+    if (!requirePlainObject(issues, gate, `state.json.phaseGate.gates[${index}]`)) {
+      return;
+    }
+    requireEnumValue(issues, gate.phase, ENGINE_PHASES, `state.json.phaseGate.gates[${index}].phase`);
+    requireArray(issues, gate.entryCriteria, `state.json.phaseGate.gates[${index}].entryCriteria`);
+    requireArray(issues, gate.exitCriteria, `state.json.phaseGate.gates[${index}].exitCriteria`);
+    requireArray(issues, gate.blockingRules, `state.json.phaseGate.gates[${index}].blockingRules`);
+    requireEnumValue(issues, gate.status, gateStatusValues, `state.json.phaseGate.gates[${index}].status`);
+    if (gate.phase) {
+      seenPhases.add(gate.phase);
+    }
+  });
+
+  ENGINE_PHASES.forEach((phase) => {
+    if (!seenPhases.has(phase)) {
+      addError(issues, `state.json.phaseGate.gates 缺少阶段 ${phase}`);
+    }
+  });
+
+  if (phaseGate.canProceed === false && (!Array.isArray(phaseGate.blockingReasons) || phaseGate.blockingReasons.length === 0)) {
+    addError(issues, "state.json.phaseGate.canProceed=false 时必须记录 blockingReasons");
+  }
+}
+
+function validateImplementationContractModel(issues, contract, phaseGate) {
+  const contractStatusValues = ["pending", "approved", "blocked"];
+  if (!requirePlainObject(issues, contract, "state.json.implementationContract")) {
+    return;
+  }
+  requireEnumValue(issues, contract.status, contractStatusValues, "state.json.implementationContract.status");
+  requireNonEmptyStringFields(issues, contract, [
+    "goal",
+    "understanding",
+    "scope",
+    "nonGoals",
+    "successCriteria",
+    "validationPlan",
+    "riskPoints",
+  ], "state.json.implementationContract");
+  requireArray(issues, contract.openQuestions, "state.json.implementationContract.openQuestions");
+  requireBooleanFields(issues, contract, ["userConfirmationRequired"], "state.json.implementationContract");
+
+  const passedContractGate = Boolean(phaseGate &&
+    Array.isArray(phaseGate.gates) &&
+    phaseGate.gates.some((gate) => gate.phase === "contract" && gate.status === "passed"));
+  if (passedContractGate && contract.status !== "approved") {
+    addError(issues, "contract 阶段已通过，但 state.json.implementationContract.status 不是 approved");
+  }
+  if (contract.status === "approved" && Array.isArray(contract.openQuestions) && contract.openQuestions.length > 0) {
+    addError(issues, "state.json.implementationContract.status=approved 时 openQuestions 必须为空");
+  }
+}
+
+function validateBaselineModel(issues, baseline, phaseGate) {
+  const baselineStatusValues = ["pending", "passed", "failed", "skipped_with_reason", "not_available"];
+  const failureCategoryValues = ["none", "existing_failure", "new_failure", "environment_failure", "test_unavailable", "unknown"];
+  if (!requirePlainObject(issues, baseline, "state.json.baseline")) {
+    return;
+  }
+  requireEnumValue(issues, baseline.status, baselineStatusValues, "state.json.baseline.status");
+  requireNonEmptyString(issues, baseline.command, "state.json.baseline.command");
+  requireNullableNonEmptyStringFields(issues, baseline, ["result", "reason"], "state.json.baseline");
+  requireEnumValue(issues, baseline.failureCategory, failureCategoryValues, "state.json.baseline.failureCategory");
+  requireBooleanFields(issues, baseline, ["allowsCoding"], "state.json.baseline");
+
+  if (baseline.status === "pending" && baseline.allowsCoding) {
+    addError(issues, "state.json.baseline.status=pending 时 allowsCoding 不得为 true");
+  }
+  if ((baseline.status === "skipped_with_reason" || baseline.status === "not_available") && !baseline.reason) {
+    addError(issues, `state.json.baseline.status=${baseline.status} 时必须记录 reason`);
+  }
+
+  const codingStarted = Boolean(phaseGate &&
+    Array.isArray(phaseGate.gates) &&
+    phaseGate.gates.some((gate) => ["coding", "validation", "cleanup", "delivery"].includes(gate.phase) && gate.status === "passed"));
+  if (codingStarted && !hasValidatedBaseline(baseline)) {
+    addError(issues, "coding/validation/cleanup/delivery 阶段推进前必须有 baseline passed/failed/skipped_with_reason/not_available 及原因");
+  }
+}
+
+function validateIterationPolicyModel(issues, policy) {
+  const decisionValues = ["continue", "stop", "ask_user", "replan", "revert"];
+  if (!requirePlainObject(issues, policy, "state.json.iterationPolicy")) {
+    return;
+  }
+  requireNonEmptyString(issues, policy.currentIterationGoal, "state.json.iterationPolicy.currentIterationGoal");
+  requireNonNegativeIntegerFields(issues, policy, [
+    "maxGoalsPerIteration",
+    "maxChangedFiles",
+    "maxDiffLines",
+    "maxNoProgressIterations",
+    "consecutiveFailureCount",
+  ], "state.json.iterationPolicy");
+  requireEnumValue(issues, policy.lastDecision, decisionValues, "state.json.iterationPolicy.lastDecision");
+  requireArray(issues, policy.allowedFiles, "state.json.iterationPolicy.allowedFiles");
+  requireArray(issues, policy.stopConditions, "state.json.iterationPolicy.stopConditions");
+  requireArray(issues, policy.rollbackPlan, "state.json.iterationPolicy.rollbackPlan");
+
+  if (policy.maxGoalsPerIteration !== 1) {
+    addError(issues, `state.json.iterationPolicy.maxGoalsPerIteration=${policy.maxGoalsPerIteration}，必须等于 1`);
+  }
+  if (policy.consecutiveFailureCount >= policy.maxNoProgressIterations && policy.lastDecision === "continue") {
+    addError(issues, "连续失败达到阈值时 iterationPolicy.lastDecision 不得为 continue");
+  }
+}
+
+function validateTaskProfileModel(issues, profile) {
+  const typeValues = ["feature", "bugfix", "docs", "refactor", "verify", "optimize", "prototype", "unknown"];
+  const complexityValues = ["small", "medium", "large"];
+  const riskValues = ["low", "medium", "high"];
+  if (!requirePlainObject(issues, profile, "state.json.taskProfile")) {
+    return;
+  }
+  requireEnumValue(issues, profile.type, typeValues, "state.json.taskProfile.type");
+  requireEnumValue(issues, profile.complexity, complexityValues, "state.json.taskProfile.complexity");
+  requireEnumValue(issues, profile.risk, riskValues, "state.json.taskProfile.risk");
+  requireBooleanFields(issues, profile, ["needsUserConfirmation"], "state.json.taskProfile");
+  requireArray(issues, profile.reasons, "state.json.taskProfile.reasons");
+  if ((profile.complexity === "large" || profile.risk === "high") && profile.needsUserConfirmation !== true) {
+    addError(issues, "large/high risk taskProfile 必须设置 needsUserConfirmation=true 或记录用户已确认的 decisionRequest");
+  }
+}
+
+function validateDecisionRequestModel(issues, request, taskProfile) {
+  const statusValues = ["not_needed", "pending", "approved", "rejected", "blocked"];
+  if (!requirePlainObject(issues, request, "state.json.decisionRequest")) {
+    return;
+  }
+  requireEnumValue(issues, request.status, statusValues, "state.json.decisionRequest.status");
+  requireNonEmptyStringFields(issues, request, ["topic", "background", "recommended", "impact"], "state.json.decisionRequest");
+  requireArray(issues, request.options, "state.json.decisionRequest.options");
+  requireArray(issues, request.triggers, "state.json.decisionRequest.triggers");
+  if (taskProfile && taskProfile.needsUserConfirmation && request.status !== "approved" && request.status !== "blocked") {
+    addError(issues, "taskProfile.needsUserConfirmation=true 时 decisionRequest.status 必须为 approved 或 blocked");
+  }
+}
+
+function validatePostChangeModel(issues, postChange) {
+  const statusValues = ["not_run", "passed", "failed", "skipped_with_reason", "not_available"];
+  if (!requirePlainObject(issues, postChange, "state.json.postChange")) {
+    return;
+  }
+  requireEnumValue(issues, postChange.status, statusValues, "state.json.postChange.status");
+  requireNonEmptyString(issues, postChange.command, "state.json.postChange.command");
+  requireNullableNonEmptyStringFields(issues, postChange, ["result", "reason"], "state.json.postChange");
+  requireBooleanFields(issues, postChange, ["regressionDetected"], "state.json.postChange");
+  if ((postChange.status === "skipped_with_reason" || postChange.status === "not_available") && !postChange.reason) {
+    addError(issues, `state.json.postChange.status=${postChange.status} 时必须记录 reason`);
+  }
+}
+
+function validateDeltaAssessmentModel(issues, delta, postChange, policy) {
+  const statusValues = ["pending", "improved", "unchanged", "regression", "unknown"];
+  const decisionValues = ["keep", "revert", "retry_new_direction", "stop", "ask_user"];
+  if (!requirePlainObject(issues, delta, "state.json.deltaAssessment")) {
+    return;
+  }
+  requireEnumValue(issues, delta.status, statusValues, "state.json.deltaAssessment.status");
+  requireEnumValue(issues, delta.decision, decisionValues, "state.json.deltaAssessment.decision");
+  requireNonEmptyStringFields(issues, delta, ["summary", "baselineRef", "postChangeRef"], "state.json.deltaAssessment");
+  if ((delta.status === "regression" || (postChange && postChange.regressionDetected)) && delta.decision === "keep") {
+    addError(issues, "检测到 regression 时 deltaAssessment.decision 不得为 keep");
+  }
+  if (delta.status === "regression" && policy && policy.lastDecision === "continue") {
+    addError(issues, "deltaAssessment.status=regression 时 iterationPolicy.lastDecision 不得为 continue");
+  }
+}
+
+function validateDiffBudgetModel(issues, diffBudget, policy) {
+  const statusValues = ["not_checked", "within_budget", "over_budget", "unknown"];
+  if (!requirePlainObject(issues, diffBudget, "state.json.diffBudget")) {
+    return;
+  }
+  requireEnumValue(issues, diffBudget.status, statusValues, "state.json.diffBudget.status");
+  requireNonNegativeIntegerFields(issues, diffBudget, ["changedFiles", "diffLines"], "state.json.diffBudget");
+  requireArray(issues, diffBudget.outOfScopeFiles, "state.json.diffBudget.outOfScopeFiles");
+  requireArray(issues, diffBudget.highRiskFiles, "state.json.diffBudget.highRiskFiles");
+  requireNonEmptyString(issues, diffBudget.reason, "state.json.diffBudget.reason");
+  if (policy) {
+    if (diffBudget.changedFiles > policy.maxChangedFiles) {
+      addError(issues, `state.json.diffBudget.changedFiles=${diffBudget.changedFiles} 超出 maxChangedFiles=${policy.maxChangedFiles}`);
+    }
+    if (diffBudget.diffLines > policy.maxDiffLines) {
+      addError(issues, `state.json.diffBudget.diffLines=${diffBudget.diffLines} 超出 maxDiffLines=${policy.maxDiffLines}`);
+    }
+  }
+  if (diffBudget.status === "over_budget" && policy && policy.lastDecision === "continue") {
+    addError(issues, "diffBudget.status=over_budget 时 iterationPolicy.lastDecision 不得为 continue");
+  }
+  if ((diffBudget.outOfScopeFiles.length > 0 || diffBudget.highRiskFiles.length > 0) && policy && policy.lastDecision === "continue") {
+    addError(issues, "存在 outOfScopeFiles/highRiskFiles 时 iterationPolicy.lastDecision 不得为 continue");
+  }
+}
+
+function validateDeliveryEvidenceModel(issues, evidence, validation, cleanup, requirements) {
+  const deliveryStatusValues = ["pending", "ready", "blocked", "delivered"];
+  if (!requirePlainObject(issues, evidence, "state.json.deliveryEvidence")) {
+    return;
+  }
+  requireEnumValue(issues, evidence.status, deliveryStatusValues, "state.json.deliveryEvidence.status");
+  requireNonEmptyStringFields(issues, evidence, [
+    "goal",
+    "changes",
+    "validationSummary",
+    "baselineComparison",
+    "cleanupSummary",
+    "risks",
+    "unfinishedItems",
+    "userConfirmation",
+  ], "state.json.deliveryEvidence");
+  requireArray(issues, evidence.changedFiles, "state.json.deliveryEvidence.changedFiles");
+
+  const requirementCounts = countJsonRequirementStates(requirements || []);
+  const hasOpenRequirements = hasOpenRequirementCounts(requirementCounts);
+  if ((evidence.status === "ready" || evidence.status === "delivered") && hasOpenRequirements) {
+    addError(issues, "state.json.deliveryEvidence.status 为 ready/delivered 时 requirements 不得存在开放项");
+  }
+  const isReadyOrDelivered = evidence.status === "ready" || evidence.status === "delivered";
+  if (isReadyOrDelivered && validation && validation.finalVerifiability === "unknown") {
+    addError(issues, "state.json.deliveryEvidence.status 为 ready/delivered 时 validation.finalVerifiability 不得为 unknown");
+  }
+  if (isReadyOrDelivered && cleanup && cleanup.status !== "completed") {
+    addError(issues, "state.json.deliveryEvidence.status 为 ready/delivered 时 cleanup.status 必须为 completed");
+  }
+  if (isReadyOrDelivered && /^(未运行|无|unknown|not_run)$/i.test(evidence.validationSummary.trim())) {
+    addError(issues, "state.json.deliveryEvidence.status 为 ready/delivered 时 validationSummary 必须包含真实验证结论");
+  }
+  if (isReadyOrDelivered && /^(无|none|not_needed)$/i.test(evidence.risks.trim())) {
+    addError(issues, "state.json.deliveryEvidence.status 为 ready/delivered 时 risks 必须显式说明风险或有限可验证边界");
+  }
+  if (isReadyOrDelivered && /^(无|none)$/i.test(evidence.userConfirmation.trim())) {
+    addError(issues, "state.json.deliveryEvidence.status 为 ready/delivered 时 userConfirmation 必须记录确认来源或说明无需确认的原因");
+  }
+}
+
+function validatePostAgentValidationGateModel(issues, gate) {
+  const lastResultValues = ["passed", "failed", "not_run"];
+  const nextActionValues = ["deliver", "context_reset_and_repair", "stop"];
+  if (!requirePlainObject(issues, gate, "state.json.postAgentValidationGate")) {
+    return;
+  }
+  requireBooleanFields(issues, gate, ["enabled"], "state.json.postAgentValidationGate");
+  requireNonEmptyString(issues, gate.command, "state.json.postAgentValidationGate.command");
+  requireEnumValue(issues, gate.lastResult, lastResultValues, "state.json.postAgentValidationGate.lastResult");
+  requireNonNegativeIntegerFields(issues, gate, ["repairCyclesUsed", "maxRepairCycles"], "state.json.postAgentValidationGate");
+  requireArray(issues, gate.failureSummary, "state.json.postAgentValidationGate.failureSummary");
+  requireEnumValue(issues, gate.nextAction, nextActionValues, "state.json.postAgentValidationGate.nextAction");
+
+  if (gate.enabled && (!gate.command.includes("--validate-state") || !gate.command.includes("--strict-state"))) {
+    addError(issues, "state.json.postAgentValidationGate.command 必须包含 --validate-state 和 --strict-state");
+  }
+  if (gate.lastResult === "failed" && gate.nextAction !== "context_reset_and_repair" && gate.nextAction !== "stop") {
+    addError(issues, "postAgentValidationGate.lastResult=failed 时 nextAction 必须为 context_reset_and_repair 或 stop");
+  }
+  if (gate.repairCyclesUsed > gate.maxRepairCycles) {
+    addError(issues, "postAgentValidationGate.repairCyclesUsed 不得大于 maxRepairCycles");
+  }
+}
+
+function validateDeliveryGateConsistency(issues, state) {
+  const deliveryEvidence = state.deliveryEvidence || {};
+  const postAgentGate = state.postAgentValidationGate || {};
+  const watchdog = state.watchdog || {};
+  const isReadyOrDelivered = deliveryEvidence.status === "ready" || deliveryEvidence.status === "delivered";
+  if (!isReadyOrDelivered) {
+    return;
+  }
+  if (postAgentGate.enabled !== true) {
+    addError(issues, "deliveryEvidence ready/delivered 时 postAgentValidationGate.enabled 必须为 true");
+  }
+  if (postAgentGate.lastResult !== "passed") {
+    addError(issues, "deliveryEvidence ready/delivered 时 postAgentValidationGate.lastResult 必须为 passed");
+  }
+  if (postAgentGate.nextAction !== "deliver") {
+    addError(issues, "deliveryEvidence ready/delivered 时 postAgentValidationGate.nextAction 必须为 deliver");
+  }
+  if (watchdog.deliveryVerifiability !== "verifiable" && watchdog.deliveryVerifiability !== "partially_verifiable") {
+    addError(issues, "deliveryEvidence ready/delivered 时 watchdog.deliveryVerifiability 必须为 verifiable 或 partially_verifiable");
+  }
 }
 
 function hasOpenRequirementCounts(counts) {
@@ -2045,11 +2417,42 @@ function validateStateJsonModel(state, expected = {}) {
     addError(issues, `state.json.schemaVersion=${state.schemaVersion || "missing"}，期望 ${STATE_SCHEMA_VERSION}`);
   }
 
-  const requiredObjects = ["task", "session", "mode", "budgets", "currentState", "watchdog", "decisions", "validation", "cleanup"];
+  const requiredObjects = [
+    "task",
+    "session",
+    "mode",
+    "budgets",
+    "currentState",
+    "watchdog",
+    "phaseGate",
+    "implementationContract",
+    "baseline",
+    "iterationPolicy",
+    "taskProfile",
+    "decisionRequest",
+    "decisions",
+    "validation",
+    "postChange",
+    "deltaAssessment",
+    "diffBudget",
+    "cleanup",
+    "deliveryEvidence",
+    "postAgentValidationGate",
+  ];
   requiredObjects.forEach((key) => {
     requirePlainObject(issues, state[key], `state.json.${key}`);
   });
   requireArray(issues, state.requirements, "state.json.requirements");
+
+  const task = state.task || {};
+  requireNonEmptyString(issues, task.goal, "state.json.task.goal");
+  requireArray(issues, task.successCriteria, "state.json.task.successCriteria");
+  requireArray(issues, task.nonGoals, "state.json.task.nonGoals");
+  requireNonEmptyString(issues, task.allowedScope, "state.json.task.allowedScope");
+  requireArray(issues, task.compatibility, "state.json.task.compatibility");
+  if (Array.isArray(task.successCriteria) && task.successCriteria.length === 0) {
+    addError(issues, "state.json.task.successCriteria 不能为空；缺少成功标准时不得进入自动迭代交付门禁");
+  }
 
   const session = state.session || {};
   requireNonEmptyStringFields(issues, session, ["session", "stateJsonFile", "stateFile", "promptFile", "currentFile"], "state.json.session");
@@ -2109,6 +2512,19 @@ function validateStateJsonModel(state, expected = {}) {
   requireArray(issues, validation.commands, "state.json.validation.commands");
   const cleanup = state.cleanup || {};
   requireEnumValue(issues, cleanup.status, enumValues.cleanupStatus, "state.json.cleanup.status");
+
+  validatePhaseGateModel(issues, state.phaseGate);
+  validateImplementationContractModel(issues, state.implementationContract, state.phaseGate);
+  validateBaselineModel(issues, state.baseline, state.phaseGate);
+  validateIterationPolicyModel(issues, state.iterationPolicy);
+  validateTaskProfileModel(issues, state.taskProfile);
+  validateDecisionRequestModel(issues, state.decisionRequest, state.taskProfile);
+  validatePostChangeModel(issues, state.postChange);
+  validateDeltaAssessmentModel(issues, state.deltaAssessment, state.postChange, state.iterationPolicy);
+  validateDiffBudgetModel(issues, state.diffBudget, state.iterationPolicy);
+  validateDeliveryEvidenceModel(issues, state.deliveryEvidence, validation, cleanup, requirements);
+  validatePostAgentValidationGateModel(issues, state.postAgentValidationGate);
+  validateDeliveryGateConsistency(issues, state);
 
   return issues;
 }
@@ -2390,6 +2806,77 @@ function buildStateModel(rawAnswers) {
       validationHardeningDimensionsDone: [],
       newTestCount: 0,
     },
+    phaseGate: {
+      currentPhase: "requirement",
+      canProceed: false,
+      blockingReasons: ["REQ-BOOTSTRAP pending；尚未生成完整 Requirement Coverage Matrix 和 Implementation Contract"],
+      gates: ENGINE_PHASES.map((phase) => ({
+        phase,
+        entryCriteria: defaultPhaseEntryCriteria(phase),
+        exitCriteria: defaultPhaseExitCriteria(phase),
+        blockingRules: defaultPhaseBlockingRules(phase),
+        status: phase === "requirement" ? "pending" : "blocked",
+      })),
+    },
+    implementationContract: {
+      status: "pending",
+      goal: answers.goal || "未指定",
+      understanding: "待 Agent 从原始清单、当前代码和用户约束中确认",
+      scope: answers.allowedScope || "未指定",
+      nonGoals: normalizeLines(answers.nonGoals).join("；") || "未指定",
+      successCriteria: normalizeLines(answers.successCriteria).join("；") || "未指定",
+      validationPlan: normalizeLines(answers.validationCommands).join("；") || "未指定",
+      riskPoints: "状态门禁、baseline、cleanup、delivery 证据和 CLI strict 校验必须保持一致",
+      openQuestions: [],
+      userConfirmationRequired: false,
+    },
+    baseline: {
+      status: "pending",
+      command: normalizeLines(answers.validationCommands)[0] || "not_run",
+      result: null,
+      reason: "尚未由 Agent 建立修改前 baseline",
+      failureCategory: "unknown",
+      allowsCoding: false,
+    },
+    iterationPolicy: {
+      currentIterationGoal: "提取完整 RCM 并补齐门禁实体",
+      maxGoalsPerIteration: 1,
+      maxChangedFiles: 8,
+      maxDiffLines: 800,
+      maxNoProgressIterations: 3,
+      consecutiveFailureCount: 0,
+      allowedFiles: [],
+      stopConditions: [
+        "连续失败达到阈值",
+        "验证结果恶化",
+        "修改范围超出 Implementation Contract",
+        "finalVerifiability 无法判定",
+      ],
+      rollbackPlan: [
+        "仅回滚本轮 Agent 自己的修改",
+        "无法安全回滚时记录风险并停止或 ask_user",
+      ],
+      lastDecision: "continue",
+    },
+    taskProfile: {
+      type: answers.mode === "verify" ? "verify" : answers.mode === "optimize" ? "optimize" : answers.mode === "prototype" ? "prototype" : "unknown",
+      complexity: answers.mode === "strict" ? "large" : "medium",
+      risk: answers.mode === "strict" ? "high" : "medium",
+      needsUserConfirmation: answers.mode === "strict",
+      reasons: [
+        "严格模式默认按复杂/高风险处理",
+        "复杂度分级只能调节流程强度，不能绕过 Hard Gate",
+      ],
+    },
+    decisionRequest: {
+      status: answers.mode === "strict" ? "approved" : "not_needed",
+      topic: answers.mode === "strict" ? "严格模式高风险任务确认" : "无",
+      background: answers.mode === "strict" ? "用户已通过 CLI 参数确认 strict/autopilot session 和文档来源" : "当前任务不需要额外用户确认",
+      options: answers.mode === "strict" ? ["继续 strict/autopilot", "降级为 plan-only", "停止"] : [],
+      recommended: answers.mode === "strict" ? "继续 strict/autopilot" : "not_needed",
+      impact: answers.mode === "strict" ? "允许 Agent 在限定范围内继续实现，但仍不得绕过 Hard Gate" : "无",
+      triggers: answers.mode === "strict" ? ["complexity=large", "risk=high"] : [],
+    },
     requirements: [
       {
         id: "REQ-BOOTSTRAP",
@@ -2417,10 +2904,53 @@ function buildStateModel(rawAnswers) {
       finalVerifiability: "unknown",
       commands: normalizeLines(answers.validationCommands),
     },
+    postChange: {
+      status: "not_run",
+      command: normalizeLines(answers.validationCommands)[0] || "not_run",
+      result: null,
+      reason: "尚未执行修改后验证",
+      regressionDetected: false,
+    },
+    deltaAssessment: {
+      status: "pending",
+      summary: "尚未比较 baseline 与 post-change",
+      baselineRef: "baseline",
+      postChangeRef: "postChange",
+      decision: "keep",
+    },
+    diffBudget: {
+      status: "not_checked",
+      changedFiles: 0,
+      diffLines: 0,
+      outOfScopeFiles: [],
+      highRiskFiles: [],
+      reason: "尚未检查 git diff",
+    },
     cleanup: {
       status: "pending",
       artifactsToDelete: "无",
       prototypeFiles: answers.mode === "prototype" ? "待创建并明确标记" : "无",
+    },
+    deliveryEvidence: {
+      status: "pending",
+      goal: answers.goal || "未指定",
+      changes: "尚未交付",
+      changedFiles: [],
+      validationSummary: "未运行",
+      baselineComparison: "未建立 baseline",
+      cleanupSummary: "pending",
+      risks: "交付前必须通过 postAgentValidationGate",
+      unfinishedItems: "REQ-BOOTSTRAP pending",
+      userConfirmation: "无",
+    },
+    postAgentValidationGate: {
+      enabled: true,
+      command: `fastcar-cli auto-iterate --validate-state ${answers.session || "default"} --strict-state`,
+      lastResult: "not_run",
+      repairCyclesUsed: 0,
+      maxRepairCycles: 5,
+      failureSummary: [],
+      nextAction: "context_reset_and_repair",
     },
     sourceChecklist: answers.sourceChecklist
       ? {
@@ -2592,6 +3122,66 @@ Autopilot：${autopilotText}
 架构摩擦：none
 原型状态：${answers.mode === "prototype" ? "proposed" : "not_needed"}
 
+## Phase Gate / 阶段门禁
+current_phase：requirement
+can_proceed：false
+blocking_reasons：REQ-BOOTSTRAP pending；尚未生成完整 Requirement Coverage Matrix 和 Implementation Contract
+phase_order：requirement -> contract -> baseline -> coding -> validation -> cleanup -> delivery
+gates：
+${ENGINE_PHASES.map((phase) => `  - phase：${phase}
+    status：${phase === "requirement" ? "pending" : "blocked"}
+    entry：${defaultPhaseEntryCriteria(phase).join("；")}
+    exit：${defaultPhaseExitCriteria(phase).join("；")}
+    blocking：${defaultPhaseBlockingRules(phase).join("；")}`).join("\n")}
+
+## Implementation Contract / 实现契约
+status：pending
+goal：${answers.goal || "未指定"}
+understanding：待 Agent 从原始清单、当前代码和用户约束中确认
+scope：${answers.allowedScope || "未指定"}
+non_goals：${normalizeLines(answers.nonGoals).join("；") || "未指定"}
+success_criteria：${normalizeLines(answers.successCriteria).join("；") || "未指定"}
+validation_plan：${normalizeLines(answers.validationCommands).join("；") || "未指定"}
+risk_points：状态门禁、baseline、cleanup、delivery 证据和 CLI strict 校验必须保持一致
+open_questions：无
+user_confirmation_required：false
+
+## Baseline / 修改前基线
+status：pending
+command：${normalizeLines(answers.validationCommands)[0] || "not_run"}
+result：未运行
+reason：尚未由 Agent 建立修改前 baseline
+failure_category：unknown
+allows_coding：false
+
+## Iteration Policy / 迭代策略
+current_iteration_goal：提取完整 RCM 并补齐门禁实体
+max_goals_per_iteration：1
+max_changed_files：8
+max_diff_lines：800
+max_no_progress_iterations：3
+consecutive_failure_count：0
+allowed_files：未分配
+stop_conditions：连续失败达到阈值；验证结果恶化；修改范围超出 Implementation Contract；finalVerifiability 无法判定
+rollback_plan：仅回滚本轮 Agent 自己的修改；无法安全回滚时记录风险并停止或 ask_user
+last_decision：continue
+
+## Task Profile / 任务画像
+type：${answers.mode === "verify" ? "verify" : answers.mode === "optimize" ? "optimize" : answers.mode === "prototype" ? "prototype" : "unknown"}
+complexity：${answers.mode === "strict" ? "large" : "medium"}
+risk：${answers.mode === "strict" ? "high" : "medium"}
+needs_user_confirmation：${answers.mode === "strict" ? "true" : "false"}
+reasons：严格模式默认按复杂/高风险处理；复杂度分级只能调节流程强度，不能绕过 Hard Gate
+
+## Decision Request / 用户确认请求
+status：${answers.mode === "strict" ? "approved" : "not_needed"}
+topic：${answers.mode === "strict" ? "严格模式高风险任务确认" : "无"}
+background：${answers.mode === "strict" ? "用户已通过 CLI 参数确认 strict/autopilot session 和文档来源" : "当前任务不需要额外用户确认"}
+options：${answers.mode === "strict" ? "继续 strict/autopilot；降级为 plan-only；停止" : "无"}
+recommended：${answers.mode === "strict" ? "继续 strict/autopilot" : "not_needed"}
+impact：${answers.mode === "strict" ? "允许 Agent 在限定范围内继续实现，但仍不得绕过 Hard Gate" : "无"}
+triggers：${answers.mode === "strict" ? "complexity=large；risk=high" : "无"}
+
 ## Watchdog / 看门狗
 enabled：true
 check_interval：每轮迭代前后、上下文压缩后、恢复后、最终交付前
@@ -2672,12 +3262,55 @@ ${formatList(answers.constraints)}
 可运行的验证命令：
 ${formatList(answers.validationCommands)}
 
+## Post-Change Validation / 修改后验证
+status：not_run
+command：${normalizeLines(answers.validationCommands)[0] || "not_run"}
+result：未运行
+reason：尚未执行修改后验证
+regression_detected：false
+
+## Delta Assessment / 差异评估
+status：pending
+summary：尚未比较 baseline 与 post-change
+baseline_ref：baseline
+post_change_ref：postChange
+decision：keep
+
+## Diff Budget / 变更预算审计
+status：not_checked
+changed_files：0
+diff_lines：0
+out_of_scope_files：无
+high_risk_files：无
+reason：尚未检查 git diff
+
 ## Temporary Artifacts / Cleanup / 临时产物清理
 临时 debug 前缀：无
 一次性 harness：无
 原型文件或路由：${answers.mode === "prototype" ? "待创建并明确标记" : "无"}
 待删除 artifacts：无
 清理状态：pending
+
+## Delivery Evidence / 交付证据
+status：pending
+goal：${answers.goal || "未指定"}
+changes：尚未交付
+changed_files：无
+validation_summary：未运行
+baseline_comparison：未建立 baseline
+cleanup_summary：pending
+risks：交付前必须通过 postAgentValidationGate
+unfinished_items：REQ-BOOTSTRAP pending
+user_confirmation：无
+
+## Post-Agent Validation Gate / Agent 后置校验门禁
+enabled：true
+command：fastcar-cli auto-iterate --validate-state ${answers.session || "default"} --strict-state
+last_result：not_run
+repair_cycles_used：0
+max_repair_cycles：5
+failure_summary：无
+next_action：context_reset_and_repair
 
 ## Context Handoff Summary / 上下文交接摘要
 目标：${answers.goal || "未指定"}

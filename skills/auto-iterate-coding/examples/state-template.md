@@ -141,6 +141,66 @@ Autopilot：
 架构摩擦：none / suspected / confirmed
 原型状态：not_needed / proposed / active / absorbed / deleted / blocked
 
+## Phase Gate / 阶段门禁
+current_phase：requirement / contract / baseline / coding / validation / cleanup / delivery
+can_proceed：true / false
+blocking_reasons：
+phase_order：requirement -> contract -> baseline -> coding -> validation -> cleanup -> delivery
+gates：
+  - phase：requirement
+    status：pending / passed / blocked / skipped_with_reason
+    entry：
+    exit：
+    blocking：
+
+## Implementation Contract / 实现契约
+status：pending / approved / blocked
+goal：
+understanding：
+scope：
+non_goals：
+success_criteria：
+validation_plan：
+risk_points：
+open_questions：
+user_confirmation_required：true / false
+
+## Baseline / 修改前基线
+status：pending / passed / failed / skipped_with_reason / not_available
+command：
+result：
+reason：
+failure_category：none / existing_failure / new_failure / environment_failure / test_unavailable / unknown
+allows_coding：true / false
+
+## Iteration Policy / 迭代策略
+current_iteration_goal：
+max_goals_per_iteration：1
+max_changed_files：
+max_diff_lines：
+max_no_progress_iterations：
+consecutive_failure_count：
+allowed_files：
+stop_conditions：
+rollback_plan：
+last_decision：continue / stop / ask_user / replan / revert
+
+## Task Profile / 任务画像
+type：feature / bugfix / docs / refactor / verify / optimize / prototype / unknown
+complexity：small / medium / large
+risk：low / medium / high
+needs_user_confirmation：true / false
+reasons：
+
+## Decision Request / 用户确认请求
+status：not_needed / pending / approved / rejected / blocked
+topic：
+background：
+options：
+recommended：
+impact：
+triggers：
+
 ## Watchdog
 enabled：true / false
 check_interval：每轮迭代前后、上下文压缩后、恢复后、最终交付前
@@ -227,12 +287,55 @@ Requirement Coverage Matrix 状态：
 不可用能力导致的未验证项：
 最终交付可验证性：
 
+## Post-Change Validation / 修改后验证
+status：not_run / passed / failed / skipped_with_reason / not_available
+command：
+result：
+reason：
+regression_detected：true / false
+
+## Delta Assessment / 差异评估
+status：pending / improved / unchanged / regression / unknown
+summary：
+baseline_ref：
+post_change_ref：
+decision：keep / revert / retry_new_direction / stop / ask_user
+
+## Diff Budget / 变更预算审计
+status：not_checked / within_budget / over_budget / unknown
+changed_files：
+diff_lines：
+out_of_scope_files：
+high_risk_files：
+reason：
+
 ## Temporary Artifacts / Cleanup
 临时 debug 前缀：
 一次性 harness：
 原型文件或路由：
 待删除 artifacts：
 清理状态：pending / completed / blocked
+
+## Delivery Evidence / 交付证据
+status：pending / ready / blocked / delivered
+goal：
+changes：
+changed_files：
+validation_summary：
+baseline_comparison：
+cleanup_summary：
+risks：
+unfinished_items：
+user_confirmation：
+
+## Post-Agent Validation Gate / Agent 后置校验门禁
+enabled：true / false
+command：fastcar-cli auto-iterate --validate-state <session> --strict-state
+last_result：passed / failed / not_run
+repair_cycles_used：
+max_repair_cycles：
+failure_summary：
+next_action：deliver / context_reset_and_repair / stop
 
 ## Context Handoff Summary
 目标：

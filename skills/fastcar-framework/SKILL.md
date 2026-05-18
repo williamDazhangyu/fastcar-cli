@@ -459,6 +459,8 @@ npm i @fastcar/core @fastcar/koa @fastcar/rpc @fastcar/server @fastcar/timer
 
 配置文件放在 `resource/application.yml`。支持按 `env` 加载多文件，例如 `application-dev.yml` 会与主配置合并。
 
+用户可见的错误消息、提示文案和多语言映射也应放在 `resource/` 下的配置、词条或数据文件中，例如 `resource/error-messages.json`。不要把大段错误文案表硬编码在 Middleware、Controller 或 Service 里；代码只负责读取配置、校验结构、根据 errorCode/locale 选择文案，并提供明确兜底。
+
 ### 基础配置示例
 
 ```yaml

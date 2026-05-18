@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fastcar.local/auto-iterate/state.schema.json",
+  "title": "FastCar Auto Iterate State",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schemaVersion",
+    "task",
+    "session",
+    "mode",
+    "budgets",
+    "currentState",
+    "watchdog",
+    "phaseGate",
+    "implementationContract",
+    "baseline",
+    "iterationPolicy",
+    "taskProfile",
+    "decisionRequest",
+    "requirements",
+    "decisions",
+    "validation",
+    "postChange",
+    "deltaAssessment",
+    "diffBudget",
+    "cleanup",
+    "deliveryEvidence",
+    "postAgentValidationGate"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "task": {
+      "type": "object",
+      "required": ["goal", "successCriteria", "nonGoals", "allowedScope", "compatibility"],
+      "properties": {
+        "goal": { "type": "string", "minLength": 1 },
+        "successCriteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "nonGoals": { "type": "array", "items": { "type": "string" } },
+        "allowedScope": { "type": "string", "minLength": 1 },
+        "compatibility": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "session": {
+      "type": "object",
+      "required": ["session", "stateJsonFile", "stateFile", "promptFile", "currentFile"],
+      "properties": {
+        "session": { "type": "string", "minLength": 1 },
+        "stateJsonFile": { "type": "string", "minLength": 1 },
+        "stateFile": { "type": "string", "minLength": 1 },
+        "promptFile": { "type": "string", "minLength": 1 },
+        "currentFile": { "type": "string", "minLength": 1 }
+      }
+    },
+    "taskProfile": {
+      "type": "object",
+      "required": ["type", "complexity", "risk", "needsUserConfirmation", "reasons"],
+      "properties": {
+        "type": {
+          "enum": ["feature", "bugfix", "docs", "refactor", "verify", "optimize", "prototype", "unknown"]
+        },
+        "complexity": { "enum": ["small", "medium", "large"] },
+        "risk": { "enum": ["low", "medium", "high"] },
+        "needsUserConfirmation": { "type": "boolean" },
+        "reasons": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "decisionRequest": {
+      "type": "object",
+      "required": ["status", "topic", "background", "options", "recommended", "impact", "triggers"],
+      "properties": {
+        "status": { "enum": ["not_needed", "pending", "approved", "rejected", "blocked"] },
+        "topic": { "type": "string", "minLength": 1 },
+        "background": { "type": "string", "minLength": 1 },
+        "options": { "type": "array", "items": { "type": "string" } },
+        "recommended": { "type": "string", "minLength": 1 },
+        "impact": { "type": "string", "minLength": 1 },
+        "triggers": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "postChange": {
+      "type": "object",
+      "required": ["status", "command", "result", "reason", "regressionDetected"],
+      "properties": {
+        "status": { "enum": ["not_run", "passed", "failed", "skipped_with_reason", "not_available"] },
+        "command": { "type": "string", "minLength": 1 },
+        "result": { "type": ["string", "null"], "minLength": 1 },
+        "reason": { "type": ["string", "null"], "minLength": 1 },
+        "regressionDetected": { "type": "boolean" }
+      }
+    },
+    "deltaAssessment": {
+      "type": "object",
+      "required": ["status", "summary", "baselineRef", "postChangeRef", "decision"],
+      "properties": {
+        "status": { "enum": ["pending", "improved", "unchanged", "regression", "unknown"] },
+        "summary": { "type": "string", "minLength": 1 },
+        "baselineRef": { "type": "string", "minLength": 1 },
+        "postChangeRef": { "type": "string", "minLength": 1 },
+        "decision": { "enum": ["keep", "revert", "retry_new_direction", "stop", "ask_user"] }
+      }
+    },
+    "diffBudget": {
+      "type": "object",
+      "required": ["status", "changedFiles", "diffLines", "outOfScopeFiles", "highRiskFiles", "reason"],
+      "properties": {
+        "status": { "enum": ["not_checked", "within_budget", "over_budget", "unknown"] },
+        "changedFiles": { "type": "integer", "minimum": 0 },
+        "diffLines": { "type": "integer", "minimum": 0 },
+        "outOfScopeFiles": { "type": "array", "items": { "type": "string" } },
+        "highRiskFiles": { "type": "array", "items": { "type": "string" } },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "postAgentValidationGate": {
+      "type": "object",
+      "required": ["enabled", "command", "lastResult", "repairCyclesUsed", "maxRepairCycles", "failureSummary", "nextAction"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "command": { "type": "string", "minLength": 1 },
+        "lastResult": { "enum": ["passed", "failed", "not_run"] },
+        "repairCyclesUsed": { "type": "integer", "minimum": 0 },
+        "maxRepairCycles": { "type": "integer", "minimum": 0 },
+        "failureSummary": { "type": "array", "items": { "type": "string" } },
+        "nextAction": { "enum": ["deliver", "context_reset_and_repair", "stop"] }
+      }
+    }
+  }
+}
