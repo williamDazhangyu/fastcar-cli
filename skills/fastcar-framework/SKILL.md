@@ -459,7 +459,37 @@ npm i @fastcar/core @fastcar/koa @fastcar/rpc @fastcar/server @fastcar/timer
 
 配置文件放在 `resource/application.yml`。支持按 `env` 加载多文件，例如 `application-dev.yml` 会与主配置合并。
 
-用户可见的错误消息、提示文案和多语言映射也应放在 `resource/` 下的配置、词条或数据文件中，例如 `resource/error-messages.json`。不要把大段错误文案表硬编码在 Middleware、Controller 或 Service 里；代码只负责读取配置、校验结构、根据 errorCode/locale 选择文案，并提供明确兜底。
+用户可见的错误消息、提示文案、prompt 模板、词条和多语言映射也应放在 `resource/` 下的配置或数据文件中，优先使用独立 `.yml` 文件，例如 `resource/error-messages.yml`、`resource/conversation-guardrail-texts.yml`。不要把大段业务文案表硬编码在 Middleware、Controller 或 Service 里，也不要塞进 `application.yml` / `application-*.yml`；`application*.yml` 只放应用启动参数、数据源、端口、provider/model ID、阈值等运行配置。业务代码应通过 `@Configure("xxx.yml")` 配置类注入，负责结构化读取、校验和按 errorCode/locale 选择文案。
+
+### 独立业务配置示例
+
+```yaml
+# resource/conversation-guardrail-texts.yml
+pendingTaskWait:
+  zh-CN: |
+    ### 当前图片仍在生成中
+
+    上一张图片还没完成，请等待生成结束后再继续编辑。
+  en-US: |
+    ### The image is still being generated
+
+    Wait until generation completes before editing it.
+```
+
+```typescript
+import { Configure } from "@fastcar/core/annotation";
+
+@Configure("conversation-guardrail-texts.yml")
+class ConversationGuardrailTextConfig {
+  pendingTaskWait: Record<string, string> = {};
+}
+
+@Service
+class ConversationService {
+  @Autowired
+  private guardrailTextConfig!: ConversationGuardrailTextConfig;
+}
+```
 
 ### 基础配置示例
 

@@ -47,6 +47,7 @@ const REQUIRED_STATE_SECTIONS = [
   "## Diff Budget / 变更预算审计",
   "## Temporary Artifacts / Cleanup / 临时产物清理",
   "## Delivery Evidence / 交付证据",
+  "## Skill Capture / 技能沉淀",
   "## Post-Agent Validation Gate / Agent 后置校验门禁",
   "## Context Handoff Summary / 上下文交接摘要",
   "## Resume Prompt / 恢复提示",
@@ -179,7 +180,7 @@ const DEFAULT_CONSTRAINTS =
   "不要连接生产数据库\n不要写入密钥、token、密码或连接串\n不要新增依赖，除非先说明原因并等待确认";
 
 const DEFAULT_DELIVERY_FORMAT =
-  "最终输出实现总结、关键修改、完整任务清单完成状态、需求覆盖矩阵（Requirement Coverage Matrix）、完成定义（Definition of Done）、Watchdog 状态、交付可验证性、验证证据、未验证项、剩余需求、风险、验收建议，以及本 session state 的最终状态摘要。";
+  "最终输出实现总结、关键修改、完整任务清单完成状态、需求覆盖矩阵（Requirement Coverage Matrix）、完成定义（Definition of Done）、Watchdog 状态、交付可验证性、验证证据、未验证项、剩余需求、风险、技能沉淀状态、验收建议，以及本 session state 的最终状态摘要。";
 
 const DISPATCH_AGENT_CONFIGS = {
   codex: {
@@ -1281,6 +1282,45 @@ function validateDeliveryEvidenceModel(issues, evidence, validation, cleanup, re
   }
   if (isReadyOrDelivered && /^(无|none)$/i.test(evidence.userConfirmation.trim())) {
     addError(issues, "state.json.deliveryEvidence.status 为 ready/delivered 时 userConfirmation 必须记录确认来源或说明无需确认的原因");
+  }
+}
+
+function validateSkillCaptureModel(issues, skillCapture, evidence) {
+  const statusValues = [
+    "pending",
+    "captured",
+    "skipped_no_high_value",
+    "blocked",
+    "not_available",
+  ];
+  if (!requirePlainObject(issues, skillCapture, "state.json.skillCapture")) {
+    return;
+  }
+
+  requireEnumValue(issues, skillCapture.status, statusValues, "state.json.skillCapture.status");
+  requireNonEmptyStringFields(issues, skillCapture, [
+    "root",
+    "indexFile",
+    "selectionCriteria",
+    "lastRunSummary",
+  ], "state.json.skillCapture");
+  requireArray(issues, skillCapture.capturedFiles, "state.json.skillCapture.capturedFiles");
+  requireArray(issues, skillCapture.pendingCandidates, "state.json.skillCapture.pendingCandidates");
+  requireArray(issues, skillCapture.skippedReasons, "state.json.skillCapture.skippedReasons");
+
+  if (normalizeRelativePathForCompare(skillCapture.root) !== ".agents/skills") {
+    addError(issues, "state.json.skillCapture.root 必须为 .agents/skills");
+  }
+  if (normalizeRelativePathForCompare(skillCapture.indexFile) !== ".agents/skills/index.md") {
+    addError(issues, "state.json.skillCapture.indexFile 必须为 .agents/skills/index.md");
+  }
+
+  const isDeliveryReady = evidence && (evidence.status === "ready" || evidence.status === "delivered");
+  if (isDeliveryReady && skillCapture.status === "pending") {
+    addError(issues, "deliveryEvidence ready/delivered 时 skillCapture.status 不得为 pending");
+  }
+  if (skillCapture.status === "captured" && skillCapture.capturedFiles.length === 0) {
+    addError(issues, "state.json.skillCapture.status=captured 时 capturedFiles 不能为空");
   }
 }
 
@@ -2437,6 +2477,7 @@ function validateStateJsonModel(state, expected = {}) {
     "diffBudget",
     "cleanup",
     "deliveryEvidence",
+    "skillCapture",
     "postAgentValidationGate",
   ];
   requiredObjects.forEach((key) => {
@@ -2523,6 +2564,7 @@ function validateStateJsonModel(state, expected = {}) {
   validateDeltaAssessmentModel(issues, state.deltaAssessment, state.postChange, state.iterationPolicy);
   validateDiffBudgetModel(issues, state.diffBudget, state.iterationPolicy);
   validateDeliveryEvidenceModel(issues, state.deliveryEvidence, validation, cleanup, requirements);
+  validateSkillCaptureModel(issues, state.skillCapture, state.deliveryEvidence);
   validatePostAgentValidationGateModel(issues, state.postAgentValidationGate);
   validateDeliveryGateConsistency(issues, state);
 
@@ -2943,6 +2985,16 @@ function buildStateModel(rawAnswers) {
       unfinishedItems: "REQ-BOOTSTRAP pending",
       userConfirmation: "无",
     },
+    skillCapture: {
+      status: "pending",
+      root: ".agents/skills",
+      indexFile: ".agents/skills/index.md",
+      capturedFiles: [],
+      pendingCandidates: [],
+      skippedReasons: [],
+      selectionCriteria: "只沉淀可复用、可验证、跨任务有价值的技能点；不要记录密钥、客户数据、一次性日志或完整源码",
+      lastRunSummary: "尚未执行任务后技能沉淀",
+    },
     postAgentValidationGate: {
       enabled: true,
       command: `fastcar-cli auto-iterate --validate-state ${answers.session || "default"} --strict-state`,
@@ -3303,6 +3355,17 @@ risks：交付前必须通过 postAgentValidationGate
 unfinished_items：REQ-BOOTSTRAP pending
 user_confirmation：无
 
+## Skill Capture / 技能沉淀
+status：pending
+root：.agents/skills
+index_file：.agents/skills/index.md
+captured_files：无
+pending_candidates：无
+skipped_reasons：无
+selection_criteria：只沉淀可复用、可验证、跨任务有价值的技能点；不要记录密钥、客户数据、一次性日志或完整源码
+last_run_summary：尚未执行任务后技能沉淀
+执行时机：每次任务交付、提前停止或阶段性验收后，先提取高价值技能点，再更新 .agents/skills/index.md；没有高价值内容时写明 skipped_no_high_value 和原因
+
 ## Post-Agent Validation Gate / Agent 后置校验门禁
 enabled：true
 command：fastcar-cli auto-iterate --validate-state ${answers.session || "default"} --strict-state
@@ -3398,6 +3461,9 @@ sub-agent 是 Agent 工具执行自动迭代时的协议增强，不是 fastcar-
 当上下文变长、完成 3-5 轮迭代、进入新阶段或开始重复尝试时，请输出并使用 Context Handoff Summary 继续。
 请维护完整任务清单、已完成任务、当前任务、剩余任务和整体完成状态；剩余任务非空时不得按成功交付停止，只能继续迭代或按提前停止汇报。
 修 bug、性能回归或验证失败时，请先建立能复现目标问题的 feedback loop；无法建立时停止并说明尝试过什么、缺少什么 artifact 或环境。
+
+## Skill Capture / 技能沉淀
+每次任务交付、提前停止或阶段性验收后，都必须执行 Skill Capture / 技能沉淀：从真实失败信号、调试路径、验证策略、框架 API 约束、复用脚手架、反模式和停止条件中筛选高价值技能点，写入本项目 .agents/skills 下的合适 skill 文档，并同步维护 .agents/skills/index.md 作为检索入口。只沉淀可复用、可验证、跨任务有价值的技能点；不得写入密钥、客户数据、一次性日志、大段源码或只对本次任务有效的流水账。没有高价值内容时，将 skillCapture.status 标记为 skipped_no_high_value 并记录 skippedReasons；不能写文件时标记 not_available 或 blocked。
 连续失败或修改无改善时，请列出 3-5 个排序假设，并让每轮只验证一个可证伪假设。
 新功能和缺陷修复优先使用垂直切片 TDD；一次只写一个外部行为测试或等价验证，再做最小实现。
 如果问题需要先澄清状态模型、数据模型、交互逻辑或 UI 方向，可以先做明确标记的一次性原型；原型结论吸收前不得声称需求完成。

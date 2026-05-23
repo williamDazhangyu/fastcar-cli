@@ -328,6 +328,17 @@ risks：
 unfinished_items：
 user_confirmation：
 
+## Skill Capture / 技能沉淀
+status：pending / captured / skipped_no_high_value / blocked / not_available
+root：.agents/skills
+index_file：.agents/skills/index.md
+captured_files：
+pending_candidates：
+skipped_reasons：
+selection_criteria：只沉淀可复用、可验证、跨任务有价值的技能点；不要记录密钥、客户数据、一次性日志或完整源码
+last_run_summary：
+执行时机：每次任务交付、提前停止或阶段性验收后，先提取高价值技能点，再更新 .agents/skills/index.md；没有高价值内容时写明 skipped_no_high_value 和原因
+
 ## Post-Agent Validation Gate / Agent 后置校验门禁
 enabled：true / false
 command：fastcar-cli auto-iterate --validate-state <session> --strict-state
@@ -362,4 +373,5 @@ next_action：deliver / context_reset_and_repair / stop
 如果 Watchdog.fresh_eyes_required 为 true，必须先设置 triggered=true、required_action=context_compress_and_review，并完成上下文压缩与新鲜视角复查后再继续或交付。
 如果所有关键 REQ 已 passed，必须先完成 validation_hardening：至少达到 minimum_validation_hardening_iterations，并覆盖 boundary / negative / regression 维度；无法执行时标记 blocked 或 not_available，不得静默跳过。
 如果 Temporary Artifacts / Cleanup 中仍有未清理的 debug 日志、harness、原型路由或一次性文件，不要按成功交付输出，除非用户明确要求保留并已标记原因。
+每次任务交付、提前停止或阶段性验收后，必须执行 Skill Capture / 技能沉淀：把高价值、可复用、可验证的经验写入 .agents/skills，并维护 .agents/skills/index.md；没有高价值内容时记录 skipped_no_high_value 和原因。
 ```

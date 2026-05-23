@@ -24,6 +24,11 @@ Commands:
   init [template] [name]   初始化项目
                            template: 模板名称 (${Object.keys(templates).join(", ")})
                            name: 项目名称（可选，默认使用当前目录名）
+                           --yes, -y 非交互初始化，适合 Agent 调用
+                           --package-manager npm|yarn|pnpm 指定包管理器
+                           --components pgsql,mysql,redis,mongo 指定可选组件
+                           --with-agent 初始化项目级 Agent 配置目录
+                           --agent-target agents|codex|kimi|claude|cursor
 
   clean node_modules       删除冗余的 node_modules 目录
   compress node_modules    压缩 node_modules 目录
@@ -72,6 +77,7 @@ Examples:
   $ fastcar-cli init static           # 使用 static 模板
   $ fastcar-cli init my-project       # 创建 my-project 目录
   $ fastcar-cli init web my-project   # 使用 web 模板创建 my-project
+  $ fastcar-cli init web my-project --yes --package-manager npm --with-agent # Agent 非交互创建项目
   $ fastcar-cli clean node_modules
   $ fastcar-cli reverse        # 数据库表逆向生成
   $ fastcar-cli reverse:init   # 生成默认配置文件（默认 YAML 格式）

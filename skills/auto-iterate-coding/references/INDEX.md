@@ -10,7 +10,7 @@
 | `real-testing.md` | 需要验证、沙箱、外部资源判断 | 必读 | 区分真实验证、沙箱验证和未验证项 |
 | `stop-conditions.md` | 每轮继续前、预算耗尽、阻塞、风险上升 | 必读 | 判断继续、收窄、请求用户或提前停止 |
 | `final-delivery.md` | 交付前 | 必读 | 成功交付、有限成功、提前停止和验证证据 |
-| `state-schema.md` | 维护、恢复或校验 session state | 必读 | 固定 state.json 强约束、state.md 生成视图和兼容恢复规则 |
+| `state-schema.md` | 维护、恢复或校验 session state | 必读 | 固定 state.json 强约束、state.md 生成视图、Skill Capture 和兼容恢复规则 |
 | `state.schema.json` | 第三方 Agent、测试或文档工具需要读取机器状态 schema | 必读 | 独立 JSON Schema artifact，覆盖 state.json 必填对象、关键枚举和门禁实体 |
 | `phase-gates.md` | 自动迭代进入编码、验证、cleanup 或交付前 | 必读 | 阶段状态机、Hard Gate、阻断原因和 post-agent strict 校验循环 |
 | `iteration-policy.md` | 每轮实现、失败修复、预算或回滚判断 | 必读 | 单轮单目标、变更预算、停止条件和安全回滚 |
@@ -35,7 +35,7 @@
 
 ### 单一模式
 
-- Quick：`natural-language-routing.md`、`requirement-to-implementation.md`、`feedback-loop.md`、`real-testing.md`、`stop-conditions.md`、`final-delivery.md`。适合目标明确的小中型改动、文档补丁、示例补全或轻量写作修订；Agent 先从仓库、文档和约定推断流程清单。
+- Quick：`natural-language-routing.md`、`requirement-to-implementation.md`、`feedback-loop.md`、`real-testing.md`、`stop-conditions.md`、`final-delivery.md`。适合目标明确的小中型改动、文档补丁、示例补全或轻量写作修订；Agent 先从仓库、文档和约定推断流程清单，并在任务后执行 `.agents/skills` 技能沉淀。
 - 严格实现 / Autopilot / Strict：`requirement-to-implementation.md`、`feedback-loop.md`、`real-testing.md`、`stop-conditions.md`、`final-delivery.md`，交付前按需读取 `two-axis-review.md`。适合 PRD、issue、长清单、生产代码或正式文档的完整实现。
 - Autopilot：`requirement-to-implementation.md`、`feedback-loop.md`、`real-testing.md`、`stop-conditions.md`、`final-delivery.md`，长任务配合 `progress-visualization.md`。适合“完整做完”“一直修到通过”“迭代 N 次以内”等有边界自动推进任务；预算是上限，不是必须消耗。
 - Diagnose：`feedback-loop.md`、`tdd-vertical-slices.md`、`real-testing.md`、`stop-conditions.md`、`final-delivery.md`。适合困难 bug、性能回归、flaky 测试，也适合定位文档生成失败、示例不可运行、发布说明与实际 diff 不一致等非代码问题。
@@ -60,3 +60,4 @@
 - 写作 / 文档生成 + Verify-only：用于文章、指南、PRD、报告、教程、Runbook、README 或发布说明。将提纲、事实约束、目标读者、语气、格式和来源作为 Requirement Coverage Matrix；验证方式包括事实核对、结构覆盖、链接检查、术语一致性和样例可运行性。
 - 写作 / 文档生成 + Autopilot：用于“按大纲完整写完”“持续改到满足清单”“迭代 20 次以内优化文档”。每轮必须围绕一个最小写作目标或验证失败信号推进，例如补缺章节、消除矛盾、压缩重复、增强示例、统一术语或修复格式；不得为了消耗轮次做无意义改写。
 - 研究 / 调研 + Plan-only + Verify-only：用于技术选型、方案比较、竞品梳理或事实密集型报告。先规划问题和证据口径，再做只读验证；需要最新外部事实时必须使用可用网络或标记 `not_verified`。
+- 任务后 Skill Capture：交付、提前停止或阶段性验收前，按 `final-delivery.md` 和 `state-schema.md` 更新 `Skill Capture / 技能沉淀`，将高价值经验写入 `.agents/skills`，并维护 `.agents/skills/index.md`；没有高价值内容时记录 `skipped_no_high_value`。

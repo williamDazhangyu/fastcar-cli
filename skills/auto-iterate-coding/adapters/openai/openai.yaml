@@ -1,0 +1,68 @@
+adapter:
+  name: openai
+  display_name: "Auto Iterate Coding"
+  version: 1
+
+tool_mapping:
+  read_files:
+    - "Use local file reads and repository search first"
+    - "Prefer `SKILL.md`, `index.md`, `contracts/` and `references/` before editing"
+  edit_files:
+    - "Use bounded patches"
+    - "Preserve existing user changes and avoid broad rewrites"
+  run_commands:
+    - "Use shell or CLI commands for real validation"
+    - "Prefer `npm test`, `npm run build`, `npm run typecheck`, or project-specific checks"
+  state_management:
+    - "Read and update `.agent-state/auto-iterate/<session>/state.json` when available"
+    - "Refresh `.agent-state/auto-iterate/<session>/state.md` after each meaningful update"
+  session_flow:
+    - "Create or reuse explicit session names"
+    - "Use `--resume`, `--switch`, and `--validate-state` for session recovery and audit"
+  skill_capture:
+    - "After delivery or stop, capture reusable skill points into `.agents/skills`"
+    - "Maintain `.agents/skills/index.md` as the navigation entry"
+
+platform_constraints:
+  available:
+    - "file_read"
+    - "file_write"
+    - "shell_command"
+    - "git_status"
+    - "local_tests"
+  limited:
+    - "no guaranteed UI Goal mode"
+    - "no assumption of database or external service access"
+  blocked_without_user_confirmation:
+    - "production database access"
+    - "destructive git operations"
+    - "new dependency introduction"
+  degrade_when_unavailable:
+    - "mark requirements not_verified or blocked"
+    - "record missing validation commands or resources explicitly"
+
+prompt_contract:
+  startup:
+    - "Read `skills/auto-iterate-coding/index.md` first"
+    - "Then read `SKILL.md`, `contracts/`, and the most relevant `references/`"
+    - "Announce auto-iterate activation, current session, state files, and next minimal action"
+  recovery:
+    - "Prefer `--resume <session>` or `--validate-state <session>` for existing work"
+    - "Reconcile state.json, state.md, and current code before editing"
+  delivery:
+    - "Report verification evidence, not just completion"
+    - "Include Skill Capture status and index maintenance outcome"
+
+state_handling:
+  canonical:
+    - ".agent-state/auto-iterate/<session>/state.json"
+    - ".agent-state/auto-iterate/<session>/state.md"
+    - ".agent-state/auto-iterate/<session>/start-prompt.md"
+    - ".agent-state/auto-iterate-current.json"
+  recovery_priority:
+    - "explicit session in current user request"
+    - "session state"
+    - "current pointer"
+    - "conversation inference"
+
+default_prompt: "Use this skill to implement or repair code through bounded edit-test-fix loops with real validation, progress tracking, feedback-loop discipline, vertical-slice TDD, prototype clarification, architecture-friction detection, cleanup gates, and stop conditions. Prefer `index.md` for navigation, `contracts/` for hard rules, `compatibility/` for migration, and `adapters/` for platform-specific mapping."

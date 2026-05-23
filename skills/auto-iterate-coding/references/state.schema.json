@@ -26,6 +26,7 @@
     "diffBudget",
     "cleanup",
     "deliveryEvidence",
+    "skillCapture",
     "postAgentValidationGate"
   ],
   "properties": {
@@ -129,6 +130,22 @@
         "maxRepairCycles": { "type": "integer", "minimum": 0 },
         "failureSummary": { "type": "array", "items": { "type": "string" } },
         "nextAction": { "enum": ["deliver", "context_reset_and_repair", "stop"] }
+      }
+    },
+    "skillCapture": {
+      "type": "object",
+      "required": ["status", "root", "indexFile", "capturedFiles", "pendingCandidates", "skippedReasons", "selectionCriteria", "lastRunSummary"],
+      "properties": {
+        "status": {
+          "enum": ["pending", "captured", "skipped_no_high_value", "blocked", "not_available"]
+        },
+        "root": { "const": ".agents/skills" },
+        "indexFile": { "const": ".agents/skills/index.md" },
+        "capturedFiles": { "type": "array", "items": { "type": "string" } },
+        "pendingCandidates": { "type": "array", "items": { "type": "string" } },
+        "skippedReasons": { "type": "array", "items": { "type": "string" } },
+        "selectionCriteria": { "type": "string", "minLength": 1 },
+        "lastRunSummary": { "type": "string", "minLength": 1 }
       }
     }
   }

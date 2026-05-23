@@ -55,6 +55,19 @@ fastcar-cli init rpc
 fastcar-cli init cos
 fastcar-cli init micro
 fastcar-cli init static
+
+# Agent/CI 非交互初始化，并同步项目级 Agent 配置
+fastcar-cli init web my-project --yes --package-manager npm --with-agent
+
+# 指定可选组件和 Agent target
+fastcar-cli init rpc rpc-service --yes --components pgsql,redis --agent-target codex
+
+# 常用参数
+# --yes / -y                非交互模式，适合 Agent / CI
+# --package-manager npm|yarn|pnpm  指定安装依赖时使用的包管理器
+# --components pgsql,mysql,redis,mongo  指定可选数据库组件
+# --with-agent              初始化项目级 Agent 配置目录
+# --agent-target agents|codex|kimi|claude|cursor  指定 Agent 配置位置
 ```
 
 ### 项目打包
@@ -275,6 +288,9 @@ fastcar-cli init
 
 # 或者直接指定 web 模板
 fastcar-cli init web
+
+# Agent/CI 非交互初始化
+fastcar-cli init web my-project --yes --package-manager npm --with-agent
 
 # 安装依赖
 npm install

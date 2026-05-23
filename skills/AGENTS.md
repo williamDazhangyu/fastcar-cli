@@ -195,6 +195,7 @@ export enum JobStatus {
 - 状态字段优先使用字符串枚举，避免裸数字和魔法字符串。
 - 示例代码必须给出关键 import，避免让 Agent 猜测模块来源。
 - 面向用户或前端展示的错误消息、提示文案和多语言映射不要硬编码在 Controller、Service 或 Middleware 中；应放在 `resource/` 下的配置、词条或数据文件中，代码只负责读取、校验和兜底。
+- 这类业务文案、prompt 模板、词条和多语言映射优先使用独立 `.yml` 文件，例如 `resource/error-messages.yml`、`resource/conversation-guardrail-texts.yml`，并通过 `@Configure("xxx.yml")` 配置类注入；不要把大段业务文案塞进 `application.yml` / `application-*.yml`。`application*.yml` 只放应用启动参数、数据源、端口、provider/model ID、阈值等运行配置。
 
 ## 验证建议
 

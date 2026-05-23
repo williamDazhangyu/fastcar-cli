@@ -5,6 +5,7 @@ const { execSync } = require("child_process");
 const inquirer = require("inquirer");
 const utils = require("./utils");
 const templates = require("./templates.json");
+const { getLocalPath, getTargetNames } = require("./skill-targets");
 
 // 可选组件配置
 const optionComponents = [
@@ -54,6 +55,291 @@ const packageManagers = [
     description: "npm - Node.js 默认包管理器",
   },
 ];
+
+const packageManagerNames = packageManagers.map((pm) => pm.name);
+
+function readOptionValue(args, index) {
+  const arg = args[index];
+  const equalIndex = arg.indexOf("=");
+
+  if (equalIndex !== -1) {
+    return arg.slice(equalIndex + 1);
+  }
+
+  const next = args[index + 1];
+  if (next && !next.startsWith("-")) {
+    return next;
+  }
+
+  return null;
+}
+
+function shouldSkipNext(args, index) {
+  const arg = args[index];
+  return arg.indexOf("=") === -1 && args[index + 1] && !args[index + 1].startsWith("-");
+}
+
+function parseBoolean(value, defaultValue = true) {
+  if (value === null || value === undefined || value === "") {
+    return defaultValue;
+  }
+
+  const normalized = String(value).toLowerCase();
+  if (["true", "1", "yes", "y"].includes(normalized)) {
+    return true;
+  }
+
+  if (["false", "0", "no", "n"].includes(normalized)) {
+    return false;
+  }
+
+  return defaultValue;
+}
+
+function parseComponents(value) {
+  if (!value) {
+    return [];
+  }
+
+  return String(value)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseInitArgs(args = []) {
+  const options = {
+    yes: false,
+    template: null,
+    name: null,
+    version: null,
+    description: null,
+    repositoryUrl: null,
+    author: null,
+    license: null,
+    private: null,
+    components: null,
+    packageManager: null,
+    withAgent: false,
+    agentTarget: "agents",
+    templateExplicit: false,
+  };
+  const positional = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === "--yes" || arg === "-y" || arg === "--non-interactive") {
+      options.yes = true;
+      continue;
+    }
+
+    if (arg === "--with-agent" || arg === "--agent" || arg === "--init-agent") {
+      options.withAgent = true;
+      continue;
+    }
+
+    if (arg === "--no-agent") {
+      options.withAgent = false;
+      continue;
+    }
+
+    if (arg === "--template" || arg.startsWith("--template=")) {
+      options.template = readOptionValue(args, index);
+      options.templateExplicit = true;
+      if (shouldSkipNext(args, index)) index += 1;
+      continue;
+    }
+
+    if (arg === "--name" || arg.startsWith("--name=")) {
+      options.name = readOptionValue(args, index);
+      if (shouldSkipNext(args, index)) index += 1;
+      continue;
+    }
+
+    if (arg === "--version" || arg.startsWith("--version=")) {
+      options.version = readOptionValue(args, index);
+      if (shouldSkipNext(args, index)) index += 1;
+      continue;
+    }
+
+    if (arg === "--description" || arg.startsWith("--description=")) {
+      options.description = readOptionValue(args, index);
+      if (shouldSkipNext(args, index)) index += 1;
+      continue;
+    }
+
+    if (arg === "--repository-url" || arg === "--repository" || arg.startsWith("--repository-url=") || arg.startsWith("--repository=")) {
+      options.repositoryUrl = readOptionValue(args, index);
+      if (shouldSkipNext(args, index)) index += 1;
+      continue;
+    }
+
+    if (arg === "--author" || arg.startsWith("--author=")) {
+      options.author = readOptionValue(args, index);
+      if (shouldSkipNext(args, index)) index += 1;
+      continue;
+    }
+
+    if (arg === "--license" || arg.startsWith("--license=")) {
+      options.license = readOptionValue(args, index);
+      if (shouldSkipNext(args, index)) index += 1;
+      continue;
+    }
+
+    if (arg === "--private" || arg.startsWith("--private=")) {
+      options.private = parseBoolean(readOptionValue(args, index), true);
+      if (shouldSkipNext(args, index)) index += 1;
+      continue;
+    }
+
+    if (arg === "--public") {
+      options.private = false;
+      continue;
+    }
+
+    if (arg === "--components" || arg.startsWith("--components=")) {
+      options.components = parseComponents(readOptionValue(args, index));
+      if (shouldSkipNext(args, index)) index += 1;
+      continue;
+    }
+
+    if (arg === "--component" || arg.startsWith("--component=")) {
+      options.components = [
+        ...(options.components || []),
+        ...parseComponents(readOptionValue(args, index)),
+      ];
+      if (shouldSkipNext(args, index)) index += 1;
+      continue;
+    }
+
+    if (arg === "--package-manager" || arg === "--pm" || arg.startsWith("--package-manager=") || arg.startsWith("--pm=")) {
+      options.packageManager = readOptionValue(args, index);
+      if (shouldSkipNext(args, index)) index += 1;
+      continue;
+    }
+
+    if (arg === "--agent-target" || arg.startsWith("--agent-target=")) {
+      options.agentTarget = readOptionValue(args, index) || "agents";
+      options.withAgent = true;
+      if (shouldSkipNext(args, index)) index += 1;
+      continue;
+    }
+
+    positional.push(arg);
+  }
+
+  if (options.template && !options.templateExplicit && !getTemplateConfig(options.template)) {
+    positional.unshift(options.template);
+    options.template = null;
+  }
+
+  return {
+    options,
+    positional,
+  };
+}
+
+function getPackageManager(name) {
+  return packageManagers.find((pm) => pm.name === name) || null;
+}
+
+function validateComponents(components) {
+  const invalidComponents = components.filter((name) => !optionComponentNames.includes(name));
+  if (invalidComponents.length > 0) {
+    throw new Error(
+      `不支持的组件: ${invalidComponents.join(", ")}\n` +
+        `可用组件: ${optionComponentNames.join(", ")}`,
+    );
+  }
+}
+
+function validateInitOptions(options) {
+  if (options.packageManager && !getPackageManager(options.packageManager)) {
+    throw new Error(
+      `不支持的包管理器: ${options.packageManager}\n` +
+        `可用包管理器: ${packageManagerNames.join(", ")}`,
+    );
+  }
+
+  if (options.components) {
+    validateComponents(options.components);
+  }
+
+  if (options.agentTarget && !getTargetNames().includes(options.agentTarget)) {
+    throw new Error(
+      `不支持的 Agent target: ${options.agentTarget}\n` +
+        `可用 target: ${getTargetNames().join(", ")}`,
+    );
+  }
+}
+
+function buildQuestionInfoFromOptions(defaultName, existingPackage, options) {
+  return {
+    name: options.name || existingPackage.name || defaultName,
+    version: options.version || existingPackage.version || "1.0.0",
+    description:
+      options.description !== null && options.description !== undefined
+        ? options.description
+        : existingPackage.description || "",
+    repositoryUrl:
+      options.repositoryUrl !== null && options.repositoryUrl !== undefined
+        ? options.repositoryUrl
+        : existingPackage.repository && existingPackage.repository.url
+          ? existingPackage.repository.url
+          : "",
+    author:
+      options.author !== null && options.author !== undefined
+        ? options.author
+        : existingPackage.author || "",
+    license: options.license || existingPackage.license || "MIT",
+    private:
+      options.private !== null && options.private !== undefined
+        ? options.private
+        : existingPackage.private !== undefined
+          ? existingPackage.private
+          : true,
+    components: options.components || [],
+  };
+}
+
+function getPackageInfoFromQuestionInfo(existingPackage, questionInfo) {
+  const packageInfo = {
+    ...existingPackage,
+    name: questionInfo.name,
+    version: questionInfo.version,
+    description: questionInfo.description,
+    author: questionInfo.author,
+    license: questionInfo.license,
+    private: questionInfo.private,
+  };
+
+  if (questionInfo.repositoryUrl) {
+    packageInfo.repository = {
+      type: "git",
+      url: questionInfo.repositoryUrl,
+    };
+  }
+
+  return packageInfo;
+}
+
+function initLocalAgentConfig(projectDir, target) {
+  const localPath = getLocalPath(target, projectDir);
+  if (!localPath) {
+    throw new Error(`无法确定 ${target} 的项目级 Agent 配置目录`);
+  }
+
+  fs.mkdirSync(localPath, { recursive: true });
+
+  const agentsSourcePath = path.join(__dirname, "..", "skills", "AGENTS.md");
+  const agentsTargetPath = path.join(localPath, "AGENTS.md");
+  if (fs.existsSync(agentsSourcePath) && !fs.existsSync(agentsTargetPath)) {
+    fs.copyFileSync(agentsSourcePath, agentsTargetPath);
+  }
+
+  return localPath;
+}
 
 // 交互式选择包管理器
 async function selectPackageManager() {
@@ -371,9 +657,14 @@ const Questions = async (defaultName, skipNamePrompt = false) => {
 
 async function init(args = []) {
   try {
+    const parsedArgs = parseInitArgs(args);
+    const initOptions = parsedArgs.options;
+    args = parsedArgs.positional;
+    validateInitOptions(initOptions);
+
     let currDir = process.cwd();
-    let type = null;
-    let projectName = null;
+    let type = initOptions.template || null;
+    let projectName = initOptions.name || null;
 
     // 解析参数：支持以下几种格式
     // 1. init                    -> 交互式选择模板，询问项目名，创建文件夹
@@ -384,18 +675,25 @@ async function init(args = []) {
     // hasProjectName 用于判断是否指定了项目名，决定是否询问项目名称
     let hasProjectName = false;
 
-    if (args.length === 0) {
+    if (initOptions.template) {
+      if (args[0]) {
+        projectName = args[0];
+        hasProjectName = true;
+      } else {
+        hasProjectName = Boolean(initOptions.name);
+      }
+    } else if (args.length === 0) {
       // 情况1：没有任何参数
       type = null;
-      projectName = null;
-      hasProjectName = false;
+      projectName = initOptions.name || null;
+      hasProjectName = Boolean(initOptions.name);
     } else if (args.length === 1) {
       // 可能是情况2或情况3
       if (getTemplateConfig(args[0])) {
         // 情况3：args[0] 是模板名，未指定项目名，需要询问
         type = args[0];
-        projectName = null;
-        hasProjectName = false;
+        projectName = initOptions.name || null;
+        hasProjectName = Boolean(initOptions.name);
       } else {
         // 情况2：args[0] 是项目名（不是模板名）
         type = null;
@@ -412,9 +710,15 @@ async function init(args = []) {
     // 如果没有指定模板类型，或者指定的模板不存在，则交互式选择
     if (!type || !getTemplateConfig(type)) {
       if (type && !getTemplateConfig(type)) {
+        if (initOptions.yes) {
+          throw new Error(
+            `未找到模板: ${type}\n` +
+              `可用模板: ${Object.keys(templates).join(", ")}`,
+          );
+        }
         console.log(`⚠️  未找到模板: ${type}，请从以下列表中选择:`);
       }
-      type = await selectTemplate();
+      type = initOptions.yes ? "web" : await selectTemplate();
     }
 
     const templateConfig = getTemplateConfig(type);
@@ -472,41 +776,17 @@ async function init(args = []) {
     // （如果有 package.json，则以它为基础进行修改）
     if (fs.existsSync(realPackagePath)) {
       const existingPackage = require(realPackagePath);
-      questionInfo = await Questions(
-        existingPackage.name || defaultName,
-        skipNamePrompt,
-      );
+      questionInfo = initOptions.yes
+        ? buildQuestionInfoFromOptions(defaultName, existingPackage, initOptions)
+        : await Questions(existingPackage.name || defaultName, skipNamePrompt);
 
       // 保留原有的依赖，只更新其他字段
-      packageInfo = {
-        ...existingPackage,
-        name: questionInfo.name,
-        version: questionInfo.version,
-        description: questionInfo.description,
-        author: questionInfo.author,
-        license: questionInfo.license,
-        private: questionInfo.private,
-      };
+      packageInfo = getPackageInfoFromQuestionInfo(existingPackage, questionInfo);
     } else {
-      questionInfo = await Questions(defaultName, skipNamePrompt);
-      packageInfo = {
-        name: questionInfo.name,
-        version: questionInfo.version,
-        description: questionInfo.description,
-        author: questionInfo.author,
-        license: questionInfo.license,
-        private: questionInfo.private,
-      };
-
-      if (!!questionInfo.repositoryUrl) {
-        let repType = questionInfo.repositoryUrl.split(".");
-        Reflect.set(packageInfo, {
-          repository: {
-            type: repType,
-            url: questionInfo.repositoryUrl,
-          },
-        });
-      }
+      questionInfo = initOptions.yes
+        ? buildQuestionInfoFromOptions(defaultName, {}, initOptions)
+        : await Questions(defaultName, skipNamePrompt);
+      packageInfo = getPackageInfoFromQuestionInfo({}, questionInfo);
     }
 
     // 获取最终的项目名（可能是用户输入的，也可能是命令行指定的）
@@ -542,7 +822,7 @@ async function init(args = []) {
     }
 
     Object.keys(packageInfo).forEach((key) => {
-      if (!packageInfo[key]) {
+      if (packageInfo[key] === undefined || packageInfo[key] === null || packageInfo[key] === "") {
         Reflect.deleteProperty(packageInfo, key);
       }
     });
@@ -655,8 +935,18 @@ async function init(args = []) {
       utils.writeYaml(pm2RunPath, pm2Config);
     }
 
+    let agentConfigPath = null;
+    if (initOptions.withAgent) {
+      agentConfigPath = initLocalAgentConfig(currDir, initOptions.agentTarget);
+      console.log(`🤖 已初始化项目级 Agent 配置: ${agentConfigPath}`);
+    }
+
     // 选择包管理器
-    const packageManager = await selectPackageManager();
+    const packageManager = initOptions.yes
+      ? getPackageManager(initOptions.packageManager || "npm")
+      : initOptions.packageManager
+        ? getPackageManager(initOptions.packageManager)
+        : await selectPackageManager();
 
     // 获取项目文件夹名（用于显示 cd 命令）
     const projectFolderName = path.basename(currDir);
@@ -665,6 +955,9 @@ async function init(args = []) {
     console.log(`📁 项目路径: ${currDir}`);
     console.log(`📦 使用模板: ${templateConfig.package}`);
     console.log(`📦 包管理器: ${packageManager.name}`);
+    if (agentConfigPath) {
+      console.log(`🤖 Agent 配置: ${agentConfigPath}`);
+    }
     console.log(`\n👉 请执行以下命令启动项目：`);
     console.log(`   cd ${projectFolderName} && ${packageManager.installCmd}`);
     console.log();

@@ -8,6 +8,7 @@
 - `validation.finalVerifiability` 不是 `unknown`。
 - `watchdog.deliveryVerifiability` 不是 `unknown` 或 `not_verifiable`。
 - `cleanup.status=completed`，或用户明确确认保留临时产物并记录原因。
+- `skillCapture.status` 不是 `pending`；交付、提前停止或阶段性验收前必须沉淀高价值技能点，或记录 `skipped_no_high_value / blocked / not_available` 原因。
 - `postAgentValidationGate.lastResult=passed`。
 - `fastcar-cli auto-iterate --validate-state <session> --strict-state` 通过。
 
@@ -19,6 +20,7 @@
 - baseline 命令、结果和失败归因。
 - post-change 验证命令、结果和 delta 结论。
 - cleanup 状态。
+- Skill Capture / 技能沉淀状态，以及 `.agents/skills/index.md` 是否已同步更新。
 - `postAgentValidationGate` 结果和修复循环次数。
 - 风险与限制。
 - 未完成事项。

@@ -166,6 +166,20 @@ fastcar-cli auto-iterate --examples session
 启动快速自动迭代，目标是修复支付回调重复处理问题
 ```
 
+### 初始化项目时的 Agent 交互
+
+如果你只是想创建一个可直接给 Agent 接手的新项目，`init` 也支持非交互模式：
+
+```bash
+fastcar-cli init web my-project --yes --package-manager npm --with-agent
+fastcar-cli init rpc rpc-service --yes --components pgsql,redis --agent-target codex
+```
+
+- `--yes`：跳过所有交互提问，适合 Agent 或 CI。
+- `--with-agent`：在新项目中初始化项目级 Agent 配置目录，并复制共享 `AGENTS.md`。
+- `--agent-target`：指定写入哪个 Agent 目录，默认是 `agents`。
+- `--components`：非交互指定数据库组件，多个值用逗号分隔。
+
 ### 严格按文档完整实现
 
 ```text

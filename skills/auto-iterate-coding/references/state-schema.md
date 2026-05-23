@@ -6,7 +6,7 @@
 
 ## 权威文件
 
-- `state.json`：唯一可编辑状态源，包含 `schemaVersion`、task、session、mode、budgets、currentState、watchdog、phaseGate、implementationContract、baseline、iterationPolicy、taskProfile、decisionRequest、requirements、decisions、validation、postChange、deltaAssessment、diffBudget、cleanup、deliveryEvidence、postAgentValidationGate 等结构化字段。
+- `state.json`：唯一可编辑状态源，包含 `schemaVersion`、task、session、mode、budgets、currentState、watchdog、phaseGate、implementationContract、baseline、iterationPolicy、taskProfile、decisionRequest、requirements、decisions、validation、postChange、deltaAssessment、diffBudget、cleanup、deliveryEvidence、skillCapture、postAgentValidationGate 等结构化字段。
 - `state.schema.json`：独立 JSON Schema artifact，用于文档、测试和第三方 Agent 对齐机器状态字段；CLI 仍以运行时代码校验作为最终门禁。
 - `state.md`：生成视图，用于人类阅读和 legacy 兼容；不得作为机器恢复、交付门禁或并发调度的唯一依据。
 - `auto-iterate-current.json`：当前 session 指针，必须记录 `stateJsonFile`、`stateFile`、`promptFile` 和 `session`。
@@ -41,9 +41,10 @@
 | 24 | `## Diff Budget / 变更预算审计` | 必填；从 state.json.diffBudget 渲染，记录变更文件数、diff 行数、越界文件和高风险文件 | Agent |
 | 25 | `## Temporary Artifacts / Cleanup` | 必填；记录 debug、harness、原型和清理状态 | Agent |
 | 26 | `## Delivery Evidence / 交付证据` | 必填；从 state.json.deliveryEvidence 渲染，交付摘要的机器来源 | Agent |
-| 27 | `## Post-Agent Validation Gate / Agent 后置校验门禁` | 必填；从 state.json.postAgentValidationGate 渲染，记录 strict 校验和 repair cycle | Agent |
-| 28 | `## Context Handoff Summary` | 必填；上下文压缩、长任务恢复和交接时更新 | Agent |
-| 29 | `## Resume Prompt` | 必填；说明恢复时的最小执行规则 | CLI 初始化，Agent 可补充 |
+| 27 | `## Skill Capture / 技能沉淀` | 必填；从 state.json.skillCapture 渲染，记录任务后高价值技能点沉淀、`.agents/skills/index.md` 更新和跳过原因 | Agent |
+| 28 | `## Post-Agent Validation Gate / Agent 后置校验门禁` | 必填；从 state.json.postAgentValidationGate 渲染，记录 strict 校验和 repair cycle | Agent |
+| 29 | `## Context Handoff Summary` | 必填；上下文压缩、长任务恢复和交接时更新 | Agent |
+| 30 | `## Resume Prompt` | 必填；说明恢复时的最小执行规则 | CLI 初始化，Agent 可补充 |
 
 ## 一致性规则
 
@@ -73,6 +74,10 @@
 - `postChange.regressionDetected=true` 或 `deltaAssessment.status=regression` 时，`deltaAssessment.decision` 不得为 `keep`，`iterationPolicy.lastDecision` 不得为 `continue`。
 - `diffBudget.changedFiles` / `diffBudget.diffLines` 不得超过 `iterationPolicy.maxChangedFiles` / `iterationPolicy.maxDiffLines`；`diffBudget.status=over_budget` 或存在 `outOfScopeFiles` / `highRiskFiles` 时，`iterationPolicy.lastDecision` 不得为 `continue`。
 - `deliveryEvidence.status=ready / delivered` 时，关键 RCM 不得存在开放项，`validation.finalVerifiability` 不得为 `unknown`，且 `cleanup.status` 必须为 `completed`。
+- `skillCapture.root` 必须为 `.agents/skills`，`skillCapture.indexFile` 必须为 `.agents/skills/index.md`；每次交付、提前停止或阶段性验收后必须更新技能沉淀状态。
+- 技能沉淀只沉淀可复用、可验证、跨任务有价值的技能点；不得记录密钥、客户数据、一次性日志、大段源码或只对本次任务有效的流水账。
+- `deliveryEvidence.status=ready / delivered` 时，`skillCapture.status` 不得为 `pending`；如果没有高价值技能点，必须标记 `skipped_no_high_value` 并记录 `skippedReasons`，不得静默跳过。
+- `skillCapture.status=captured` 时，`capturedFiles` 必须列出本次写入或更新的 `.agents/skills` 文件，且 `.agents/skills/index.md` 必须同步维护为检索入口。
 - `postAgentValidationGate` 必须启用交付前 CLI 门禁，命令必须包含 `--validate-state` 和 `--strict-state`；失败时 `nextAction` 必须为 `context_reset_and_repair` 或 `stop`。
 - 所有关键 REQ 均为 `passed` 且 `remaining_implementation_iterations > 0` 时，`Watchdog.fresh_eyes_required` 必须为 `true`，`Watchdog.triggered` 必须为 `true`，且 `required_action` 必须为 `context_compress_and_review`；Agent 不得在此时跳过上下文压缩直接交付。
 - 所有关键 REQ 均为 `passed` 且 fresh-eyes 已处理后，必须完成 `validation_hardening` 门禁：`validation_hardening_iterations_used >= minimum_validation_hardening_iterations`，并覆盖 `boundary / negative / regression`；无法覆盖时必须把 `validation_hardening_status` 标记为 `blocked / not_available / user_accepted_limited` 并记录原因。
@@ -94,7 +99,7 @@
 
 - `state.json` 强约束：schemaVersion、必填对象、字段类型、枚举值、预算计数、任务成功标准、RCM 状态、Watchdog 交付可验证性、session 路径和 current 指针。
 - Phase Gate 强约束：固定阶段完整、Implementation Contract 完整、baseline 可判定、单轮单目标预算、Task Profile、Decision Request、Post-Change Validation、Delta Assessment、Diff Budget、Delivery Evidence 和 Post-Agent Validation Gate 一致。
-- session 基线一致性：29 个章节、session 路径、`start-prompt.md`、`auto-iterate-current.json`、预算计数、最少轮次、Phase Gate、Implementation Contract、Baseline、Iteration Policy、Task Profile、Decision Request、Watchdog、RCM/DoD、Validation、Post-Change Validation、Delta Assessment、Diff Budget、临时产物清理、Delivery Evidence 和 Post-Agent Validation Gate。
+- session 基线一致性：30 个章节、session 路径、`start-prompt.md`、`auto-iterate-current.json`、预算计数、最少轮次、Phase Gate、Implementation Contract、Baseline、Iteration Policy、Task Profile、Decision Request、Watchdog、RCM/DoD、Validation、Post-Change Validation、Delta Assessment、Diff Budget、临时产物清理、Delivery Evidence、Skill Capture 和 Post-Agent Validation Gate。
 - sub-agent 协议一致性：`Sub-Agent Dispatch`、`Decisions` 中的并发确认、coder 文件 ownership、active/history 计数、merge 状态和 RCM 推进风险。
 
 校验结果中的 `ERROR` 表示不应继续恢复、dispatch 或按成功交付输出；`WARN` 表示有参考风险，通常应在下一轮迭代、dispatch 或交付前同步状态。
