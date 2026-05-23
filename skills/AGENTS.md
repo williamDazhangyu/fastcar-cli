@@ -36,6 +36,15 @@
 
 用户不需要记住 `fastcar-cli auto-iterate` 参数。Agent 应按 `auto-iterate-coding` 的自然语言命令路由规则，将用户意图映射为对应命令；只有缺少会影响安全、兼容性或外部资源的关键信息时才追问。
 
+## Codex Goal 模型边界
+
+- Codex goal 模型是 Codex 运行时的任务目标状态能力，用于记录当前 objective、status、可选 token_budget 和完成/阻塞状态；交互式 Codex 中通过输入 `/goal` 使用。
+- `fastcar-cli auto-iterate --goal` 只是 CLI 目标文本参数，不会创建或更新 Codex goal。
+- 普通提示词里的 `Goal:` 前缀最多被 CLI 清洗为目标文本，不代表 Codex goal 已启用。
+- 只有当前 Codex 环境真实提供 goal 能力时，Agent 才能把自动迭代目标同步到 Codex goal；否则按普通 auto-iterate session 状态执行。
+- 推荐配合方式：先用 `/goal` 设置 Codex 会话级整体目标，再用 `fastcar-cli auto-iterate --goal` 创建可恢复 session；`/goal` 不替代 `.agent-state/auto-iterate/<session>/state.json`。
+- Codex goal 的完成/阻塞状态必须与真实任务状态一致，不得因为局部验证通过、预算不足或普通 CLI 参数存在就标记完成。
+
 ## Import 规则
 
 - `@fastcar/*` 相关模块必须使用 TypeScript 静态 `import`。

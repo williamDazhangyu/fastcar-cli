@@ -17,17 +17,32 @@
 
 本协议中的 `goal` 可能出现在不同上下文，含义不同。Agent 必须先判断用户说的是哪一种，不得把一种 `goal` 能力伪装成另一种：
 
+- Codex `/goal`：交互式 Codex 的会话级目标入口，用于记录当前整体 objective、status 和可选 token_budget。它适合承载“这次对话/任务最终要达成什么”。
 - `fastcar-cli auto-iterate --goal "<目标>"`：这是 fastcar-cli 的目标文本参数，只负责把简短目标写入自动迭代 session 和启动提示。
-- `Goal: <文本>` 或 `Goal：<文本>`：这是普通提示词内容。fastcar-cli 可以把位置参数里的该前缀清洗成目标文本，但除非当前客户端明确提供 Goal 入口，否则它不会自动启用客户端的 Goal 模式。
-- Codex 客户端 Goal 入口：这是 Codex 客户端 UI 或宿主环境提供的任务目标入口。协议只能建议用户把自动迭代启动提示放入该入口，不能通过提示词或 `fastcar-cli --goal` 强制启用。
-- “Codex goal 处理/接手”：在本路由文档中仅作为用户口语，等价于派发给 Codex worker / dispatch；默认映射为 `fastcar-cli auto-iterate --dispatch ... --agent codex ...`，不是声明已经启用 Codex 客户端 Goal 模式。
+- `Goal: <文本>` 或 `Goal：<文本>`：这是普通提示词内容。fastcar-cli 可以把位置参数里的该前缀清洗成目标文本，但它不会自动创建 Codex goal，也不会改变 Codex 运行时的 goal 状态。
+- Codex goal 模型：这是 Codex 运行时提供的任务目标状态能力，通常包含 objective、status、可选 token_budget 和完成/阻塞状态。交互式 Codex 中通过输入 `/goal` 使用该入口；不能通过普通提示词、`codex goal` 子命令或 `fastcar-cli --goal` 强制启用。
+- “Codex goal 处理/接手”：如果用户说的是当前 Codex 会话的整体目标，优先使用可用的 Codex goal 模型记录或读取目标；如果用户说的是把某个 auto-iterate session 的 REQ 或子任务交给另一个 Codex worker，则按 `fastcar-cli auto-iterate --dispatch ... --agent codex ...` 处理。
+
+推荐组合方式：
+
+```text
+1. 先在交互式 Codex 输入 /goal，设置会话级整体目标。
+2. 再运行 fastcar-cli auto-iterate --quick --goal "<同一目标摘要>" --session <session> --yes。
+3. 读取 .agent-state/auto-iterate/<session>/start-prompt.md，按 auto-iterate-coding 执行。
+4. Codex /goal 只记录会话级目标和高层状态；auto-iterate state.json 记录 session、mode、预算、RCM、验证证据、恢复状态和交付门禁。
+5. 只有 state.json 中关键需求、验证、清理、Skill Capture 和 post-agent gate 满足交付条件后，才把 Codex goal 标记为 complete。
+```
 
 执行规则：
 
-- 如果当前环境的 `codex --help` / `codex exec --help` 没有暴露 `goal` 子命令或 `--goal` 参数，必须说明 CLI 不支持显式 Codex Goal 模式；改用普通 prompt、`codex exec` 或 `fastcar-cli auto-iterate --goal`。
-- 如果用户明确要求“启用 Codex Goal 模式”，但当前环境只有普通聊天或 CLI，必须说明无法由协议强制启用客户端 UI Goal；只能按自动迭代协议执行或生成可粘贴到客户端 Goal 入口的文本。
+- 在交互式 Codex 中，使用 `/goal` 创建、查看或更新当前 goal；如果需要先确认本地版本是否启用该能力，可运行 `codex features list` 并确认 `goals` 为 `stable true`。
+- 不要仅因为 `codex --help` 或 `codex exec --help` 没有 `goal` 子命令就判定 goal 模型不可用；`/goal` 是交互式入口，不是独立 CLI 子命令。
+- 如果当前 Codex 运行时提供 goal 能力，启动长任务或用户明确要求使用 goal 模型时，可通过 `/goal` 创建或读取当前 goal，并把 objective 与 auto-iterate session 的 `task.goal` 保持语义一致。
+- Codex goal 的 `status=complete` 只能在用户目标真实完成且无需继续工作时设置；`status=blocked` 只能在同一阻塞条件连续出现并且无用户输入或外部状态变化就无法继续时设置。
+- 如果当前环境没有 Codex goal 能力，必须说明不可用并降级为普通 prompt、`codex exec`、客户端可粘贴文本或 `fastcar-cli auto-iterate --goal`；不得声称已经创建或更新 Codex goal。
 - 如果用户只是说“让 auto-iterate goal 处理”，按父任务启动映射为 `--goal` 参数。
-- 如果用户说“让 Codex goal 处理 <session> 的 <REQ>”，按 Codex worker dispatch 处理，并优先 dry-run 生成 prompt。
+- 如果用户说“让 Codex goal 处理 <session> 的 <REQ>”，通常按 Codex worker dispatch 处理，并优先 dry-run 生成 prompt；只有用户明确指当前会话的整体目标时，才使用 Codex goal 模型。
+- 不要用 `/goal` 替代 auto-iterate session；`/goal` 不创建 `.agent-state/auto-iterate/<session>/state.json`，也不记录 RCM、验证证据或恢复指针。
 
 ## 映射表
 
@@ -47,7 +62,7 @@
 | “优化这个模块” / “提升性能但别改行为” | `fastcar-cli auto-iterate --optimize --goal "<目标>" --session <session> --yes` |
 | “校验自动迭代 state” / “检查 session 是否一致” / “检查 sub-agent 协议一致性” | 如果能确定 session 或 state 路径，调用 `fastcar-cli auto-iterate --validate-state <session|state.md|state.json>`；不能确定时先运行 `--list` 或询问 |
 | “校验当前自动迭代 state” / “检查当前 session 状态” | `fastcar-cli auto-iterate --validate-state` |
-| “让 Codex goal 处理 REQ-001” / “派发给 Codex worker” | 将“Codex goal”理解为 Codex worker / dispatch 口语，不是客户端 Goal 模式；调用 `fastcar-cli auto-iterate --dispatch <session> --agent codex --task "<子任务>" --files "<白名单>" --verify-command "<验证命令>" --dry-run`；确认 prompt 后再去掉 `--dry-run` 并配置 `AUTO_ITERATE_CODEX_CMD` |
+| “让 Codex goal 处理 REQ-001” / “派发给 Codex worker” | 默认将“Codex goal”理解为 Codex worker / dispatch 口语；调用 `fastcar-cli auto-iterate --dispatch <session> --agent codex --task "<子任务>" --files "<白名单>" --verify-command "<验证命令>" --dry-run`；确认 prompt 后再去掉 `--dry-run` 并配置 `AUTO_ITERATE_CODEX_CMD` |
 | “让 Claude Code 处理 REQ-001” / “派发给 Gemini/Kimi/Cursor worker” | `fastcar-cli auto-iterate --dispatch <session> --agent <claude|gemini|kimi|cursor|windsurf|copilot|jules|devin|openhands|replit> --task "<子任务>" --files "<白名单>" --verify-command "<验证命令>" --dry-run`；确认 prompt 后再配置对应 `AUTO_ITERATE_<AGENT>_CMD` |
 | “列出自动迭代任务” | `fastcar-cli auto-iterate --list` |
 | “切换到登录修复任务” | `fastcar-cli auto-iterate --switch <session>` |
@@ -63,7 +78,7 @@
 ```text
 1. state 校验：validate-state
 2. session 管理：列出 / 切换 / 恢复
-3. 明确派发给 Codex / worker / goal：dispatch；这里的 goal 是口语，不等于 Codex 客户端 Goal 模式
+3. 明确派发给 Codex / worker / goal：dispatch；这里的 goal 多数是口语，不等于当前会话 Codex goal 模型
 4. 明确禁止修改：verify 或 plan-only
 5. 明确要求诊断、debug、复现、flaky、性能回归：diagnose
 6. 明确要求原型、试方案、验证状态机、验证数据模型：prototype
@@ -154,7 +169,9 @@ Agent：先在当前 shell 设置 `AUTO_ITERATE_KIMI_CMD='powershell -NoProfile 
 
 父任务启动推荐句式：让 auto-iterate goal 处理：<目标>，session 叫 <session>。
 
-子任务派发推荐句式：让 Codex worker 处理 <session> 的 <REQ 或子任务>，只能改 <文件白名单>，验证命令 <命令>，先 dry-run。兼容旧口语“让 Codex goal 处理”，但必须按 dispatch 解释，不得声称已启用 Codex 客户端 Goal 模式。
+Codex `/goal` + auto-iterate 推荐句式：先在交互式 Codex 输入 `/goal`，把当前 Codex goal 设为：<整体目标>；再启动 `fastcar-cli auto-iterate --quick --goal "<同一目标摘要>" --session <session> --yes`。
+
+子任务派发推荐句式：让 Codex worker 处理 <session> 的 <REQ 或子任务>，只能改 <文件白名单>，验证命令 <命令>，先 dry-run。兼容旧口语“让 Codex goal 处理”，但必须先判断是当前会话 goal 还是 worker dispatch；不得把 `fastcar-cli --goal` 伪装成 Codex goal 模型。
 
 真实执行句式：确认 prompt 后用本地 Codex/Kimi 执行；如果没有配置 `AUTO_ITERATE_CODEX_CMD` 或 `AUTO_ITERATE_KIMI_CMD`，先只生成 prompt，不要猜测交互式命令。
 ```

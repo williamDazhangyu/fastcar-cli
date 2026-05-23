@@ -316,6 +316,33 @@ reason：
 待删除 artifacts：
 清理状态：pending / completed / blocked
 
+## Style Consolidation / 技巧风格整理
+status：pending / completed / not_applicable / blocked / not_available
+trigger：功能实现并通过验证后、Delivery Evidence ready 前
+local_skills_reviewed：
+global_skills_reviewed：
+applied_rules：
+changed_files：
+scope：仅整理本次需求相关代码，不扩大行为范围
+summary：
+verification_summary：
+skipped_reasons：
+last_run_summary：
+执行时机：实现需求的模式中，所有关键 REQ 已实现并通过验证后，先读取本项目 .agents/skills 与全局 skills 中相关代码风格、框架约束和反模式，再做有边界整理；整理后必须重新运行相关验证，再进入 Delivery Evidence ready。
+
+## Context Reset Review Gate / 上下文清空复核门禁
+status：pending / passed / failed / blocked / not_available / user_accepted_limited
+trigger：所有关键 REQ passed 后、Delivery Evidence ready 前
+review_cycles_used：
+max_review_cycles：1
+source_of_truth：state.json、原始需求、当前代码/diff、真实验证结果、项目规范和相关 skills；不得依赖历史对话记忆
+standards_findings：
+spec_findings：
+decision：not_run / pass / reopen_requirements / block / limited_acceptance
+reopened_requirements：
+last_run_summary：
+执行方式：清空对话实现细节，只依据 source_of_truth 重新读取事实；按 Standards / Spec 两轴复核。发现问题必须新增或重开 REQ 并回到实现循环；无发现时才能进入 Delivery Evidence ready。
+
 ## Delivery Evidence / 交付证据
 status：pending / ready / blocked / delivered
 goal：
@@ -373,5 +400,6 @@ next_action：deliver / context_reset_and_repair / stop
 如果 Watchdog.fresh_eyes_required 为 true，必须先设置 triggered=true、required_action=context_compress_and_review，并完成上下文压缩与新鲜视角复查后再继续或交付。
 如果所有关键 REQ 已 passed，必须先完成 validation_hardening：至少达到 minimum_validation_hardening_iterations，并覆盖 boundary / negative / regression 维度；无法执行时标记 blocked 或 not_available，不得静默跳过。
 如果 Temporary Artifacts / Cleanup 中仍有未清理的 debug 日志、harness、原型路由或一次性文件，不要按成功交付输出，除非用户明确要求保留并已标记原因。
+实现需求的模式中，功能实现并通过验证后、交付前必须执行 Style Consolidation / 技巧风格整理：读取本地 .agents/skills 和全局 skills 中相关代码风格规则，整理本次修改范围内代码并重新验证；不适用时必须记录 skipped_reasons。
 每次任务交付、提前停止或阶段性验收后，必须执行 Skill Capture / 技能沉淀：把高价值、可复用、可验证的经验写入 .agents/skills，并维护 .agents/skills/index.md；没有高价值内容时记录 skipped_no_high_value 和原因。
 ```

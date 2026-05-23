@@ -16,6 +16,12 @@ tool_mapping:
   state_management:
     - "Read and update `.agent-state/auto-iterate/<session>/state.json` when available"
     - "Refresh `.agent-state/auto-iterate/<session>/state.md` after each meaningful update"
+  goal_model:
+    - "Use interactive Codex `/goal` when the current runtime exposes goal state"
+    - "Check `codex features list` for `goals stable true` only as a feature availability signal"
+    - "Keep the Codex goal objective semantically aligned with the auto-iterate task goal"
+    - "Do not confuse Codex goal state with `fastcar-cli auto-iterate --goal`"
+    - "Use auto-iterate state.json, not `/goal`, as the source of truth for session recovery, budgets, RCM, validation evidence, and delivery gates"
   session_flow:
     - "Create or reuse explicit session names"
     - "Use `--resume`, `--switch`, and `--validate-state` for session recovery and audit"
@@ -31,7 +37,7 @@ platform_constraints:
     - "git_status"
     - "local_tests"
   limited:
-    - "no guaranteed UI Goal mode"
+    - "Codex goal model is runtime-dependent and may be unavailable in plain CLI or non-Codex hosts"
     - "no assumption of database or external service access"
   blocked_without_user_confirmation:
     - "production database access"
@@ -52,6 +58,11 @@ prompt_contract:
   delivery:
     - "Report verification evidence, not just completion"
     - "Include Skill Capture status and index maintenance outcome"
+  goal_model:
+    - "In interactive Codex, use `/goal` to create, inspect, or update the current goal"
+    - "Mark Codex goal complete only after the real objective is achieved"
+    - "Mark Codex goal blocked only when the task is genuinely blocked and cannot progress without user input or external-state changes"
+    - "Do not mark `/goal` complete until auto-iterate delivery gates have passed when an auto-iterate session is active"
 
 state_handling:
   canonical:

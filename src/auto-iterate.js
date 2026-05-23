@@ -46,6 +46,8 @@ const REQUIRED_STATE_SECTIONS = [
   "## Delta Assessment / 差异评估",
   "## Diff Budget / 变更预算审计",
   "## Temporary Artifacts / Cleanup / 临时产物清理",
+  "## Style Consolidation / 技巧风格整理",
+  "## Context Reset Review Gate / 上下文清空复核门禁",
   "## Delivery Evidence / 交付证据",
   "## Skill Capture / 技能沉淀",
   "## Post-Agent Validation Gate / Agent 后置校验门禁",
@@ -266,12 +268,14 @@ const OPTIONS_WITH_REQUIRED_VALUE = new Set([
   "--verify-command",
   "--verify-cmd",
   "--timeout",
+  "--capture-skills",
 ]);
 
 const OPTIONS_WITH_OPTIONAL_VALUE = new Set([
   "--dispatch",
   "--examples",
   "--validate-state",
+  "--finalize",
 ]);
 
 function isConsumedOptionValue(args, index) {
@@ -280,6 +284,9 @@ function isConsumedOptionValue(args, index) {
   }
 
   const previous = String(args[index - 1] || "");
+  if (previous === "--capture-skills" || previous === "--finalize") {
+    return true;
+  }
   return OPTIONS_WITH_REQUIRED_VALUE.has(previous) || OPTIONS_WITH_OPTIONAL_VALUE.has(previous);
 }
 
@@ -310,6 +317,7 @@ function parseArgs(args = []) {
     resumeSession: null,
     validateState: null,
     strictState: false,
+    finalizeSession: null,
     dispatchSession: null,
     agent: "codex",
     task: null,
@@ -407,6 +415,18 @@ function parseArgs(args = []) {
       return;
     }
 
+    if (arg === "--finalize") {
+      options.finalizeSession = args[index + 1] && !args[index + 1].startsWith("-")
+        ? args[index + 1]
+        : "__current__";
+      return;
+    }
+
+    if (arg.startsWith("--finalize=")) {
+      options.finalizeSession = arg.slice("--finalize=".length) || "__current__";
+      return;
+    }
+
     if (arg === "--dispatch") {
       options.dispatchSession = args[index + 1] && !args[index + 1].startsWith("-")
         ? args[index + 1]
@@ -416,6 +436,16 @@ function parseArgs(args = []) {
 
     if (arg.startsWith("--dispatch=")) {
       options.dispatchSession = arg.slice("--dispatch=".length) || "__current__";
+      return;
+    }
+
+    if (arg === "--capture-skills" && args[index + 1]) {
+      options.captureSkillsSession = args[index + 1];
+      return;
+    }
+
+    if (arg.startsWith("--capture-skills=")) {
+      options.captureSkillsSession = arg.slice("--capture-skills=".length);
       return;
     }
 
@@ -608,9 +638,13 @@ Session:
   --resume <name>
   --validate-state [session|state.md|state.json]
   --strict-state
+  --finalize [session]
 
 Dispatch:
   --dispatch <session> --agent <${supportedAgents}> --task <text> --files <glob[,glob]> [--verify-command <cmd>] [--timeout <seconds>] [--dry-run]
+
+Skill Capture:
+  --capture-skills <session> [--yes]
 
 Other:
   --goal <text>
@@ -1285,6 +1319,112 @@ function validateDeliveryEvidenceModel(issues, evidence, validation, cleanup, re
   }
 }
 
+function isImplementationMode(mode) {
+  return ["strict", "quick", "diagnose", "prototype"].includes(mode);
+}
+
+function validateStyleConsolidationModel(issues, styleConsolidation, state) {
+  const statusValues = ["pending", "completed", "not_applicable", "blocked", "not_available"];
+  if (!requirePlainObject(issues, styleConsolidation, "state.json.styleConsolidation")) {
+    return;
+  }
+
+  requireEnumValue(issues, styleConsolidation.status, statusValues, "state.json.styleConsolidation.status");
+  requireNonEmptyStringFields(issues, styleConsolidation, [
+    "trigger",
+    "scope",
+    "summary",
+    "verificationSummary",
+    "lastRunSummary",
+  ], "state.json.styleConsolidation");
+  requireArray(issues, styleConsolidation.localSkillsReviewed, "state.json.styleConsolidation.localSkillsReviewed");
+  requireArray(issues, styleConsolidation.globalSkillsReviewed, "state.json.styleConsolidation.globalSkillsReviewed");
+  requireArray(issues, styleConsolidation.appliedRules, "state.json.styleConsolidation.appliedRules");
+  requireArray(issues, styleConsolidation.changedFiles, "state.json.styleConsolidation.changedFiles");
+  requireArray(issues, styleConsolidation.skippedReasons, "state.json.styleConsolidation.skippedReasons");
+
+  const mode = state && state.mode ? state.mode.mode : "unknown";
+  const deliveryEvidence = state && state.deliveryEvidence ? state.deliveryEvidence : {};
+  const isReadyOrDelivered = deliveryEvidence.status === "ready" || deliveryEvidence.status === "delivered";
+  if (isReadyOrDelivered && isImplementationMode(mode) && styleConsolidation.status === "pending") {
+    addError(issues, "实现类模式 deliveryEvidence ready/delivered 前 styleConsolidation.status 不得为 pending");
+  }
+  if (styleConsolidation.status === "completed") {
+    if (styleConsolidation.localSkillsReviewed.length === 0 && styleConsolidation.globalSkillsReviewed.length === 0) {
+      addError(issues, "styleConsolidation.status=completed 时必须记录已参考的本地或全局 skill");
+    }
+    if (styleConsolidation.appliedRules.length === 0) {
+      addError(issues, "styleConsolidation.status=completed 时 appliedRules 不能为空");
+    }
+    if (/^(未运行|无|unknown|not_run)$/i.test(styleConsolidation.verificationSummary.trim())) {
+      addError(issues, "styleConsolidation.status=completed 时 verificationSummary 必须记录整理后的验证结论");
+    }
+  }
+  if (styleConsolidation.status === "not_applicable" && styleConsolidation.skippedReasons.length === 0) {
+    addError(issues, "styleConsolidation.status=not_applicable 时 skippedReasons 必须说明原因");
+  }
+}
+
+function validateContextResetReviewModel(issues, review, state) {
+  const statusValues = ["pending", "passed", "failed", "blocked", "not_available", "user_accepted_limited"];
+  const decisionValues = ["not_run", "pass", "reopen_requirements", "block", "limited_acceptance"];
+  if (!requirePlainObject(issues, review, "state.json.contextResetReview")) {
+    return;
+  }
+
+  requireEnumValue(issues, review.status, statusValues, "state.json.contextResetReview.status");
+  requireEnumValue(issues, review.decision, decisionValues, "state.json.contextResetReview.decision");
+  requireNonEmptyStringFields(issues, review, [
+    "trigger",
+    "sourceOfTruth",
+    "lastRunSummary",
+  ], "state.json.contextResetReview");
+  requireNonNegativeIntegerFields(issues, review, [
+    "reviewCyclesUsed",
+    "maxReviewCycles",
+  ], "state.json.contextResetReview");
+  requireArray(issues, review.standardsFindings, "state.json.contextResetReview.standardsFindings");
+  requireArray(issues, review.specFindings, "state.json.contextResetReview.specFindings");
+  requireArray(issues, review.reopenedRequirements, "state.json.contextResetReview.reopenedRequirements");
+
+  if (review.reviewCyclesUsed > review.maxReviewCycles) {
+    addError(issues, "contextResetReview.reviewCyclesUsed 不得大于 maxReviewCycles");
+  }
+
+  const deliveryEvidence = state && state.deliveryEvidence ? state.deliveryEvidence : {};
+  const isReadyOrDelivered = deliveryEvidence.status === "ready" || deliveryEvidence.status === "delivered";
+  const canDeliverWithReview = review.status === "passed" || review.status === "user_accepted_limited";
+  if (isReadyOrDelivered && !canDeliverWithReview) {
+    addError(issues, "deliveryEvidence ready/delivered 前 contextResetReview.status 必须为 passed 或 user_accepted_limited");
+  }
+  if (isReadyOrDelivered && review.status === "pending") {
+    addError(issues, "deliveryEvidence ready/delivered 前 contextResetReview.status 不得为 pending");
+  }
+  if (isReadyOrDelivered && review.status === "failed") {
+    addError(issues, "contextResetReview.status=failed 时不得交付；必须重开 REQ 并回到实现循环");
+  }
+  if (isReadyOrDelivered && review.status === "passed" && review.decision !== "pass") {
+    addError(issues, "contextResetReview.status=passed 时 decision 必须为 pass");
+  }
+  if (review.status === "passed") {
+    if (review.reviewCyclesUsed < 1) {
+      addError(issues, "contextResetReview.status=passed 时 reviewCyclesUsed 必须至少为 1");
+    }
+    if (review.standardsFindings.length > 0 || review.specFindings.length > 0 || review.reopenedRequirements.length > 0) {
+      addError(issues, "contextResetReview.status=passed 时 findings 和 reopenedRequirements 必须为空");
+    }
+  }
+  if (review.status === "failed" && review.reopenedRequirements.length === 0) {
+    addError(issues, "contextResetReview.status=failed 时必须记录 reopenedRequirements");
+  }
+  if (isReadyOrDelivered && review.status === "user_accepted_limited" && review.decision !== "limited_acceptance") {
+    addError(issues, "contextResetReview.status=user_accepted_limited 时 decision 必须为 limited_acceptance");
+  }
+  if ((review.status === "blocked" || review.status === "not_available" || review.status === "user_accepted_limited") && review.lastRunSummary.trim() === "未运行") {
+    addError(issues, `contextResetReview.status=${review.status} 时 lastRunSummary 必须说明阻塞、不可用或有限接受原因`);
+  }
+}
+
 function validateSkillCaptureModel(issues, skillCapture, evidence) {
   const statusValues = [
     "pending",
@@ -1337,8 +1477,10 @@ function validatePostAgentValidationGateModel(issues, gate) {
   requireArray(issues, gate.failureSummary, "state.json.postAgentValidationGate.failureSummary");
   requireEnumValue(issues, gate.nextAction, nextActionValues, "state.json.postAgentValidationGate.nextAction");
 
-  if (gate.enabled && (!gate.command.includes("--validate-state") || !gate.command.includes("--strict-state"))) {
-    addError(issues, "state.json.postAgentValidationGate.command 必须包含 --validate-state 和 --strict-state");
+  const usesStrictValidateState = gate.command.includes("--validate-state") && gate.command.includes("--strict-state");
+  const usesFinalize = gate.command.includes("--finalize");
+  if (gate.enabled && !usesStrictValidateState && !usesFinalize) {
+    addError(issues, "state.json.postAgentValidationGate.command 必须包含 --finalize，或兼容旧格式 --validate-state 和 --strict-state");
   }
   if (gate.lastResult === "failed" && gate.nextAction !== "context_reset_and_repair" && gate.nextAction !== "stop") {
     addError(issues, "postAgentValidationGate.lastResult=failed 时 nextAction 必须为 context_reset_and_repair 或 stop");
@@ -2476,6 +2618,8 @@ function validateStateJsonModel(state, expected = {}) {
     "deltaAssessment",
     "diffBudget",
     "cleanup",
+    "styleConsolidation",
+    "contextResetReview",
     "deliveryEvidence",
     "skillCapture",
     "postAgentValidationGate",
@@ -2564,6 +2708,8 @@ function validateStateJsonModel(state, expected = {}) {
   validateDeltaAssessmentModel(issues, state.deltaAssessment, state.postChange, state.iterationPolicy);
   validateDiffBudgetModel(issues, state.diffBudget, state.iterationPolicy);
   validateDeliveryEvidenceModel(issues, state.deliveryEvidence, validation, cleanup, requirements);
+  validateStyleConsolidationModel(issues, state.styleConsolidation, state);
+  validateContextResetReviewModel(issues, state.contextResetReview, state);
   validateSkillCaptureModel(issues, state.skillCapture, state.deliveryEvidence);
   validatePostAgentValidationGateModel(issues, state.postAgentValidationGate);
   validateDeliveryGateConsistency(issues, state);
@@ -2973,6 +3119,33 @@ function buildStateModel(rawAnswers) {
       artifactsToDelete: "无",
       prototypeFiles: answers.mode === "prototype" ? "待创建并明确标记" : "无",
     },
+    styleConsolidation: {
+      status: isImplementationMode(answers.mode) ? "pending" : "not_applicable",
+      trigger: "功能实现并通过验证后、Delivery Evidence ready 前",
+      localSkillsReviewed: [],
+      globalSkillsReviewed: [],
+      appliedRules: [],
+      changedFiles: [],
+      scope: answers.mode === "optimize" || answers.mode === "verify" || answers.mode === "plan"
+        ? "非实现模式默认不要求整理"
+        : "仅整理本次需求相关代码，不扩大行为范围",
+      summary: "尚未按本地和全局 skills 的代码风格整理",
+      verificationSummary: "未运行",
+      skippedReasons: isImplementationMode(answers.mode) ? [] : ["当前模式不是实现需求模式"],
+      lastRunSummary: "尚未执行技巧风格整理",
+    },
+    contextResetReview: {
+      status: "pending",
+      trigger: "所有关键 REQ passed 后、Delivery Evidence ready 前",
+      reviewCyclesUsed: 0,
+      maxReviewCycles: 1,
+      sourceOfTruth: "state.json、原始需求、当前代码/diff、真实验证结果、项目规范和相关 skills；不得依赖历史对话记忆",
+      standardsFindings: [],
+      specFindings: [],
+      decision: "not_run",
+      reopenedRequirements: [],
+      lastRunSummary: "尚未执行上下文清空复核",
+    },
     deliveryEvidence: {
       status: "pending",
       goal: answers.goal || "未指定",
@@ -2997,7 +3170,7 @@ function buildStateModel(rawAnswers) {
     },
     postAgentValidationGate: {
       enabled: true,
-      command: `fastcar-cli auto-iterate --validate-state ${answers.session || "default"} --strict-state`,
+      command: `fastcar-cli auto-iterate --finalize ${answers.session || "default"} --yes`,
       lastResult: "not_run",
       repairCyclesUsed: 0,
       maxRepairCycles: 5,
@@ -3343,6 +3516,33 @@ reason：尚未检查 git diff
 待删除 artifacts：无
 清理状态：pending
 
+## Style Consolidation / 技巧风格整理
+status：${isImplementationMode(answers.mode) ? "pending" : "not_applicable"}
+trigger：功能实现并通过验证后、Delivery Evidence ready 前
+local_skills_reviewed：无
+global_skills_reviewed：无
+applied_rules：无
+changed_files：无
+scope：${answers.mode === "optimize" || answers.mode === "verify" || answers.mode === "plan" ? "非实现模式默认不要求整理" : "仅整理本次需求相关代码，不扩大行为范围"}
+summary：尚未按本地和全局 skills 的代码风格整理
+verification_summary：未运行
+skipped_reasons：${isImplementationMode(answers.mode) ? "无" : "当前模式不是实现需求模式"}
+last_run_summary：尚未执行技巧风格整理
+执行时机：实现需求的模式中，所有关键 REQ 已实现并通过验证后，先读取本项目 .agents/skills 与全局 skills 中相关代码风格、框架约束和反模式，再做有边界整理；整理后必须重新运行相关验证，再进入 Delivery Evidence ready。
+
+## Context Reset Review Gate / 上下文清空复核门禁
+status：pending / passed / failed / blocked / not_available / user_accepted_limited
+trigger：所有关键 REQ passed 后、Delivery Evidence ready 前
+review_cycles_used：0
+max_review_cycles：1
+source_of_truth：state.json、原始需求、当前代码/diff、真实验证结果、项目规范和相关 skills；不得依赖历史对话记忆
+standards_findings：无
+spec_findings：无
+decision：not_run / pass / reopen_requirements / block / limited_acceptance
+reopened_requirements：无
+last_run_summary：尚未执行上下文清空复核
+执行方式：清空对话实现细节，只依据 source_of_truth 重新读取事实；按 Standards / Spec 两轴复核。发现问题必须新增或重开 REQ 并回到实现循环；无发现时才能进入 Delivery Evidence ready。
+
 ## Delivery Evidence / 交付证据
 status：pending
 goal：${answers.goal || "未指定"}
@@ -3368,7 +3568,7 @@ last_run_summary：尚未执行任务后技能沉淀
 
 ## Post-Agent Validation Gate / Agent 后置校验门禁
 enabled：true
-command：fastcar-cli auto-iterate --validate-state ${answers.session || "default"} --strict-state
+command：fastcar-cli auto-iterate --finalize ${answers.session || "default"} --yes
 last_result：not_run
 repair_cycles_used：0
 max_repair_cycles：5
@@ -3399,6 +3599,7 @@ Watchdog：enabled，交付前必须从 unknown 更新为 verifiable / partially
 如果 Requirement Coverage Matrix 中仍存在 pending / implemented / not_verified 的关键需求，不要按成功交付输出。
 如果 Watchdog triggered 为 true，先处理 required_action；交付可验证性为 not_verifiable 或 unknown 时，不要按成功交付输出。
 如果 Watchdog.fresh_eyes_required 为 true，必须先设置 triggered=true、required_action=context_compress_and_review，并完成上下文压缩与新鲜视角复查后再继续或交付。
+如果所有关键 REQ 已 passed，Delivery Evidence ready 前必须完成 Context Reset Review Gate：清空对话实现细节，只依据 state.json、原始需求、当前代码/diff、真实验证结果、项目规范和相关 skills 执行 Standards / Spec 两轴复核。发现问题必须新增或重开 REQ 并回到实现循环；无发现时将 contextResetReview.status 标记为 passed。
 如果所有关键 REQ 已 passed，必须先完成 validation_hardening：至少达到 minimum_validation_hardening_iterations，并覆盖 boundary / negative / regression 维度；无法执行时标记 blocked 或 not_available，不得静默跳过。
 如果 Temporary Artifacts / Cleanup 中仍有未清理的 debug 日志、harness、原型路由或一次性文件，不要按成功交付输出，除非用户明确要求保留并已标记原因。
 `;
@@ -3457,7 +3658,9 @@ sub-agent 是 Agent 工具执行自动迭代时的协议增强，不是 fastcar-
 请启用并维护 Watchdog 状态；每轮迭代前后、上下文压缩后、恢复后和最终交付前都要检查无进展、验证缺失、状态漂移和交付可验证性，并把 required_action 写回 state.json 后刷新 state.md。
 如果 Watchdog 触发 run_validation、reconcile、ask_user、context_compress_and_review 或 stop，必须先处理 required_action，不得绕过；交付可验证性为 not_verifiable 或 unknown 时，不要按成功交付输出。
 当 Watchdog.fresh_eyes_required = true 时：所有 REQ 已 passed 但仍有剩余实现预算。请执行上下文压缩，输出 Context Handoff Summary，清空对话中的实现细节。以"新接手项目的开发者"视角重新审视全部代码和 RCM。发现遗漏 → 创建新 REQ，重置 fresh_eyes_required = false，继续迭代。无遗漏 → fresh_eyes_required = false，继续优化或交付。
+当所有关键 REQ passed 后、Delivery Evidence ready 前，必须执行 Context Reset Review Gate：清空对话实现细节，只依据 state.json、原始需求、当前代码/diff、真实验证结果、项目规范和相关 skills 重新读取事实；按 Standards / Spec 两轴复核。发现问题时更新 contextResetReview.status=failed、记录 reopenedRequirements、新增或重开 REQ 并回到实现循环；无发现时更新 contextResetReview.status=passed、decision=pass、reviewCyclesUsed>=1。不要用“我记得已经完成”替代该门禁。
 当所有关键 REQ passed 且 fresh_eyes_required 已处理后，必须进入 validation_hardening 交付前验证加固。验证加固不消耗实现迭代预算；每轮选择一个攻击式验证维度（boundary、negative、regression，必要时追加 compatibility、concurrency、permission、data、ui），优先用局部最小可证伪验证补充真实测试或等价验证命令。重型 e2e / 全量 CI 不得每轮机械重复，只有相关风险、影响面较大或最终交付门禁需要时运行；如因耗时延后，记录 heavy_validation_deferred、原因和用户可复现命令。发现问题时新增或重开 REQ 并回到实现；无新发现时更新 validation_hardening_iterations_used、validation_hardening_dimensions_done 和验证证据。未达到 minimum_validation_hardening_iterations 或缺少必需维度时，不得按成功交付输出。
+如果当前模式是实现需求的模式（strict、quick、diagnose、prototype），在功能实现并通过验证后、Delivery Evidence ready 前，必须执行 Style Consolidation / 技巧风格整理：读取本项目 .agents/skills 和全局 skills 中与本次代码相关的代码风格、FastCar API 约束、TypeScript 规范、反模式和验证建议，按这些规则重新整理本次修改范围内代码。不得扩大行为范围、引入无关重构或为了风格削弱测试。整理后必须重新运行相关验证，并更新 state.json.styleConsolidation；非实现模式可标记 not_applicable 并记录原因。
 当上下文变长、完成 3-5 轮迭代、进入新阶段或开始重复尝试时，请输出并使用 Context Handoff Summary 继续。
 请维护完整任务清单、已完成任务、当前任务、剩余任务和整体完成状态；剩余任务非空时不得按成功交付停止，只能继续迭代或按提前停止汇报。
 修 bug、性能回归或验证失败时，请先建立能复现目标问题的 feedback loop；无法建立时停止并说明尝试过什么、缺少什么 artifact 或环境。
@@ -4339,13 +4542,16 @@ const NATURAL_LANGUAGE_EXAMPLES = [
     ],
   },
   {
-    title: "Codex worker / dispatch 派发",
+    title: "Codex /goal 与 worker dispatch",
     keywords: ["codex", "goal", "worker", "dispatch", "派发", "子 Agent"],
     examples: [
-      "说明：这里的 Codex goal 是用户口语，按 Codex worker / dispatch 处理，不表示已启用 Codex 客户端 Goal 模式",
+      "推荐：先在交互式 Codex 输入 /goal 设置整体目标，再启动 fastcar-cli auto-iterate --quick --goal \"同一目标摘要\" --session <session> --yes",
+      "说明：/goal 负责 Codex 会话级目标；auto-iterate state.json 负责 session、预算、RCM、验证证据和恢复状态",
+      "说明：这里的 Codex goal 需要先判断语义；子任务默认按 Codex worker / dispatch 处理，不等于更新当前会话 Codex goal 模型",
       "让 Codex goal 处理 login-bugfix 的 REQ-001，只能改 src/auth.js 和 test/auth.test.js，验证命令 npm test，先 dry-run",
       "让 Codex goal 接手当前自动迭代任务的 REQ-002，文件白名单是 src/auto-iterate.js 和 test/auto-iterate-doc-reliability.test.js，先生成 worker prompt 不实际执行",
       "派发给 Codex worker：session 是 dispatch-codex，任务是补充 resume 降级测试，只允许改 test/auto-iterate-doc-reliability.test.js，跑 npm test",
+      "在交互式 Codex 输入 /goal，把当前 Codex goal 设为：完整修复登录失败并通过 npm test",
       "确认 prompt 后，让本地 Codex 真实执行这个 worker",
       "先生成 Codex worker prompt，不启动外部 Agent，确认后再配置 AUTO_ITERATE_CODEX_CMD 执行",
     ],
@@ -4408,6 +4614,593 @@ function showNaturalLanguageExamples(query) {
   });
 }
 
+// ============================================================
+// Skill Capture / 技能沉淀
+// ============================================================
+
+const SKILL_CAPTURE_MAX_TEXT_LENGTH = 220;
+const SKILL_CAPTURE_SENSITIVE_PATTERNS = [
+  {
+    pattern: /\b(authorization)\s*[:=]\s*bearer\s+[A-Za-z0-9._~+/=-]+/gi,
+    replacement: "$1: Bearer [REDACTED]",
+  },
+  {
+    pattern: /\b(password|passwd|pwd|token|secret|api[_-]?key|access[_-]?key|private[_-]?key|connection[_-]?string|dsn|jwt)\s*[:=]\s*[^;\s,)\]}]+/gi,
+    replacement: "$1=[REDACTED]",
+  },
+  {
+    pattern: /([a-z][a-z0-9+.-]*:\/\/)([^:\s/@]+):([^@\s/]+)@/gi,
+    replacement: "$1[REDACTED]@",
+  },
+  {
+    pattern: /\b[A-Za-z0-9_~+/=-]{32,}\b/g,
+    replacement: "[REDACTED_TOKEN]",
+  },
+  {
+    pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
+    replacement: "[REDACTED_EMAIL]",
+  },
+];
+
+function sanitizeSkillCaptureText(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  let text = String(value)
+    .replace(/\r?\n+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) {
+    return "";
+  }
+
+  for (const item of SKILL_CAPTURE_SENSITIVE_PATTERNS) {
+    text = text.replace(item.pattern, item.replacement);
+  }
+
+  if (text.length > SKILL_CAPTURE_MAX_TEXT_LENGTH) {
+    text = `${text.slice(0, SKILL_CAPTURE_MAX_TEXT_LENGTH - 3).trim()}...`;
+  }
+
+  return text;
+}
+
+function isHighValueSkillCaptureText(value) {
+  const text = sanitizeSkillCaptureText(value);
+  if (text.length < 8) {
+    return false;
+  }
+
+  if (/^(无|none|null|unknown|pending|未指定|未运行|not_run|尚未开始)$/i.test(text)) {
+    return false;
+  }
+
+  if (/^(测试通过|验证通过|passed|ok|success)$/i.test(text)) {
+    return false;
+  }
+
+  if (/(一次性日志|完整日志|客户数据|用户数据|secret|password|token|api[_-]?key)/i.test(text) &&
+      /\[REDACTED/.test(text) === false) {
+    return false;
+  }
+
+  return true;
+}
+
+function extractSkillCandidates(stateJson) {
+  const requirements = Array.isArray(stateJson.requirements) ? stateJson.requirements : [];
+  const decisions = stateJson.decisions || {};
+  const deliveryEvidence = stateJson.deliveryEvidence || {};
+  const validation = stateJson.validation || {};
+  const implementationContract = stateJson.implementationContract || {};
+  const session = stateJson.session || {};
+  const candidateMap = new Map();
+
+  function addCandidate(name, data) {
+    if (!candidateMap.has(name)) {
+      candidateMap.set(name, {
+        name,
+        title: data.title || name,
+        description: data.description || "",
+        scenarios: new Set(),
+        approaches: new Set(),
+        verifications: new Set(),
+        pitfalls: new Set(),
+        sourceRequirements: [],
+        sourceDecisions: [],
+      });
+    }
+
+    const candidate = candidateMap.get(name);
+    const scenario = sanitizeSkillCaptureText(data.scenario);
+    const approach = sanitizeSkillCaptureText(data.approach);
+    const verification = sanitizeSkillCaptureText(data.verification);
+    const pitfall = sanitizeSkillCaptureText(data.pitfall);
+    if (isHighValueSkillCaptureText(scenario)) candidate.scenarios.add(scenario);
+    if (isHighValueSkillCaptureText(approach)) candidate.approaches.add(approach);
+    if (isHighValueSkillCaptureText(verification)) candidate.verifications.add(verification);
+    if (isHighValueSkillCaptureText(pitfall)) candidate.pitfalls.add(pitfall);
+    if (data.sourceReq) candidate.sourceRequirements.push(data.sourceReq);
+    if (data.sourceDecision) candidate.sourceDecisions.push(data.sourceDecision);
+  }
+
+  const frameworkKeywords = [
+    { pattern: /fastcar|@fastcar|Koa|Controller|Component|Service|Autowired|Application/i, skill: "fastcar-framework", title: "FastCar Framework 实践经验" },
+    { pattern: /数据库|database|mysql|postgresql|pgsql|MongoDB|Redis|ORM|mapper|entity|transaction|事务/i, skill: "fastcar-database", title: "FastCar 数据库实践经验" },
+    { pattern: /RPC|rpc|微服务|microservice|gRPC|WebSocket|Socket\.IO|MQTT|protobuf/i, skill: "fastcar-rpc-microservices", title: "FastCar RPC/微服务实践经验" },
+    { pattern: /serverless|Serverless|阿里云|腾讯云|AWS Lambda|FC|SCF|云函数/i, skill: "fastcar-serverless", title: "FastCar Serverless 实践经验" },
+    { pattern: /缓存|cache|定时任务|cron|时间轮|time.wheel|workerpool|文件监听|COS|对象存储/i, skill: "fastcar-toolkit", title: "FastCar 工具集实践经验" },
+    { pattern: /队列|queue|pg.?boss|PgBoss|job|schedule|worker|dead.letter/i, skill: "fastcar-pgboss", title: "FastCar PgBoss 队列实践经验" },
+    { pattern: /TypeScript|类型|type|interface|enum|泛型|generic|类型安全/i, skill: "typescript-coding-style", title: "TypeScript 编码实践经验" },
+  ];
+
+  const sessionSkillName = slugifySessionName(`captured-${session.session || "session"}`);
+
+  for (const req of requirements) {
+    const summary = req.summary || "";
+    const evidence = req.evidence || "";
+    const combined = `${summary} ${evidence}`;
+    const sanitizedEvidence = sanitizeSkillCaptureText(req.evidence || req.nextStep || "");
+
+    for (const item of frameworkKeywords) {
+      if (item.pattern.test(combined)) {
+        addCandidate(item.skill, {
+          title: item.title,
+          description: `从 session ${session.session || "unknown"} 自动提取的实战经验`,
+          scenario: req.summary,
+          approach: sanitizedEvidence,
+          sourceReq: req.id || "",
+        });
+      }
+    }
+
+    if (req.status === "passed" && isHighValueSkillCaptureText(sanitizedEvidence)) {
+      addCandidate(sessionSkillName, {
+        title: `Session ${session.session || "unknown"} 技能沉淀`,
+        description: "从自动迭代 session 提取的通用实战经验",
+        scenario: req.summary,
+        approach: sanitizedEvidence,
+        verification: sanitizedEvidence,
+        sourceReq: req.id || "",
+      });
+    }
+
+    if (req.status === "blocked" && isHighValueSkillCaptureText(req.blockedReason)) {
+      addCandidate(sessionSkillName, {
+        title: `Session ${session.session || "unknown"} 技能沉淀`,
+        pitfall: `${req.summary}: ${req.blockedReason}`,
+        sourceReq: req.id || "",
+      });
+    }
+  }
+
+  const decisionFields = [
+    "parallelWriteConfirmation",
+    "coderFileOwnership",
+    "fallbackStrategy",
+    "architectureDecision",
+    "compatibilityDecision",
+    "resourceDecision",
+    "scopeDecision",
+  ];
+  for (const field of decisionFields) {
+    const sanitizedValue = sanitizeSkillCaptureText(decisions[field]);
+    if (isHighValueSkillCaptureText(sanitizedValue)) {
+      addCandidate(sessionSkillName, {
+        title: `Session ${session.session || "unknown"} 技能沉淀`,
+        approach: `决策 ${field}: ${sanitizedValue}`,
+        sourceDecision: field,
+      });
+    }
+  }
+
+  const validationCommands = Array.isArray(validation.commands) ? validation.commands : [];
+  for (const cmd of validationCommands) {
+    const commandText = cmd && typeof cmd.command === "string"
+      ? sanitizeSkillCaptureText(cmd.command)
+      : "";
+    if (isHighValueSkillCaptureText(commandText)) {
+      const resultText = cmd.result === "passed" ? "通过" :
+        cmd.result === "failed" ? "失败" : "未运行";
+      const summary = sanitizeSkillCaptureText(cmd.summary);
+      addCandidate(sessionSkillName, {
+        title: `Session ${session.session || "unknown"} 技能沉淀`,
+        verification: `${commandText} - ${resultText}${isHighValueSkillCaptureText(summary) ? `: ${summary}` : ""}`,
+      });
+    }
+  }
+
+  const contractFields = ["goal", "scope", "nonGoals", "constraints", "architecture", "successCriteria"];
+  for (const field of contractFields) {
+    const sanitizedValue = sanitizeSkillCaptureText(implementationContract[field]);
+    if (isHighValueSkillCaptureText(sanitizedValue)) {
+      addCandidate(sessionSkillName, {
+        title: `Session ${session.session || "unknown"} 技能沉淀`,
+        approach: `契约 ${field}: ${sanitizedValue}`,
+      });
+    }
+  }
+
+  const changedFiles = Array.isArray(deliveryEvidence.changedFiles)
+    ? deliveryEvidence.changedFiles
+    : (Array.isArray(deliveryEvidence.changed_files) ? deliveryEvidence.changed_files : []);
+  const fileExtensions = new Set();
+  for (const item of changedFiles) {
+    const file = typeof item === "string" ? item : (item.path || item.file || "");
+    const ext = path.extname(file).toLowerCase();
+    if (ext) fileExtensions.add(ext);
+  }
+  if (fileExtensions.has(".ts") || fileExtensions.has(".tsx")) {
+    addCandidate(sessionSkillName, {
+      title: `Session ${session.session || "unknown"} 技能沉淀`,
+      approach: "涉及 TypeScript 文件修改，注意类型安全和 import 规范",
+    });
+  }
+
+  const result = [];
+  for (const [, candidate] of candidateMap) {
+    const scenarios = [...candidate.scenarios].filter(Boolean);
+    const approaches = [...candidate.approaches].filter(Boolean);
+    const verifications = [...candidate.verifications].filter(Boolean);
+    const pitfalls = [...candidate.pitfalls].filter(Boolean);
+    if (scenarios.length || approaches.length || verifications.length || pitfalls.length) {
+      result.push({
+        name: candidate.name,
+        title: candidate.title,
+        description: candidate.description,
+        scenarios,
+        approaches,
+        verifications,
+        pitfalls,
+        sourceRequirements: [...new Set(candidate.sourceRequirements)].filter(Boolean),
+        sourceDecisions: [...new Set(candidate.sourceDecisions)].filter(Boolean),
+        session: session.session || "unknown",
+      });
+    }
+  }
+
+  return result;
+}
+
+function buildSkillMarkdown(candidate) {
+  const lines = [
+    "---",
+    `name: ${candidate.name}`,
+    `description: ${candidate.description || `从自动迭代 session ${candidate.session || "unknown"} 自动捕获的实战技能点`}`,
+    "---",
+    "",
+    `# ${candidate.title || candidate.name}`,
+    "",
+  ];
+
+  const sections = [
+    ["触发场景", candidate.scenarios],
+    ["可靠做法", candidate.approaches],
+    ["验证方式", candidate.verifications],
+    ["常见误区", candidate.pitfalls],
+  ];
+  for (const [title, values] of sections) {
+    if (values && values.length > 0) {
+      lines.push(`## ${title}`, "");
+      for (const value of values) {
+        lines.push(`- ${value}`);
+      }
+      lines.push("");
+    }
+  }
+
+  if (candidate.sourceRequirements && candidate.sourceRequirements.length > 0) {
+    lines.push("## 来源", "");
+    lines.push(`- Session: ${candidate.session || "unknown"}`);
+    lines.push(`- 相关需求: ${candidate.sourceRequirements.join(", ")}`);
+    if (candidate.sourceDecisions && candidate.sourceDecisions.length > 0) {
+      lines.push(`- 相关决策: ${candidate.sourceDecisions.join(", ")}`);
+    }
+    lines.push("");
+  }
+
+  lines.push("> 本文件由 fastcar-cli auto-iterate --capture-skills 自动生成。");
+  lines.push(`> 生成时间: ${getIsoTimestamp()}`);
+  lines.push("> 请根据实际情况审查和完善内容。");
+  lines.push("");
+  return lines.join("\n");
+}
+
+function buildSkillsIndexEntry(candidate) {
+  const escapeCell = (value) => sanitizeSkillCaptureText(value).replace(/\|/g, "\\|");
+  return `| ${escapeCell(candidate.name)} | ${escapeCell(candidate.title || candidate.name)} | ${candidate.scenarios ? escapeCell(candidate.scenarios.slice(0, 3).join("；")) : ""} | ${escapeCell(candidate.session || "unknown")} |`;
+}
+
+async function updateSkillsIndexFile(skillsDir, candidates) {
+  const indexPath = path.join(skillsDir, "index.md");
+  let existingContent = "";
+  try {
+    existingContent = await fs.promises.readFile(indexPath, "utf8");
+  } catch {
+    // Create below.
+  }
+
+  const existingEntries = new Set();
+  const entryPattern = /^\|\s*([^|]+)\s*\|/gm;
+  let match;
+  while ((match = entryPattern.exec(existingContent)) !== null) {
+    existingEntries.add(match[1].trim());
+  }
+
+  if (existingContent && existingContent.includes("| 技能名称 |")) {
+    let changed = false;
+    const lines = existingContent.split("\n");
+    const newLines = [];
+    let inTable = false;
+    let tableEnded = false;
+    for (const line of lines) {
+      newLines.push(line);
+      if (line.startsWith("| 技能名称 |") || line.startsWith("| Skill |")) {
+        inTable = true;
+        continue;
+      }
+      if (inTable && !tableEnded && (line.trim() === "" || !line.startsWith("|"))) {
+        for (const candidate of candidates) {
+          if (!existingEntries.has(candidate.name)) {
+            newLines.splice(newLines.length - 1, 0, buildSkillsIndexEntry(candidate));
+            changed = true;
+          }
+        }
+        tableEnded = true;
+      }
+    }
+    if (inTable && !tableEnded) {
+      for (const candidate of candidates) {
+        if (!existingEntries.has(candidate.name)) {
+          newLines.push(buildSkillsIndexEntry(candidate));
+          changed = true;
+        }
+      }
+    }
+    return { content: newLines.join("\n"), changed };
+  }
+
+  const now = getIsoTimestamp();
+  let content = `# Skills 索引
+
+> 本索引由 fastcar-cli auto-iterate --capture-skills 自动维护。
+> 最后更新: ${now}
+
+## 已捕获技能
+
+| 技能名称 | 标题 | 关键触发场景 | 来源 Session |
+|----------|------|-------------|-------------|
+`;
+  for (const candidate of candidates) {
+    content += `${buildSkillsIndexEntry(candidate)}\n`;
+  }
+  content += `
+## 使用说明
+
+每个技能目录包含一个 \`SKILL.md\` 文件，AI Agent 在相关任务中会自动加载。
+技能点来自自动迭代 session 的实战经验，包括真实失败信号、调试路径、验证策略等。
+`;
+  return { content, changed: true };
+}
+
+async function updateStateMarkdownSkillCapture(stateMdPath, skillCapture) {
+  let content;
+  try {
+    content = await fs.promises.readFile(stateMdPath, "utf8");
+  } catch {
+    return;
+  }
+
+  const capturedFilesText = (skillCapture.capturedFiles || []).length > 0
+    ? skillCapture.capturedFiles.join(", ")
+    : "无";
+  const skippedReasonsText = (skillCapture.skippedReasons || []).length > 0
+    ? skillCapture.skippedReasons.join("; ")
+    : "无";
+  const pendingText = (skillCapture.pendingCandidates || []).length > 0
+    ? skillCapture.pendingCandidates.join(", ")
+    : "无";
+  const newSection = `status：${skillCapture.status || "pending"}
+root：${skillCapture.root || ".agents/skills"}
+index_file：${skillCapture.indexFile || ".agents/skills/index.md"}
+captured_files：${capturedFilesText}
+pending_candidates：${pendingText}
+skipped_reasons：${skippedReasonsText}
+selection_criteria：${skillCapture.selectionCriteria || "只沉淀可复用、可验证、跨任务有价值的技能点；不要记录密钥、客户数据、一次性日志或完整源码"}
+last_run_summary：${skillCapture.lastRunSummary || ""}
+执行时机：每次任务交付、提前停止或阶段性验收后，先提取高价值技能点，再更新 .agents/skills/index.md；没有高价值内容时写明 skipped_no_high_value 和原因`;
+  const escapedHeading = "## Skill Capture / 技能沉淀".replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(${escapedHeading}\\s*\\r?\\n)([\\s\\S]*?)(?=^## |(?![\\s\\S]))`, "m");
+  if (pattern.test(content)) {
+    await fs.promises.writeFile(stateMdPath, content.replace(pattern, `$1${newSection}\n\n`), "utf8");
+  }
+}
+
+async function writeCapturedSkills(sessionPaths, candidates, session, stateJson, currentSkillCapture) {
+  const skillsDir = path.join(process.cwd(), ".agents", "skills");
+  await fs.promises.mkdir(skillsDir, { recursive: true });
+
+  const capturedFiles = [];
+  for (const candidate of candidates) {
+    const skillDir = path.join(skillsDir, candidate.name);
+    await fs.promises.mkdir(skillDir, { recursive: true });
+    const skillMdPath = path.join(skillDir, "SKILL.md");
+    await fs.promises.writeFile(skillMdPath, buildSkillMarkdown(candidate), "utf8");
+    capturedFiles.push(toRelative(skillMdPath));
+    console.log(`📝 已写入: ${toRelative(skillMdPath)}`);
+  }
+
+  const { content: indexContent, changed } = await updateSkillsIndexFile(skillsDir, candidates);
+  const indexPath = path.join(skillsDir, "index.md");
+  await fs.promises.writeFile(indexPath, indexContent, "utf8");
+  capturedFiles.push(toRelative(indexPath));
+  console.log(changed
+    ? `📋 已更新索引: ${toRelative(indexPath)}`
+    : `📋 索引已存在对应入口: ${toRelative(indexPath)}`);
+
+  const now = getIsoTimestamp();
+  const updatedCapture = {
+    ...currentSkillCapture,
+    status: "captured",
+    capturedFiles: [...new Set([...(currentSkillCapture.capturedFiles || []), ...capturedFiles])],
+    pendingCandidates: [],
+    lastRunSummary: `自动捕获于 ${now}：共沉淀 ${candidates.length} 个技能 (${candidates.map(c => c.name).join(", ")})`,
+  };
+  stateJson.skillCapture = updatedCapture;
+  stateJson.updatedAt = now;
+  await writeJsonFileAtomic(sessionPaths.sessionStateJsonPath, stateJson);
+  await updateStateMarkdownSkillCapture(sessionPaths.sessionStatePath, updatedCapture);
+
+  console.log("");
+  console.log(`✅ 技能沉淀完成：${candidates.length} 个技能 → .agents/skills/`);
+  console.log(`   Session: ${session}`);
+  console.log(`   技能目录: ${toRelative(skillsDir)}`);
+  console.log("   已更新 state.json 和 state.md 中的 skillCapture 状态。");
+}
+
+async function captureSkills(sessionName, options = {}) {
+  const stateInfo = await resolveStateFileForValidation(sessionName);
+  const session = stateInfo.session || (stateInfo.current && stateInfo.current.session);
+  if (!session || session === "unknown") {
+    console.log("❌ 无法确定 session，请传入 --capture-skills <session>");
+    process.exitCode = 1;
+    return;
+  }
+
+  const sessionPaths = getSessionPaths(session);
+  const stateJson = await readJsonFile(sessionPaths.sessionStateJsonPath);
+  if (!stateJson) {
+    console.log(`❌ 缺少或无法解析 state.json: ${toRelative(sessionPaths.sessionStateJsonPath)}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const currentSkillCapture = stateJson.skillCapture || {};
+  if (currentSkillCapture.status === "captured") {
+    console.log(`⚠️  Session "${session}" 已执行过技能沉淀 (status=captured)。`);
+    console.log(`   已捕获文件: ${(currentSkillCapture.capturedFiles || []).join(", ") || "无"}`);
+    return;
+  }
+
+  console.log(`🔍 正在从 session "${session}" 提取技能候选...`);
+  const candidates = extractSkillCandidates(stateJson);
+  if (candidates.length === 0) {
+    const now = getIsoTimestamp();
+    const updatedCapture = {
+      ...currentSkillCapture,
+      status: "skipped_no_high_value",
+      skippedReasons: [
+        ...(currentSkillCapture.skippedReasons || []),
+        "自动分析未发现足够结构化的技能点；session 中的 RCM/Decisions/Validation 数据不足以提取高价值技能。",
+      ],
+      lastRunSummary: `自动捕获于 ${now}：未发现高价值技能候选`,
+    };
+    stateJson.skillCapture = updatedCapture;
+    stateJson.updatedAt = now;
+    await writeJsonFileAtomic(sessionPaths.sessionStateJsonPath, stateJson);
+    await updateStateMarkdownSkillCapture(sessionPaths.sessionStatePath, updatedCapture);
+    console.log("✅ 已将 skillCapture.status 标记为 skipped_no_high_value。");
+    return;
+  }
+
+  console.log(`\n发现 ${candidates.length} 个技能候选:\n`);
+  candidates.forEach((candidate, index) => {
+    console.log(`  [${index + 1}] ${candidate.name}`);
+    console.log(`      标题: ${candidate.title}`);
+    if (candidate.scenarios.length > 0) {
+      console.log(`      触发场景: ${candidate.scenarios.slice(0, 3).join("；")}${candidate.scenarios.length > 3 ? "..." : ""}`);
+    }
+    if (candidate.approaches.length > 0) {
+      console.log(`      可靠做法: ${candidate.approaches.length} 条`);
+    }
+    if (candidate.verifications.length > 0) {
+      console.log(`      验证方式: ${candidate.verifications.length} 条`);
+    }
+    if (candidate.pitfalls.length > 0) {
+      console.log(`      常见误区: ${candidate.pitfalls.length} 条`);
+    }
+    console.log("");
+  });
+
+  if (options.yes) {
+    console.log("🤖 非交互模式：自动捕获全部候选。\n");
+    await writeCapturedSkills(sessionPaths, candidates, session, stateJson, currentSkillCapture);
+    return;
+  }
+
+  const { selected } = await inquirer.prompt([{
+    type: "checkbox",
+    name: "selected",
+    message: "选择要沉淀的技能 (空格选中，回车确认):",
+    choices: [
+      ...candidates.map((candidate, index) => ({
+        name: `[${index + 1}] ${candidate.name} - ${candidate.title}`,
+        value: index,
+      })),
+      { name: "跳过全部 (标记 skipped_no_high_value)", value: -1 },
+    ],
+  }]);
+
+  if (selected.length === 0 || (selected.length === 1 && selected[0] === -1)) {
+    const now = getIsoTimestamp();
+    const updatedCapture = {
+      ...currentSkillCapture,
+      status: "skipped_no_high_value",
+      skippedReasons: [
+        ...(currentSkillCapture.skippedReasons || []),
+        "用户手动选择跳过技能沉淀。",
+      ],
+      lastRunSummary: `自动捕获于 ${now}：用户选择跳过`,
+    };
+    stateJson.skillCapture = updatedCapture;
+    stateJson.updatedAt = now;
+    await writeJsonFileAtomic(sessionPaths.sessionStateJsonPath, stateJson);
+    await updateStateMarkdownSkillCapture(sessionPaths.sessionStatePath, updatedCapture);
+    console.log("✅ 已将 skillCapture.status 标记为 skipped_no_high_value。");
+    return;
+  }
+
+  await writeCapturedSkills(
+    sessionPaths,
+    selected.filter(item => item >= 0).map(item => candidates[item]),
+    session,
+    stateJson,
+    currentSkillCapture,
+  );
+}
+
+async function finalizeAutoIterateSession(sessionName, options = {}) {
+  const previousExitCode = process.exitCode;
+  process.exitCode = 0;
+
+  const stateInfo = await resolveStateFileForValidation(sessionName);
+  const session = stateInfo.session || (stateInfo.current && stateInfo.current.session);
+  if (!session || session === "unknown") {
+    console.log("❌ 无法确定 session，请传入 --finalize <session>");
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`🏁 正在执行迭代结束门禁: ${session}`);
+  await captureSkills(session, { yes: options.yes !== false });
+  if (process.exitCode && process.exitCode !== 0) {
+    console.log("❌ finalize 已停止：Skill Capture / 技能沉淀失败。");
+    return;
+  }
+
+  const validationResult = await validateState(session, { strict: true });
+  if (!validationResult || !validationResult.ok) {
+    console.log("❌ finalize 未通过：strict state 门禁失败。");
+    process.exitCode = 1;
+    return;
+  }
+
+  process.exitCode = previousExitCode || 0;
+  console.log("✅ finalize 完成：已执行技能沉淀并通过 strict state 门禁。");
+}
+
 async function resolveMode(options) {
   if (options.mode) {
     return options.mode;
@@ -4453,8 +5246,18 @@ async function initAutoIterate(args = []) {
     return;
   }
 
+  if (options.finalizeSession) {
+    await finalizeAutoIterateSession(options.finalizeSession, { yes: options.yes });
+    return;
+  }
+
   if (options.dispatchSession) {
     await initDispatch(options);
+    return;
+  }
+
+  if (options.captureSkillsSession) {
+    await captureSkills(options.captureSkillsSession, { yes: options.yes });
     return;
   }
 

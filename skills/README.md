@@ -88,7 +88,25 @@ fastcar-cli auto-iterate -f docs/ai-checklist.md
 
 生成后，把 `.agent-state/auto-iterate/<session>/start-prompt.md` 的内容发给 Agent。
 
-注意：Codex 客户端的 Goal 入口、提示词里的 `Goal:` 前缀、以及 `fastcar-cli auto-iterate --goal` 不是同一个东西。`--goal` 只是 fastcar-cli 的目标文本参数；普通聊天里写 `Goal:` 最多被 CLI 清洗为目标文本，不会自动启用客户端 Goal 模式。只有当前客户端明确提供 Goal 输入/任务入口时，把启动提示放进去才算使用客户端 Goal。
+### Codex `/goal` 与 auto-iterate 配合
+
+Codex `/goal` 和 `fastcar-cli auto-iterate --goal` 可以配合使用，但职责不同：
+
+- `/goal` 是交互式 Codex 的会话级目标入口，用于记录当前整体 objective、status 和可选预算。
+- `fastcar-cli auto-iterate --goal` 是 CLI 的目标文本参数，只写入 auto-iterate session 和启动提示。
+- `.agent-state/auto-iterate/<session>/state.json` 是自动迭代的可恢复状态源，负责 mode、session、预算、需求覆盖矩阵、验证证据、恢复和交付门禁。
+
+推荐流程：
+
+```text
+1. 在交互式 Codex 输入 /goal，把当前 Codex goal 设为整体任务目标。
+2. 运行 fastcar-cli auto-iterate --quick --goal "<同一目标摘要>" --session <session> --yes。
+3. 让 Agent 读取 .agent-state/auto-iterate/<session>/start-prompt.md 并执行。
+4. 执行中保持 /goal objective 与 state.json.task.goal 语义一致；具体预算、RCM 和验证证据以 state.json 为准。
+5. 只有 auto-iterate 交付门禁通过后，才把 Codex goal 标记为 complete；真正阻塞时才标记 blocked。
+```
+
+普通聊天里的 `Goal:` 前缀最多被 CLI 清洗为目标文本，不会创建或更新 Codex goal。本地 Codex 是否支持 goal 模型可用 `codex features list` 辅助验证；看到 `goals stable true` 表示该运行时启用了 goal feature。实际创建、查看或更新 goal 的入口是交互式 Codex 的 `/goal`，不是 `codex goal` 子命令。
 
 常用模式：
 

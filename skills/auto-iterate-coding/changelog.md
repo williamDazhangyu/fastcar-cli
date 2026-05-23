@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-05-23
+
+- 同步 Codex goal 模型文档：明确 Codex 运行时 goal 状态、普通 `Goal:` 前缀和 `fastcar-cli auto-iterate --goal` 的边界。
+- 更新 OpenAI adapter、自然语言路由、README 和 CLI examples，避免把 CLI 目标参数误称为 Codex goal。
+
 ## 2026-05-22
 
 - 新增 `index.md` 作为目录索引入口。

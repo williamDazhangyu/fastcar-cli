@@ -25,6 +25,8 @@
     "deltaAssessment",
     "diffBudget",
     "cleanup",
+    "styleConsolidation",
+    "contextResetReview",
     "deliveryEvidence",
     "skillCapture",
     "postAgentValidationGate"
@@ -117,6 +119,45 @@
         "outOfScopeFiles": { "type": "array", "items": { "type": "string" } },
         "highRiskFiles": { "type": "array", "items": { "type": "string" } },
         "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "styleConsolidation": {
+      "type": "object",
+      "required": ["status", "trigger", "localSkillsReviewed", "globalSkillsReviewed", "appliedRules", "changedFiles", "scope", "summary", "verificationSummary", "skippedReasons", "lastRunSummary"],
+      "properties": {
+        "status": {
+          "enum": ["pending", "completed", "not_applicable", "blocked", "not_available"]
+        },
+        "trigger": { "type": "string", "minLength": 1 },
+        "localSkillsReviewed": { "type": "array", "items": { "type": "string" } },
+        "globalSkillsReviewed": { "type": "array", "items": { "type": "string" } },
+        "appliedRules": { "type": "array", "items": { "type": "string" } },
+        "changedFiles": { "type": "array", "items": { "type": "string" } },
+        "scope": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string", "minLength": 1 },
+        "verificationSummary": { "type": "string", "minLength": 1 },
+        "skippedReasons": { "type": "array", "items": { "type": "string" } },
+        "lastRunSummary": { "type": "string", "minLength": 1 }
+      }
+    },
+    "contextResetReview": {
+      "type": "object",
+      "required": ["status", "trigger", "reviewCyclesUsed", "maxReviewCycles", "sourceOfTruth", "standardsFindings", "specFindings", "decision", "reopenedRequirements", "lastRunSummary"],
+      "properties": {
+        "status": {
+          "enum": ["pending", "passed", "failed", "blocked", "not_available", "user_accepted_limited"]
+        },
+        "trigger": { "type": "string", "minLength": 1 },
+        "reviewCyclesUsed": { "type": "integer", "minimum": 0 },
+        "maxReviewCycles": { "type": "integer", "minimum": 0 },
+        "sourceOfTruth": { "type": "string", "minLength": 1 },
+        "standardsFindings": { "type": "array", "items": { "type": "string" } },
+        "specFindings": { "type": "array", "items": { "type": "string" } },
+        "decision": {
+          "enum": ["not_run", "pass", "reopen_requirements", "block", "limited_acceptance"]
+        },
+        "reopenedRequirements": { "type": "array", "items": { "type": "string" } },
+        "lastRunSummary": { "type": "string", "minLength": 1 }
       }
     },
     "postAgentValidationGate": {

@@ -38,6 +38,7 @@
 - 最终交付成果无法被当前环境验证，或缺少必须的验收数据、命令、权限、外部服务、数据库、密钥、沙箱替代或用户决策。
 - 原型能运行或某个方案看起来可行，但尚未被用户确认、吸收为生产实现并完成验证。
 - 所有 REQ passed 但 Watchdog.fresh_eyes_required = true。
+- 所有 REQ passed 但 Context Reset Review Gate 尚未通过，或复核发现 Standards / Spec 问题并重开 REQ。
 - 所有 REQ passed 但 validation_hardening 未达到最小轮次、缺少 boundary / negative / regression 维度，或状态仍为 pending / found_issue。
 
 ## 停止时输出
@@ -56,6 +57,7 @@
 未运行验证及原因：
 交付可验证性：verifiable / partially_verifiable / not_verifiable / unknown
 看门狗触发原因：
+上下文清空复核：
 未清理临时产物：
 架构摩擦：
 需要用户提供的资源或决策：
@@ -75,6 +77,7 @@
 - 下一步是否需要用户决策？
 - 交付成果是否真的能被当前环境验证？
 - 看门狗状态是否为 clear？
+- Context Reset Review Gate 是否已经只依据 state.json、原始需求、当前代码/diff、真实验证结果、项目规范和相关 skills 重新复核？
 - 是否还留有 debug 日志、harness、原型或临时路由？
 - 是否已经出现需要用户确认的架构摩擦？
 

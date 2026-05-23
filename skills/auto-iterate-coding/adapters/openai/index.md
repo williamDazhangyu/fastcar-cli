@@ -11,3 +11,4 @@ OpenAI 平台的 auto-iterate 适配说明。
 - 提供平台相关的 tool mapping。
 - 提供平台约束和降级策略。
 - 提供 prompt contract 和状态处理约定。
+- 说明 Codex goal 模型与 `fastcar-cli auto-iterate --goal` 文本参数的边界。

@@ -12,12 +12,24 @@
 
 成功交付前必须完成交付前验证加固：所有关键 REQ `passed` 后，至少完成 `minimum_validation_hardening_iterations`，并覆盖 boundary / negative / regression 维度。无法覆盖的维度必须明确标记为 `blocked / not_available / user_accepted_limited`，否则不得使用成功交付模板。
 
+成功交付前必须完成 Context Reset Review Gate：Agent 必须清空对话实现细节，只依据 `.agent-state/auto-iterate/<session>/state.json`、原始需求、当前代码/diff、真实验证结果、项目规范和相关 skills 重新读取事实，并按 Standards / Spec 两轴复核。发现问题时必须新增或重开 REQ 并回到实现循环；无发现时把 `contextResetReview.status=passed`、`decision=pass`、`reviewCyclesUsed>=1` 写入 state。不得用“我记得已经完成”替代该门禁。
+
 成功交付前必须完成临时产物清理：
 
 - 删除或吸收一次性原型、prototype route、variant switcher、临时 TUI 外壳和 harness。
 - 删除所有带唯一前缀的 debug instrumentation，例如 `[DEBUG-...]`。
 - 确认没有为了通过验证而留下的硬编码、跳过测试、弱化断言或内部 mock。
 - 如果临时产物需要保留，必须说明用户确认的原因、保留位置和后续清理条件。
+
+## Style Consolidation / 技巧风格整理
+
+实现需求的模式（strict、quick、diagnose、prototype）在成功交付前必须完成技巧风格整理：
+
+- 读取本项目 `.agents/skills` 和全局 skills 中与本次代码相关的代码风格、FastCar API 约束、TypeScript 规范、反模式和验证建议。
+- 只整理本次需求相关代码，不扩大行为范围，不做无关重构，不引入新依赖，不削弱测试。
+- 将整理依据写入 `styleConsolidation.localSkillsReviewed` 和 `styleConsolidation.globalSkillsReviewed`，将采用规则写入 `appliedRules`。
+- 整理后必须重新运行相关验证，并把结果写入 `styleConsolidation.verificationSummary`。
+- 如果当前任务不是实现需求，或没有可整理代码，标记 `not_applicable` 并记录 `skippedReasons`；如果无法读取 skill 或无法验证，标记 `blocked / not_available`。
 
 ## Skill Capture / 技能沉淀
 
@@ -41,6 +53,7 @@
 递归优化轮次：
 验证加固轮次：
 验证加固覆盖维度：
+上下文清空复核：
 总循环次数：
 保留的优化：
 放弃的优化及原因：
@@ -49,7 +62,9 @@
 未完成或无法运行的验证：
 交付可验证性：verifiable / partially_verifiable
 看门狗状态：clear
+Context Reset Review Gate：passed
 临时产物清理：
+技巧风格整理：
 技能沉淀：
 剩余风险：
 建议用户如何验收：
