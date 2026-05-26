@@ -528,7 +528,9 @@ async function listSkills() {
     
     for (const skill of skills) {
       const skillDir = await getSkillDir(skill);
-      const skillMdPath = path.join(skillDir, 'SKILL.md');
+      const lowerSkillMdPath = path.join(skillDir, 'skill.md');
+      const upperSkillMdPath = path.join(skillDir, 'SKILL.md');
+      const skillMdPath = await pathExists(lowerSkillMdPath) ? lowerSkillMdPath : upperSkillMdPath;
       
       let description = '';
       if (await pathExists(skillMdPath)) {

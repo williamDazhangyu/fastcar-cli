@@ -6,7 +6,7 @@
 
 ## 权威文件
 
-- `state.json`：唯一可编辑状态源，包含 `schemaVersion`、task、session、mode、budgets、currentState、watchdog、phaseGate、implementationContract、baseline、iterationPolicy、taskProfile、decisionRequest、requirements、decisions、validation、postChange、deltaAssessment、diffBudget、cleanup、styleConsolidation、contextResetReview、deliveryEvidence、skillCapture、postAgentValidationGate 等结构化字段。
+- `state.json`：唯一可编辑状态源，包含 `schemaVersion`、language、task、session、mode、budgets、currentState、watchdog、phaseGate、implementationContract、baseline、iterationPolicy、taskProfile、decisionRequest、requirements、decisions、notes、diagnose、validation、postChange、deltaAssessment、diffBudget、cleanup、styleConsolidation、contextResetReview、deliveryEvidence、skillCapture、postAgentValidationGate 等结构化字段。
 - `state.schema.json`：独立 JSON Schema artifact，用于文档、测试和第三方 Agent 对齐机器状态字段；CLI 仍以运行时代码校验作为最终门禁。
 - `state.md`：生成视图，用于人类阅读和 legacy 兼容；不得作为机器恢复、交付门禁或并发调度的唯一依据。
 - `auto-iterate-current.json`：当前 session 指针，必须记录 `stateJsonFile`、`stateFile`、`promptFile` 和 `session`。
@@ -34,25 +34,36 @@
 | 17 | `## Requirement Coverage Matrix` | 必填；多需求任务必须拆成 REQ 条目 | Agent |
 | 18 | `## Definition of Done` | 必填；从 RCM 派生交付门禁摘要，不独立重复评估 | Agent |
 | 19 | `## Decisions` | 必填；记录已确认的架构、产品、接口和用户限制 | Agent |
-| 20 | `## Hypotheses` | 必填；诊断、修复和优化时维护假设状态 | Agent |
-| 21 | `## Validation` | 必填；记录通过、失败、未运行和不可用能力导致的未验证项 | Agent |
-| 22 | `## Post-Change Validation / 修改后验证` | 必填；从 state.json.postChange 渲染，记录修改后验证命令、结果和回归标记 | Agent |
-| 23 | `## Delta Assessment / 差异评估` | 必填；从 state.json.deltaAssessment 渲染，比较 baseline 与 post-change 并给出保留/回退决策 | Agent |
-| 24 | `## Diff Budget / 变更预算审计` | 必填；从 state.json.diffBudget 渲染，记录变更文件数、diff 行数、越界文件和高风险文件 | Agent |
-| 25 | `## Temporary Artifacts / Cleanup` | 必填；记录 debug、harness、原型和清理状态 | Agent |
-| 26 | `## Style Consolidation / 技巧风格整理` | 必填；从 state.json.styleConsolidation 渲染，记录实现需求后按本地和全局 skills 代码风格整理、验证和跳过原因 | Agent |
-| 27 | `## Context Reset Review Gate / 上下文清空复核门禁` | 必填；从 state.json.contextResetReview 渲染，所有关键 REQ passed 后、Delivery Evidence ready 前执行清空上下文两轴复核 | Agent |
-| 28 | `## Delivery Evidence / 交付证据` | 必填；从 state.json.deliveryEvidence 渲染，交付摘要的机器来源 | Agent |
-| 29 | `## Skill Capture / 技能沉淀` | 必填；从 state.json.skillCapture 渲染，记录任务后高价值技能点沉淀、`.agents/skills/index.md` 更新和跳过原因 | Agent |
-| 30 | `## Post-Agent Validation Gate / Agent 后置校验门禁` | 必填；从 state.json.postAgentValidationGate 渲染，记录 strict 校验和 repair cycle | Agent |
-| 31 | `## Context Handoff Summary` | 必填；上下文压缩、长任务恢复和交接时更新 | Agent |
-| 32 | `## Resume Prompt` | 必填；说明恢复时的最小执行规则 | CLI 初始化，Agent 可补充 |
+| 20 | `## Traceability / 可追溯记录` | 必填；从 state.json.traceability 渲染，只记录公开可审计推理摘要、决策、证据、验证和路径，不记录私有思考链 | CLI / Agent |
+| 21 | `## Delivery Docs / 交付文档` | 必填；从 state.json.deliveryDocs 渲染，`--finalize` 生成 api.md、changelog.md、architecture.md、implementation.md | CLI |
+| 22 | `## Notes / 备注` | 必填；从 state.json.notes 渲染，记录 Worker 建议备注和 CLI 合并说明 | CLI / Agent |
+| 23 | `## Hypotheses` | 必填；诊断、修复和优化时维护假设状态；结构化来源为 state.json.diagnose.hypotheses | Agent |
+| 24 | `## Validation` | 必填；记录通过、失败、未运行和不可用能力导致的未验证项 | Agent |
+| 25 | `## Post-Change Validation / 修改后验证` | 必填；从 state.json.postChange 渲染，记录修改后验证命令、结果和回归标记 | Agent |
+| 26 | `## Delta Assessment / 差异评估` | 必填；从 state.json.deltaAssessment 渲染，比较 baseline 与 post-change 并给出保留/回退决策 | Agent |
+| 27 | `## Diff Budget / 变更预算审计` | 必填；从 state.json.diffBudget 渲染，记录变更文件数、diff 行数、越界文件和高风险文件 | Agent |
+| 28 | `## Temporary Artifacts / Cleanup` | 必填；记录 debug、harness、原型和清理状态 | Agent |
+| 29 | `## Style Consolidation / 技巧风格整理` | 必填；从 state.json.styleConsolidation 渲染，记录实现需求后按本地和全局 skills 代码风格整理、验证和跳过原因 | Agent |
+| 30 | `## Context Reset Review Gate / 上下文清空复核门禁` | 必填；从 state.json.contextResetReview 渲染，所有关键 REQ passed 后、Delivery Evidence ready 前执行清空上下文两轴复核 | Agent |
+| 31 | `## Delivery Evidence / 交付证据` | 必填；从 state.json.deliveryEvidence 渲染，交付摘要的机器来源 | Agent |
+| 32 | `## Skill Capture / 技能沉淀` | 必填；从 state.json.skillCapture 渲染，记录任务后高价值技能点沉淀、`.agents/skills/index.md` 更新和跳过原因 | Agent |
+| 33 | `## Post-Agent Validation Gate / Agent 后置校验门禁` | 必填；从 state.json.postAgentValidationGate 渲染，记录 strict 校验和 repair cycle | Agent |
+| 34 | `## Context Handoff Summary` | 必填；上下文压缩、长任务恢复和交接时更新 | Agent |
+| 35 | `## Resume Prompt` | 必填；说明恢复时的最小执行规则 | CLI 初始化，Agent 可补充 |
 
 ## 一致性规则
 
 - Autopilot、medium/large、多轮自动迭代和用户指定 session 的任务必须存在独立 session 目录；缺少 `state.json`、`state.md`、`start-prompt.md` 或 current 指针时，状态持久化只能标记为 `degraded`，不得按完整自动迭代完成交付。
 - `state.json.schemaVersion` 必须匹配当前 CLI 支持版本；不匹配时必须先迁移或停止恢复。
 - `state.json` 中的枚举、数字、布尔、数组和对象字段必须满足强类型校验；不得把 Markdown 中的自由文本作为机器权威状态。
+- `state.json.language` 可选记录用户语言推断结果，当前支持 `zh` / `en`；旧 session 缺失该字段时可从 `task.goal` 或来源文档推断，不得阻断恢复。
+- `status`、`mode`、`requiredAction`、`deliveryVerifiability` 等机器枚举必须保持英文；只允许人类可读摘要、原因、证据、`state.md` 视图、Worker prompt 和 Skill Capture 文档跟随用户语言。
+- `state.json.mode.runtimeAutopilot` 记录运行时是否启用 CLI 多轮 Autopilot；`mode.loopShape` 只能是 `default`、`autopilot` 或 `plan_once`，用于区分模式默认值和本次 `--run` 形态。
+- `state.json.notes[]`、`state.json.diagnose.hypotheses[]` 和 `state.json.diagnose.hypothesisQueue[]` 是 Worker `state_patch.notes` / `state_patch.hypotheses` 的白名单合并目标；Worker 不得通过它们覆盖预算、验证或交付门禁。`hypothesisQueue` 必须按 `pending -> supported/rejected/inconclusive` 推进，避免重复验证同一个假设。
+- `state.json.traceability.iterations[]` 是每轮公开审计记录，只能保存 `rationaleSummary`、决策、证据、文件、验证结果和 prompt/result/log 路径；不得记录或要求 Worker 输出私有 chain-of-thought。
+- `state.json.documentation` 汇总 Worker 的 `documentation.apiChanges`、`architectureNotes`、`implementationNotes` 和 `changelogEntries`，作为 `--finalize` 生成 docs 的输入；Worker 不能直接写 `deliveryDocs`。
+- `state.json.deliveryDocs` 由 CLI 在 `--finalize` 阶段生成，默认路径为 `.agent-state/auto-iterate/<session>/docs/`，固定产物为 `api.md`、`changelog.md`、`architecture.md`、`implementation.md`。
+- `state.json.optimization.baselineMetrics` / `postMetrics` / `metricComparison` 记录优化前后可比较指标；连续无改善通过 `noImprovementStreak` 与 `maxNoImprovementIterations` 控制停止，不得在没有改善证据时无限优化。
 - `task.successCriteria` 不能为空；成功标准缺失时不得进入交付门禁，也不得把“按目标推断”伪装成已确认验收标准。
 - 写入 `state.json` 必须使用临时文件加原子 rename；写入后必须校验通过，再渲染 `state.md`。
 - `auto-iterate-current.json.stateJsonFile` 必须存在，且指向 `.agent-state/auto-iterate/<session>/state.json`。

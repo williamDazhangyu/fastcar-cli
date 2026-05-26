@@ -1,0 +1,8 @@
+version: 1
+agent:
+  name: fastcar-auto-iterate-worker
+  system_prompt_path: ./kimi-worker-agent.md
+  tools:
+    - "kimi_cli.tools.file:ReadFile"
+    - "kimi_cli.tools.file:WriteFile"
+  subagents: {}

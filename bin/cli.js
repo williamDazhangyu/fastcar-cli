@@ -49,6 +49,14 @@ Commands:
                            --list / --switch <name> / --resume <name>
                            --dispatch <session> --agent codex|claude|gemini|kimi|cursor|windsurf|copilot|jules|devin|openhands|replit --task <text> --files <glob[,glob]> [--dry-run]
                            --verify-command <cmd> dispatch worker 的验证命令
+                           --run --once [--json-progress] CLI 驱动单轮 pipeline
+                           --run --autopilot --json-progress CLI 驱动多轮 pipeline
+                           --check [--json-progress] 只读检查 Worker CLI 环境
+                           --validate-cmd <cmd> pipeline 的 CLI 独立验证命令
+                           --scope <glob[,glob]> 限定 pipeline Worker 可修改范围
+                           --progress-interval <seconds> Worker 运行中进度统计输出间隔
+                           --isolate 每轮在临时 git worktree 中运行 Worker
+                           --allow-modify Verify 模式下允许 Worker 写文件
                            --yes, -y 非交互生成，适合 Agent 自然语言路由
                            --examples [关键词] 输出可复制的自然语言触发示例
                            -f, --from    从本地清单文档导入长需求
@@ -98,6 +106,8 @@ Examples:
   $ fastcar-cli auto-iterate --switch login-verify # 切换当前 session
   $ fastcar-cli auto-iterate --resume login-bugfix # 恢复指定 session
   $ fastcar-cli auto-iterate --validate-state login-bugfix # 只读校验 session 基线和 sub-agent 协议一致性
+  $ fastcar-cli auto-iterate --check --json-progress # 只读检查可用 Worker CLI
+  $ fastcar-cli auto-iterate --run --once --quick --goal "修复登录失败问题" --session login-bugfix --json-progress # CLI 驱动单轮 pipeline
   $ fastcar-cli auto-iterate --dispatch login-bugfix --agent codex --task "修复 REQ-001" --files "src/auth.js,test/auth.test.js" --dry-run # 生成本地 Agent worker prompt
   $ fastcar-cli auto-iterate --mode plan --goal "设计支付模块" # Plan-only 规划模式
   $ fastcar-cli auto-iterate --from docs/ai-checklist.md # 从本地清单文档生成

@@ -4,13 +4,13 @@
 
 ## 建议阅读顺序
 
-1. [SKILL.md](./SKILL.md)
-1. [contracts/README.md](./contracts/README.md)
+1. [skill.md](./skill.md)
+1. [contracts/readme.md](./contracts/readme.md)
 1. [examples/state-template.md](./examples/state-template.md)
-1. [references/INDEX.md](./references/INDEX.md)
-1. [compatibility/README.md](./compatibility/README.md)
+1. [references/index.md](./references/index.md)
+1. [compatibility/readme.md](./compatibility/readme.md)
 1. [adapters/index.md](./adapters/index.md)
-1. [adapters/README.md](./adapters/README.md)
+1. [adapters/readme.md](./adapters/readme.md)
 1. [changelog.md](./changelog.md)
 
 ## 目录职责

@@ -89,15 +89,15 @@
 
 ```powershell
 $env:AUTO_ITERATE_CODEX_CMD='codex exec --cd . --sandbox workspace-write -o "{result}" - < "{prompt}"'
-$env:AUTO_ITERATE_KIMI_CMD='powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:PYTHONUTF8=''1''; kimi --work-dir . --print --final-message-only --prompt (Get-Content -Raw -Encoding UTF8 ''{prompt}'') | Set-Content -Encoding UTF8 ''{result}''"'
+$env:AUTO_ITERATE_KIMI_CMD='kimi --quiet --afk --no-thinking --max-steps-per-turn 8 --max-ralph-iterations 0 --agent-file src/adapters/kimi-worker-agent.yaml --work-dir . -p "@{prompt}"'
 ```
 
 ```bash
 export AUTO_ITERATE_CODEX_CMD='codex exec --cd . --sandbox workspace-write -o "{result}" - < "{prompt}"'
-export AUTO_ITERATE_KIMI_CMD='kimi --work-dir . --print --final-message-only --prompt "$(cat "{prompt}")" > "{result}"'
+export AUTO_ITERATE_KIMI_CMD='kimi --quiet --afk --no-thinking --max-steps-per-turn 8 --max-ralph-iterations 0 --agent-file src/adapters/kimi-worker-agent.yaml --work-dir . -p "@{prompt}"'
 ```
 
-Codex 推荐使用 `codex exec`，因为它是非交互入口且支持把最后回复写入 `-o/--output-last-message`。Kimi 推荐使用 `kimi --print --final-message-only --prompt ...`，因为 `--print` 是非交互入口。真实运行仍可能因未登录、模型配置、网络、审批策略或平台版本失败；父 Agent 必须把这类失败记录为 `blocked` 或 `not_verified`，不能把 dry-run 当作真实 worker 完成。
+Codex 推荐使用 `codex exec`，因为它是非交互入口且支持把最后回复写入 `-o/--output-last-message`。Kimi 不推荐直接把完整 worker prompt 交给默认 agent；在仓库根目录下默认 Kimi 会读取 `AGENTS.md` 并可能进入 Router/探索协议。若要把 Kimi 当作真实 Worker，优先使用受限 `--agent-file`、`--no-thinking`、`--max-steps-per-turn`、`--max-ralph-iterations 0` 和短 prompt；当前 `fastcar-cli auto-iterate --run --agent kimi` 内置了该受限路径。真实运行仍可能因未登录、模型配置、网络、审批策略或平台版本失败；父 Agent 必须把这类失败记录为 `blocked` 或 `not_verified`，不能把 dry-run 当作真实 worker 完成。
 
 Windows 上不要优先使用 `kimi --input-format text < "{prompt}"` 读取包含中文的 worker prompt；Kimi 1.41.0 在该路径下可能触发 UnicodeEncodeError。若 result 中中文被终端编码影响，父 Agent 仍应以 `exit_code`、`status`、`validation`、`files_changed` 等结构字段和 command audit 作为 Quality Gate 输入，并在风险中记录编码问题。
 

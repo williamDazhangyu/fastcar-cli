@@ -13,6 +13,8 @@
 
 ## At-a-Glance / 人类摘要
 tl;dr：整体 in_progress / blocked / passed；模式：
+language：zh / en（从用户 goal、来源文档或交互输入推断；旧 session 可缺省并在恢复时推断）
+status_display_rule：机器枚举保持英文；人类摘要、原因、证据、生成文档和 Skill Capture 跟随用户语言
 进度：implementation current / max；optimization current / max
 需求：passed / not_verified / blocked / pending
 验证：最近命令；最近结果
@@ -40,6 +42,8 @@ current 指针：
 模式：
 模式说明：
 Autopilot：true / false
+runtime_autopilot：true / false
+loop_shape：default / autopilot / plan_once
 允许 Agent 推断流程清单：true / false
 允许修改文件：true / false
 模式执行规则：
@@ -273,11 +277,44 @@ Requirement Coverage Matrix 状态：
   coder_file_ownership：
   fallback_strategy：串行执行 / ask_user / stop
 
+## Traceability / 可追溯记录
+policy：只记录公开可审计推理摘要；不得记录私有思考链
+iterations：
+  - iteration：
+    focus：
+    summary：
+    rationale_summary：
+    decisions：
+    evidence：
+    files_changed：
+    validation：
+    prompt_path：
+    result_path：
+    log_path：
+说明：Worker 只能提交 `trace.rationaleSummary`、`trace.decisions` 和 `trace.evidence`；CLI 清洗后合并并补充验证与路径证据。
+
+## Delivery Docs / 交付文档
+status：pending / generated / blocked / not_available
+path：.agent-state/auto-iterate/<session>/docs
+files：api.md；changelog.md；architecture.md；implementation.md
+generated_at：
+说明：`--finalize` 在技能沉淀后生成可追溯交付文档，文档语言跟随用户语言；不得包含私有思考链。
+
+## Notes / 备注
+无
+
 ## Hypotheses
 已排除假设：
 排序候选假设：
+结构化假设：
 当前主要假设：
 下一步最小动作：
+假设队列：
+  id：
+  summary：
+  priority：
+  status：pending / supported / rejected / inconclusive
+  evidence：
 
 ## Validation
 已通过验证：
@@ -300,6 +337,20 @@ summary：
 baseline_ref：
 post_change_ref：
 decision：keep / revert / retry_new_direction / stop / ask_user
+
+## Optimization Metrics / 优化指标
+status：pending / implemented / optimized / passed / not_verified / no_improvement / completed
+baseline_metrics：
+  name：
+  value：
+  unit：
+  direction：lower_is_better / higher_is_better
+  source：
+post_metrics：
+metric_comparison：improved / unchanged / regression / unknown
+no_improvement_streak：
+max_no_improvement_iterations：3
+stop_reason：
 
 ## Diff Budget / 变更预算审计
 status：not_checked / within_budget / over_budget / unknown

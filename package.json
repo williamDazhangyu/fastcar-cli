@@ -7,7 +7,7 @@
     "fastcar-cli": "./bin/cli.js"
   },
   "scripts": {
-    "test": "node test/auto-iterate-doc-reliability.test.js"
+    "test": "node test/auto-iterate-doc-reliability.test.js && node test/pipeline.test.js && node test/env-check.test.js && node test/adapters.test.js && node test/router-ux.test.js && node test/skill-consistency.test.js"
   },
   "files": [
     "bin",
@@ -26,7 +26,10 @@
   "dependencies": {
     "commander": "^8.3.0",
     "compressing": "^1.5.1",
+    "cross-spawn": "^7.0.6",
     "inquirer": "^8.2.0",
+    "tree-kill": "^1.2.2",
+    "which": "^4.0.0",
     "yaml": "^2.8.3"
   },
   "repository": {

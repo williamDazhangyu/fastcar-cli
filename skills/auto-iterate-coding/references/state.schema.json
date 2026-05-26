@@ -20,6 +20,11 @@
     "decisionRequest",
     "requirements",
     "decisions",
+    "traceability",
+    "documentation",
+    "deliveryDocs",
+    "notes",
+    "diagnose",
     "validation",
     "postChange",
     "deltaAssessment",
@@ -34,6 +39,15 @@
   "properties": {
     "schemaVersion": {
       "const": 1
+    },
+    "language": {
+      "type": "object",
+      "required": ["code", "source", "confidence"],
+      "properties": {
+        "code": { "enum": ["zh", "en"] },
+        "source": { "type": "string", "minLength": 1 },
+        "confidence": { "enum": ["low", "medium", "high"] }
+      }
     },
     "task": {
       "type": "object",
@@ -87,6 +101,114 @@
         "triggers": { "type": "array", "items": { "type": "string" } }
       }
     },
+    "mode": {
+      "type": "object",
+      "required": ["mode", "label", "description", "autopilot", "runtimeAutopilot", "loopShape", "allowAgentInference", "allowModify", "instructions"],
+      "properties": {
+        "mode": { "enum": ["strict", "quick", "diagnose", "verify", "plan", "optimize", "prototype"] },
+        "label": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "autopilot": { "type": "boolean" },
+        "runtimeAutopilot": { "type": "boolean" },
+        "loopShape": { "enum": ["default", "autopilot", "plan_once"] },
+        "allowAgentInference": { "type": "boolean" },
+        "allowModify": { "type": "boolean" },
+        "instructions": { "type": "string", "minLength": 1 }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "traceability": {
+      "type": "object",
+      "required": ["policy", "iterations"],
+      "properties": {
+        "policy": { "type": "string", "minLength": 1 },
+        "iterations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "iteration": { "type": "integer", "minimum": 1 },
+              "status": { "type": "string" },
+              "summary": { "type": "string" },
+              "rationaleSummary": { "type": "string" },
+              "decisions": { "type": "array" },
+              "evidence": { "type": "array" },
+              "filesChanged": { "type": "array", "items": { "type": "string" } },
+              "promptPath": { "type": "string" },
+              "resultPath": { "type": "string" },
+              "logPath": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "documentation": {
+      "type": "object",
+      "required": ["apiChanges", "architectureNotes", "implementationNotes", "changelogEntries"],
+      "properties": {
+        "apiChanges": { "type": "array" },
+        "architectureNotes": { "type": "array" },
+        "implementationNotes": { "type": "array" },
+        "changelogEntries": { "type": "array" }
+      }
+    },
+    "deliveryDocs": {
+      "type": "object",
+      "required": ["status", "path", "files"],
+      "properties": {
+        "status": { "enum": ["pending", "generated", "blocked", "not_available"] },
+        "path": { "type": "string", "minLength": 1 },
+        "files": { "type": "array", "items": { "type": "string" } },
+        "generatedAt": { "type": ["string", "null"] }
+      }
+    },
+    "diagnose": {
+      "type": "object",
+      "required": ["hypotheses"],
+      "properties": {
+        "hypotheses": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "hypothesisQueue": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "summary", "priority", "status"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "summary": { "type": "string", "minLength": 1 },
+              "priority": { "type": "number" },
+              "status": { "enum": ["pending", "supported", "rejected", "inconclusive"] },
+              "evidence": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "optimization": {
+      "type": "object",
+      "properties": {
+        "status": { "enum": ["pending", "implemented", "optimized", "passed", "not_verified", "no_improvement", "completed"] },
+        "baselineMetrics": { "type": "array", "items": { "$ref": "#/$defs/metric" } },
+        "postMetrics": { "type": "array", "items": { "$ref": "#/$defs/metric" } },
+        "pendingMetrics": { "type": "array", "items": { "$ref": "#/$defs/metric" } },
+        "metricComparison": {
+          "type": "object",
+          "properties": {
+            "status": { "enum": ["improved", "unchanged", "regression", "unknown"] },
+            "comparisons": { "type": "array" }
+          }
+        },
+        "noImprovementStreak": { "type": "integer", "minimum": 0 },
+        "maxNoImprovementIterations": { "type": "integer", "minimum": 1 },
+        "stopReason": { "type": "string" }
+      }
+    },
     "postChange": {
       "type": "object",
       "required": ["status", "command", "result", "reason", "regressionDetected"],
@@ -95,7 +217,25 @@
         "command": { "type": "string", "minLength": 1 },
         "result": { "type": ["string", "null"], "minLength": 1 },
         "reason": { "type": ["string", "null"], "minLength": 1 },
-        "regressionDetected": { "type": "boolean" }
+        "regressionDetected": { "type": "boolean" },
+        "perCommand": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "command": { "type": "string" },
+              "status": { "type": "string" },
+              "result": { "type": ["string", "null"] },
+              "exitCode": { "type": ["integer", "null"] },
+              "signal": { "type": "string" },
+              "error": { "type": "string" },
+              "durationMs": { "type": "integer" },
+              "stdoutTail": { "type": "string" },
+              "stderrTail": { "type": "string" }
+            }
+          }
+        }
       }
     },
     "deltaAssessment": {
@@ -187,6 +327,19 @@
         "skippedReasons": { "type": "array", "items": { "type": "string" } },
         "selectionCriteria": { "type": "string", "minLength": 1 },
         "lastRunSummary": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "$defs": {
+    "metric": {
+      "type": "object",
+      "required": ["name", "value", "direction"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "value": {},
+        "unit": { "type": "string" },
+        "direction": { "enum": ["lower_is_better", "higher_is_better"] },
+        "source": { "type": "string" }
       }
     }
   }

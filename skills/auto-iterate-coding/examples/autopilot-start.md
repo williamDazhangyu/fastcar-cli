@@ -1,11 +1,11 @@
 # Autopilot 启动示例
 
-把下面内容发给 Agent，用于启动复杂需求的全自动多轮迭代开发。本示例只保留可复制骨架；执行规则以 `auto-iterate-coding/SKILL.md`、`examples/state-template.md` 和相关 references 为准，避免模板与主协议形成双重来源。
+把下面内容发给 Agent，用于启动复杂需求的全自动多轮迭代开发。本示例只保留可复制骨架；执行规则以 `auto-iterate-coding/skill.md`、`examples/state-template.md` 和相关 references 为准，避免模板与主协议形成双重来源。
 
 ```text
 请使用 auto-iterate-coding skill，进入 Autopilot 全自动迭代模式。
 
-请严格按 auto-iterate-coding/SKILL.md 执行：
+请严格按 auto-iterate-coding/skill.md 执行：
 - 先完成能力探测、session `state.json` 读取/创建、reconcile 和 Requirement Coverage Matrix；缺少 `state.json` 的旧 session 可降级读取 `state.md`，但要标记 degraded。
 - 每轮按真实 feedback loop 推进，实现后运行可用验证，并更新 `state.json` 的 At-a-Glance、Budgets、Current State、Watchdog、RCM 和 DoD，再刷新 `state.md` 生成视图。
 - 如果 remaining_implementation_iterations = 0，先请求我追加预算，不要自动继续。

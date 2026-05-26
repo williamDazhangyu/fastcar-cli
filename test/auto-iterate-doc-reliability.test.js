@@ -6,6 +6,7 @@ const { spawnSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
 const cliPath = path.join(repoRoot, "bin", "cli.js");
+const workerPath = path.join(repoRoot, "test", "fixtures", "pipeline-worker.js");
 
 const REQUIRED_STATE_SECTIONS = [
   "## At-a-Glance / 人类摘要",
@@ -27,6 +28,8 @@ const REQUIRED_STATE_SECTIONS = [
   "## Requirement Coverage Matrix / 需求覆盖矩阵",
   "## Definition of Done / 完成定义",
   "## Decisions / 已确认决策",
+  "## Traceability / 可追溯记录",
+  "## Delivery Docs / 交付文档",
   "## Hypotheses / 假设",
   "## Validation / 验证",
   "## Post-Change Validation / 修改后验证",
@@ -93,7 +96,7 @@ function makeGitProject() {
   return projectDir;
 }
 
-function runAutoIterate(cwd, args) {
+function runAutoIterate(cwd, args, env = {}) {
   const result = spawnSync(process.execPath, [cliPath, "auto-iterate", ...args], {
     cwd,
     encoding: "utf8",
@@ -101,6 +104,7 @@ function runAutoIterate(cwd, args) {
       ...process.env,
       CI: "1",
       FORCE_COLOR: "0",
+      ...env,
     },
   });
 
@@ -116,7 +120,7 @@ function runAutoIterate(cwd, args) {
   };
 }
 
-function runAutoIterateRaw(cwd, args) {
+function runAutoIterateRaw(cwd, args, env = {}) {
   return spawnSync(process.execPath, [cliPath, "auto-iterate", ...args], {
     cwd,
     encoding: "utf8",
@@ -124,8 +128,16 @@ function runAutoIterateRaw(cwd, args) {
       ...process.env,
       CI: "1",
       FORCE_COLOR: "0",
+      ...env,
     },
   });
+}
+
+function fixtureWorkerEnv(extra = {}) {
+  return {
+    AUTO_ITERATE_CODEX_CMD: `"${process.execPath}" "${workerPath}" "{result}" "{prompt}"`,
+    ...extra,
+  };
 }
 
 function sessionPaths(projectDir, session) {
@@ -297,7 +309,7 @@ test("quick 模式生成 session-only 状态、启动提示和 current 指针", 
   assertIncludes(state, "remaining_implementation_iterations：5", "state.md");
   assertIncludes(state, "REQ-BOOTSTRAP", "state.md");
   assertIncludes(state, "required_action：continue", "state.md");
-  assertIncludes(prompt, "请先读取 auto-iterate-coding/SKILL.md", "prompt");
+  assertIncludes(prompt, "请先读取 auto-iterate-coding/skill.md", "prompt");
   assertIncludes(prompt, "Auto-iterate 激活声明", "prompt");
   assertIncludes(prompt, "状态持久化标记为 degraded / not_available", "prompt");
   assertIncludes(
@@ -610,7 +622,7 @@ test("state-schema、state-template 与 CLI 初始 state 的必需章节保持�
   const { state } = readSession(projectDir, "schema-check");
   const requiredSections = extractStateSchemaSections(schema);
 
-  assert.strictEqual(requiredSections.length, 32);
+  assert.strictEqual(requiredSections.length, 35);
   for (const section of requiredSections) {
     assert.ok(headingMatches(template, section), `state-template missing ${section}`);
     assert.ok(headingMatches(state, section), `generated state missing ${section}`);
@@ -624,9 +636,69 @@ test("state-schema、state-template 与 CLI 初始 state 的必需章节保持�
   assertIncludes(schema, "diffBudget", "schema");
   assertIncludes(schema, "styleConsolidation", "schema");
   assertIncludes(schema, "contextResetReview", "schema");
+  assertIncludes(schema, "state.json.notes[]", "schema");
+  assertIncludes(schema, "mode.loopShape", "schema");
   assertIncludes(template, "partially_verifiable", "state-template");
+  assertIncludes(template, "## Notes / 备注", "state-template");
   assertIncludes(template, "Context Reset Review Gate", "state-template");
   assertIncludes(state, "交付可验证性：unknown", "state.md");
+});
+
+test("英文 goal 生成英文语言元信息、启动提示和运行投影", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "fix login bug and keep API compatible",
+    "--session",
+    "english-language",
+    "--yes",
+  ]);
+
+  const { state, stateJson, prompt } = readSession(projectDir, "english-language");
+  assert.strictEqual(stateJson.language.code, "en");
+  assertIncludes(state, "language：en", "state.md");
+  assertIncludes(state, "status_display_rule：机器枚举保持英文", "state.md");
+  assertIncludes(prompt, "Language: en", "start-prompt.md");
+  assertIncludes(prompt, "write human-readable output, state notes, summaries, Skill Capture content, and delivery summaries in English", "start-prompt.md");
+  assertIncludes(prompt, "User goal:\nfix login bug and keep API compatible", "start-prompt.md");
+
+  const result = runAutoIterateRaw(projectDir, [
+    "--run",
+    "--once",
+    "--resume",
+    "english-language",
+    "--json-progress",
+    "--validate-cmd",
+    `"${process.execPath}" -e "process.exit(0)"`,
+  ], fixtureWorkerEnv());
+  assert.strictEqual(result.status, 0, `STDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`);
+  const promptPath = path.join(projectDir, ".agent-state", "auto-iterate", "english-language", "iterations", "1", "prompt.md");
+  const workerPrompt = fs.readFileSync(promptPath, "utf8");
+  const refreshedState = fs.readFileSync(sessionPaths(projectDir, "english-language").state, "utf8");
+  assertIncludes(workerPrompt, "Write all human-readable summary/risk/evidence fields in English", "worker prompt");
+  assertIncludes(refreshedState, "This section is refreshed by fastcar-cli", "state.md runtime snapshot");
+  assertIncludes(refreshedState, "language：en", "state.md runtime snapshot");
+});
+
+test("中文 goal 生成中文语言元信息并保留中文 prompt", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "修复登录失败并保持接口兼容",
+    "--session",
+    "chinese-language",
+    "--yes",
+  ]);
+
+  const { state, stateJson, prompt } = readSession(projectDir, "chinese-language");
+  assert.strictEqual(stateJson.language.code, "zh");
+  assertIncludes(state, "语言：zh", "state.md");
+  assertIncludes(prompt, "用户目标：\n修复登录失败并保持接口兼容", "start-prompt.md");
+  assertIncludes(prompt, "请始终使用与用户当前提示一致的语言输出", "start-prompt.md");
 });
 
 test("auto-iterate session 生成机器权威 state.json 和 Markdown 视图", () => {
@@ -653,6 +725,10 @@ test("auto-iterate session 生成机器权威 state.json 和 Markdown 视图", (
   assert.strictEqual(stateJson.iterationPolicy.maxGoalsPerIteration, 1);
   assert.strictEqual(stateJson.taskProfile.complexity, "medium");
   assert.strictEqual(stateJson.decisionRequest.status, "not_needed");
+  assert.strictEqual(stateJson.mode.runtimeAutopilot, true);
+  assert.strictEqual(stateJson.mode.loopShape, "autopilot");
+  assert.deepStrictEqual(stateJson.notes, []);
+  assert.deepStrictEqual(stateJson.diagnose.hypotheses, []);
   assert.strictEqual(stateJson.postChange.status, "not_run");
   assert.strictEqual(stateJson.deltaAssessment.status, "pending");
   assert.strictEqual(stateJson.diffBudget.status, "not_checked");
@@ -683,6 +759,9 @@ test("auto-iterate session 生成机器权威 state.json 和 Markdown 视图", (
   assertIncludes(state, "## Iteration Policy / 迭代策略", "state.md");
   assertIncludes(state, "## Task Profile / 任务画像", "state.md");
   assertIncludes(state, "## Decision Request / 用户确认请求", "state.md");
+  assertIncludes(state, "## Notes / 备注", "state.md");
+  assertIncludes(state, "runtime_autopilot：true", "state.md");
+  assertIncludes(state, "loop_shape：autopilot", "state.md");
   assertIncludes(state, "## Post-Change Validation / 修改后验证", "state.md");
   assertIncludes(state, "## Delta Assessment / 差异评估", "state.md");
   assertIncludes(state, "## Diff Budget / 变更预算审计", "state.md");
@@ -711,7 +790,7 @@ test("auto-iterate session 生成机器权威 state.json 和 Markdown 视图", (
 });
 
 test("references INDEX 索引的文档真实存在并覆盖关键模式组合", () => {
-  const index = readRepoFile("skills/auto-iterate-coding/references/INDEX.md");
+  const index = readRepoFile("skills/auto-iterate-coding/references/index.md");
   const referencesDir = path.join(
     repoRoot,
     "skills",
@@ -792,6 +871,8 @@ test("独立 state.schema.json 覆盖关键门禁实体", () => {
   for (const key of [
     "taskProfile",
     "decisionRequest",
+    "notes",
+    "diagnose",
     "postChange",
     "deltaAssessment",
     "diffBudget",
@@ -808,6 +889,8 @@ test("独立 state.schema.json 覆盖关键门禁实体", () => {
   assert.ok(schema.properties.styleConsolidation.properties.status.enum.includes("completed"));
   assert.ok(schema.properties.contextResetReview.properties.status.enum.includes("passed"));
   assert.ok(schema.properties.contextResetReview.properties.decision.enum.includes("reopen_requirements"));
+  assert.ok(schema.properties.mode.properties.loopShape.enum.includes("autopilot"));
+  assert.strictEqual(schema.properties.diagnose.required[0], "hypotheses");
 });
 
 test("自然语言路由文档覆盖 CLI 支持的模式、预算和 session 规则", () => {
@@ -874,7 +957,8 @@ test("自然语言路由文档覆盖 CLI 支持的模式、预算和 session 规
   assertIncludes(routing, "确认 prompt 后，让本地 Codex 真实执行这个 worker", "natural-language-routing.md");
   assertIncludes(routing, "codex exec --cd . --sandbox workspace-write", "natural-language-routing.md");
   assertIncludes(routing, "确认 prompt 后，让本地 Kimi 真实执行这个 worker", "natural-language-routing.md");
-  assertIncludes(routing, "kimi --work-dir . --print --final-message-only", "natural-language-routing.md");
+  assertIncludes(routing, "fastcar-cli auto-iterate --run --agent kimi --json-progress", "natural-language-routing.md");
+  assertIncludes(routing, "kimi --quiet --afk --no-thinking", "natural-language-routing.md");
   assertIncludes(routing, "子任务派发推荐句式：让 Codex worker 处理 <session> 的 <REQ 或子任务>", "natural-language-routing.md");
   assertIncludes(routing, "兼容旧口语“让 Codex goal 处理”", "natural-language-routing.md");
   assertIncludes(routing, "必须先判断是当前会话 goal 还是 worker dispatch", "natural-language-routing.md");
@@ -956,7 +1040,7 @@ test("skills README 同步 auto-iterate goal 边界和 session 示例", () => {
 });
 
 test("skill 文档不再引用 legacy 状态文件并保留无 CLI fallback", () => {
-  const skill = readRepoFile("skills/auto-iterate-coding/SKILL.md");
+  const skill = readRepoFile("skills/auto-iterate-coding/skill.md");
 
   assertIncludes(skill, "无 CLI fallback", "SKILL.md");
   assertIncludes(skill, ".agent-state/auto-iterate/<session>/state.json", "SKILL.md");
@@ -1001,7 +1085,7 @@ test("state schema 强制 session 指针和交付前状态一致性检查", () =
 });
 
 test("auto-iterate 文档统一 state.json 权威源和 state.md 视图", () => {
-  const skill = readRepoFile("skills/auto-iterate-coding/SKILL.md");
+  const skill = readRepoFile("skills/auto-iterate-coding/skill.md");
   const routing = readRepoFile("skills/auto-iterate-coding/references/natural-language-routing.md");
   const concurrency = readRepoFile("skills/auto-iterate-coding/references/sub-agent-concurrency.md");
   const autopilot = readRepoFile("skills/auto-iterate-coding/examples/autopilot-start.md");
@@ -1029,7 +1113,7 @@ test("子 Agent 并发协议使用现行状态模板字段且禁止旧字段回�
   const concurrency = readRepoFile(
     "skills/auto-iterate-coding/references/sub-agent-concurrency.md",
   );
-  const skill = readRepoFile("skills/auto-iterate-coding/SKILL.md");
+  const skill = readRepoFile("skills/auto-iterate-coding/skill.md");
   const template = readRepoFile(
     "skills/auto-iterate-coding/examples/state-template.md",
   );
@@ -1069,7 +1153,8 @@ test("子 Agent 并发协议使用现行状态模板字段且禁止旧字段回�
     "AUTO_ITERATE_KIMI_CMD",
     "AUTO_ITERATE_OPENHANDS_CMD",
     "codex exec --cd . --sandbox workspace-write",
-    "kimi --work-dir . --print --final-message-only",
+    "kimi --quiet --afk --no-thinking",
+    "src/adapters/kimi-worker-agent.yaml",
     "模板缺失时不得留下半成品 worktree",
     "不能把 dry-run 当作真实 worker 完成",
     "`claude` / `claude-code`",
@@ -2081,7 +2166,7 @@ test("validate-state strict 区分 state.json 缺失和解析失败", () => {
 });
 
 test("最少迭代轮次被定义为下限而不是仅执行或最大预算", () => {
-  const skill = readRepoFile("skills/auto-iterate-coding/SKILL.md");
+  const skill = readRepoFile("skills/auto-iterate-coding/skill.md");
   const routing = readRepoFile(
     "skills/auto-iterate-coding/references/natural-language-routing.md",
   );
@@ -2121,7 +2206,7 @@ test("任务后技能沉淀写入 .agents skills 并维护 index 入口", () => 
     "--yes",
   ]);
 
-  const skill = readRepoFile("skills/auto-iterate-coding/SKILL.md");
+  const skill = readRepoFile("skills/auto-iterate-coding/skill.md");
   const template = readRepoFile(
     "skills/auto-iterate-coding/examples/state-template.md",
   );
@@ -2135,16 +2220,16 @@ test("任务后技能沉淀写入 .agents skills 并维护 index 入口", () => 
   const deliveryTemplate = readRepoFile(
     "skills/auto-iterate-coding/references/delivery-template.md",
   );
-  const index = readRepoFile("skills/auto-iterate-coding/references/INDEX.md");
+  const index = readRepoFile("skills/auto-iterate-coding/references/index.md");
   const directoryIndex = readRepoFile("skills/auto-iterate-coding/index.md");
-  const contractsReadme = readRepoFile("skills/auto-iterate-coding/contracts/README.md");
+  const contractsReadme = readRepoFile("skills/auto-iterate-coding/contracts/readme.md");
   const compatibilityReadme = readRepoFile(
-    "skills/auto-iterate-coding/compatibility/README.md",
+    "skills/auto-iterate-coding/compatibility/readme.md",
   );
   const compatibilityAdoption = readRepoFile(
     "skills/auto-iterate-coding/compatibility/third-party-adoption.md",
   );
-  const adaptersReadme = readRepoFile("skills/auto-iterate-coding/adapters/README.md");
+  const adaptersReadme = readRepoFile("skills/auto-iterate-coding/adapters/readme.md");
   const adaptersIndex = readRepoFile("skills/auto-iterate-coding/adapters/index.md");
   const openaiAdapterIndex = readRepoFile("skills/auto-iterate-coding/adapters/openai/index.md");
   const openaiAdapter = readRepoFile("skills/auto-iterate-coding/adapters/openai/openai.yaml");
@@ -2177,10 +2262,10 @@ test("任务后技能沉淀写入 .agents skills 并维护 index 入口", () => 
   assertIncludes(directoryIndex, "compatibility/", "index.md");
   assertIncludes(directoryIndex, "adapters/", "index.md");
   assertIncludes(directoryIndex, "changelog.md", "index.md");
-  assertIncludes(contractsReadme, "机器可检查的强约束", "contracts/README.md");
-  assertIncludes(compatibilityReadme, "第三方项目接入和迁移说明", "compatibility/README.md");
+  assertIncludes(contractsReadme, "机器可检查的强约束", "contracts/readme.md");
+  assertIncludes(compatibilityReadme, "第三方项目接入和迁移说明", "compatibility/readme.md");
   assertIncludes(compatibilityAdoption, "最小接入原则", "compatibility/third-party-adoption.md");
-  assertIncludes(adaptersReadme, "不同 Agent、平台或项目脚手架的适配层", "adapters/README.md");
+  assertIncludes(adaptersReadme, "不同 Agent、平台或项目脚手架的适配层", "adapters/readme.md");
   assertIncludes(adaptersIndex, "Adapters Index", "adapters/index.md");
   assertIncludes(adaptersIndex, "openai/", "adapters/index.md");
   assertIncludes(openaiAdapterIndex, "OpenAI Adapter", "adapters/openai/index.md");
@@ -2192,6 +2277,8 @@ test("任务后技能沉淀写入 .agents skills 并维护 index 入口", () => 
   assertIncludes(legacyOpenaiAdapter, "interface:", "legacy adapters/openai.yaml");
   assertIncludes(changelog, "2026-05-22", "changelog.md");
   assertIncludes(jsonSchema, "\"skillCapture\"", "state.schema.json");
+  assertIncludes(jsonSchema, "\"traceability\"", "state.schema.json");
+  assertIncludes(jsonSchema, "\"deliveryDocs\"", "state.schema.json");
   assertIncludes(jsonSchema, "\"root\": { \"const\": \".agents/skills\" }", "state.schema.json");
   assert.deepStrictEqual(stateJson.skillCapture.capturedFiles, []);
   assert.deepStrictEqual(stateJson.skillCapture.pendingCandidates, []);
@@ -2269,6 +2356,7 @@ test("finalize 自动执行技能沉淀并通过 strict state 门禁", () => {
 
   assertIncludes(output.stdout, "正在执行迭代结束门禁", "finalize stdout");
   assertIncludes(output.stdout, "技能沉淀完成", "finalize stdout");
+  assertIncludes(output.stdout, "已生成交付文档", "finalize stdout");
   assertIncludes(output.stdout, "state.json 强约束校验通过", "finalize stdout");
   assertIncludes(output.stdout, "finalize 完成", "finalize stdout");
 
@@ -2282,6 +2370,13 @@ test("finalize 自动执行技能沉淀并通过 strict state 门禁", () => {
     fs.existsSync(path.join(projectDir, ".agents", "skills", "index.md")),
     "skills index should be generated by finalize",
   );
+  assert.strictEqual(capturedStateJson.deliveryDocs.status, "generated");
+  for (const name of ["api.md", "changelog.md", "architecture.md", "implementation.md"]) {
+    const filePath = path.join(projectDir, ".agent-state", "auto-iterate", "skill-finalize", "docs", name);
+    assert.ok(fs.existsSync(filePath), `${name} should be generated by finalize`);
+  }
+  const architecture = fs.readFileSync(path.join(projectDir, ".agent-state", "auto-iterate", "skill-finalize", "docs", "architecture.md"), "utf8");
+  assertIncludes(architecture, "不记录私有思考链", "architecture.md");
 });
 
 test("capture-skills 脱敏敏感信息并过滤低价值日志", () => {
@@ -2409,6 +2504,95 @@ test("capture-skills 向无尾空行的现有 index 表追加入口", () => {
     "--strict-state",
   ]);
   assertIncludes(capturedOutput.stdout, "state.json 强约束校验通过", "validate-state stdout");
+});
+
+test("英文 session 的 capture-skills 生成英文技能文档和索引", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "capture reusable TypeScript validation practice",
+    "--session",
+    "english-skill-capture",
+    "--yes",
+  ]);
+
+  const { paths } = readSession(projectDir, "english-skill-capture");
+  const stateJson = JSON.parse(fs.readFileSync(paths.stateJson, "utf8"));
+  markSessionReadyForSkillCapture(stateJson);
+  stateJson.requirements = [
+    {
+      id: "REQ-EN",
+      summary: "TypeScript validation should keep enum status values stable",
+      type: "validation",
+      status: "passed",
+      relatedFiles: ["src/pipeline/language.js"],
+      evidence: "Added tests proving human-readable text follows English while enum status stays unchanged",
+      blockedReason: "none",
+      nextStep: "none",
+    },
+  ];
+  fs.writeFileSync(paths.stateJson, `${JSON.stringify(stateJson, null, 2)}\n`, "utf8");
+
+  runAutoIterate(projectDir, [
+    "--capture-skills",
+    "english-skill-capture",
+    "--yes",
+  ]);
+
+  const indexContent = fs.readFileSync(path.join(projectDir, ".agents", "skills", "index.md"), "utf8");
+  assertIncludes(indexContent, "# Skills Index", "skills index");
+  assertIncludes(indexContent, "| Skill | Title | Key Trigger Scenarios | Source Session |", "skills index");
+
+  const generatedFiles = fs.readdirSync(path.join(projectDir, ".agents", "skills"), { recursive: true })
+    .filter((file) => String(file).endsWith("SKILL.md"));
+  const generatedContent = generatedFiles
+    .map((file) => fs.readFileSync(path.join(projectDir, ".agents", "skills", file), "utf8"))
+    .join("\n");
+  assertIncludes(generatedContent, "## Trigger Scenarios", "generated skill");
+  assertIncludes(generatedContent, "## Reliable Approach", "generated skill");
+  assertIncludes(generatedContent, "Generated by fastcar-cli auto-iterate --capture-skills", "generated skill");
+  assertNotIncludes(generatedContent, "## 触发场景", "generated skill");
+});
+
+test("CLI 驱动设计文档与当前 pipeline 硬接口保持一致", () => {
+  const design = readRepoFile("docs/auto-iterate-cli-driven.md");
+  const runPipeline = readRepoFile("src/pipeline/runPipeline.js");
+  const iterationPaths = readRepoFile("src/pipeline/iterationPaths.js");
+
+  assertIncludes(design, "ensurePipelineSession", "auto-iterate-cli-driven.md");
+  assertIncludes(design, "buildIterationPaths", "auto-iterate-cli-driven.md");
+  assertIncludes(design, "`mode_branch`", "auto-iterate-cli-driven.md");
+  assertIncludes(design, "`agent_timeout`", "auto-iterate-cli-driven.md");
+  assertIncludes(design, "`req_status`", "auto-iterate-cli-driven.md");
+  assertIncludes(design, "`budget_left`", "auto-iterate-cli-driven.md");
+  assertIncludes(design, "error(reason=missing_result_json)", "auto-iterate-cli-driven.md");
+  assertIncludes(design, "error(reason=invalid_result_json)", "auto-iterate-cli-driven.md");
+  assertIncludes(design, "`no_progress` 只消费 Worker 显式返回的合法 status", "auto-iterate-cli-driven.md");
+  assertIncludes(design, "`--focus <type:id>` 可强制覆盖本轮选择，但必须在当前 mode 允许的 focus 集合里", "auto-iterate-cli-driven.md");
+  assertIncludes(design, "postChange.perCommand[]", "auto-iterate-cli-driven.md");
+  assertIncludes(design, "mode-specific 行为没有拆成 `runPlanOnce` / `runReproduceFirst` / `runDefaultLoop`", "auto-iterate-cli-driven.md");
+  assert.ok(
+    !design.includes("该轮降级为 `no_progress` 或 `blocked`"),
+    "缺失或非法 result.json 不应被文档描述为自动降级 no_progress/blocked",
+  );
+  assert.ok(
+    !design.includes("降级为 no_progress"),
+    "缺失或非法 result.json 当前实现不是降级 no_progress",
+  );
+
+  assertIncludes(runPipeline, 'event: "mode_branch"', "runPipeline.js");
+  assertIncludes(runPipeline, 'event: "agent_timeout"', "runPipeline.js");
+  assertIncludes(runPipeline, 'reason: "missing_result_json"', "runPipeline.js");
+  assertIncludes(runPipeline, 'reason: "invalid_result_json"', "runPipeline.js");
+  assertIncludes(runPipeline, "req_status: buildRequirementStatus(state)", "runPipeline.js");
+  assertIncludes(runPipeline, "budget_left: getBudgetLeft(state)", "runPipeline.js");
+  assertIncludes(runPipeline, "refreshStateMarkdownView", "runPipeline.js");
+  assertIncludes(iterationPaths, "function buildIterationPaths", "iterationPaths.js");
+
+  const duplicateHeadingCount = (design.match(/^## 1\. 背景与问题$/gm) || []).length;
+  assert.strictEqual(duplicateHeadingCount, 1, "背景与问题标题不应重复");
 });
 
 async function main() {

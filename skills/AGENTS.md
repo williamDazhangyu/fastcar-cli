@@ -19,7 +19,7 @@
 
 ## 自动迭代 Skill 强触发词
 
-如果用户消息包含以下意图或词语，优先使用 `auto-iterate-coding`，并先读取 `skills/auto-iterate-coding/SKILL.md`：
+如果用户消息包含以下意图或词语，优先使用 `auto-iterate-coding`，并先读取 `skills/auto-iterate-coding/skill.md`：
 
 - 自动迭代、auto-iterate、全自动开发、Autopilot。
 - 完整实现、完整做完、全部实现、端到端实现、把需求都做完。

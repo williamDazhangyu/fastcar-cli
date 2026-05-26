@@ -2,6 +2,16 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const inquirer = require("inquirer");
+const { runPipeline } = require("./pipeline/runPipeline");
+const { generateDeliveryDocs } = require("./pipeline/deliveryDocs");
+const { checkEnvironment } = require("./pipeline/envCheck");
+const { emitProgress } = require("./pipeline/progress");
+const {
+  getLanguageText,
+  inferLanguageFromAnswers,
+  inferLanguageFromState,
+  languageCode,
+} = require("./pipeline/language");
 
 const STATE_DIR = ".agent-state";
 const SESSION_ROOT_DIR = "auto-iterate";
@@ -40,6 +50,9 @@ const REQUIRED_STATE_SECTIONS = [
   "## Requirement Coverage Matrix / 需求覆盖矩阵",
   "## Definition of Done / 完成定义",
   "## Decisions / 已确认决策",
+  "## Traceability / 可追溯记录",
+  "## Delivery Docs / 交付文档",
+  "## Notes / 备注",
   "## Hypotheses / 假设",
   "## Validation / 验证",
   "## Post-Change Validation / 修改后验证",
@@ -267,7 +280,13 @@ const OPTIONS_WITH_REQUIRED_VALUE = new Set([
   "--files",
   "--verify-command",
   "--verify-cmd",
+  "--validate-cmd",
   "--timeout",
+  "--step-timeout",
+  "--max-steps",
+  "--focus",
+  "--scope",
+  "--answer",
   "--capture-skills",
 ]);
 
@@ -323,8 +342,24 @@ function parseArgs(args = []) {
     task: null,
     files: null,
     verifyCommand: null,
+    validateCommand: null,
     timeoutSeconds: 300,
+    stepTimeoutSeconds: 300,
+    progressIntervalSeconds: 15,
     dryRun: false,
+    run: false,
+    once: false,
+    autopilotRun: false,
+    jsonProgress: false,
+    noRun: false,
+    noValidate: false,
+    check: false,
+    isolate: false,
+    allowModify: false,
+    maxSteps: null,
+    focus: null,
+    scope: null,
+    answer: null,
     maxIterations: null,
     autopilotMaxIterations: null,
     yes: false,
@@ -494,6 +529,16 @@ function parseArgs(args = []) {
       return;
     }
 
+    if (arg === "--validate-cmd" && args[index + 1]) {
+      options.validateCommand = args[index + 1];
+      return;
+    }
+
+    if (arg.startsWith("--validate-cmd=")) {
+      options.validateCommand = arg.slice("--validate-cmd=".length);
+      return;
+    }
+
     if (arg === "--timeout" && args[index + 1]) {
       options.timeoutSeconds = formatNumber(args[index + 1], 300);
       return;
@@ -504,8 +549,113 @@ function parseArgs(args = []) {
       return;
     }
 
+    if (arg === "--step-timeout" && args[index + 1]) {
+      options.stepTimeoutSeconds = formatNumber(args[index + 1], 300);
+      return;
+    }
+
+    if (arg.startsWith("--step-timeout=")) {
+      options.stepTimeoutSeconds = formatNumber(arg.slice("--step-timeout=".length), 300);
+      return;
+    }
+
+    if (arg === "--progress-interval" && args[index + 1]) {
+      options.progressIntervalSeconds = formatNumber(args[index + 1], 15);
+      return;
+    }
+
+    if (arg.startsWith("--progress-interval=")) {
+      options.progressIntervalSeconds = formatNumber(arg.slice("--progress-interval=".length), 15);
+      return;
+    }
+
+    if (arg === "--max-steps" && args[index + 1]) {
+      options.maxSteps = formatNumber(args[index + 1], null);
+      return;
+    }
+
+    if (arg.startsWith("--max-steps=")) {
+      options.maxSteps = formatNumber(arg.slice("--max-steps=".length), null);
+      return;
+    }
+
+    if (arg === "--focus" && args[index + 1]) {
+      options.focus = args[index + 1];
+      return;
+    }
+
+    if (arg.startsWith("--focus=")) {
+      options.focus = arg.slice("--focus=".length);
+      return;
+    }
+
+    if (arg === "--scope" && args[index + 1]) {
+      options.scope = args[index + 1];
+      return;
+    }
+
+    if (arg.startsWith("--scope=")) {
+      options.scope = arg.slice("--scope=".length);
+      return;
+    }
+
+    if (arg === "--answer" && args[index + 1]) {
+      options.answer = args[index + 1];
+      return;
+    }
+
+    if (arg.startsWith("--answer=")) {
+      options.answer = arg.slice("--answer=".length);
+      return;
+    }
+
     if (arg === "--dry-run") {
       options.dryRun = true;
+      return;
+    }
+
+    if (arg === "--run") {
+      options.run = true;
+      return;
+    }
+
+    if (arg === "--once") {
+      options.once = true;
+      return;
+    }
+
+    if (arg === "--autopilot") {
+      options.autopilotRun = true;
+      return;
+    }
+
+    if (arg === "--json-progress") {
+      options.jsonProgress = true;
+      return;
+    }
+
+    if (arg === "--no-run") {
+      options.noRun = true;
+      return;
+    }
+
+    if (arg === "--no-validate") {
+      options.noValidate = true;
+      return;
+    }
+
+    if (arg === "--check") {
+      options.check = true;
+      return;
+    }
+
+    if (arg === "--isolate") {
+      options.isolate = true;
+      return;
+    }
+
+    if (arg === "--allow-modify") {
+      options.allowModify = true;
       return;
     }
 
@@ -642,6 +792,22 @@ Session:
 
 Dispatch:
   --dispatch <session> --agent <${supportedAgents}> --task <text> --files <glob[,glob]> [--verify-command <cmd>] [--timeout <seconds>] [--dry-run]
+
+Pipeline:
+  --run --once [--json-progress]
+  --autopilot
+  --check
+  --step-timeout <seconds>
+  --progress-interval <seconds>
+  --max-steps <n>
+  --validate-cmd <cmd>
+  --focus <type:id>
+  --scope <glob[,glob]>
+  --answer <id>
+  --isolate
+  --allow-modify
+  --no-validate
+  --no-run
 
 Skill Capture:
   --capture-skills <session> [--yes]
@@ -1232,6 +1398,9 @@ function validatePostChangeModel(issues, postChange) {
   requireBooleanFields(issues, postChange, ["regressionDetected"], "state.json.postChange");
   if ((postChange.status === "skipped_with_reason" || postChange.status === "not_available") && !postChange.reason) {
     addError(issues, `state.json.postChange.status=${postChange.status} 时必须记录 reason`);
+  }
+  if (postChange.perCommand !== undefined && !Array.isArray(postChange.perCommand)) {
+    addError(issues, "state.json.postChange.perCommand 必须是数组");
   }
 }
 
@@ -2627,6 +2796,25 @@ function validateStateJsonModel(state, expected = {}) {
   requiredObjects.forEach((key) => {
     requirePlainObject(issues, state[key], `state.json.${key}`);
   });
+  if (state.language !== undefined && requirePlainObject(issues, state.language, "state.json.language")) {
+    requireEnumValue(issues, state.language.code, ["zh", "en"], "state.json.language.code");
+    requireNonEmptyString(issues, state.language.source || "inferred", "state.json.language.source");
+    requireEnumValue(issues, state.language.confidence || "medium", ["low", "medium", "high"], "state.json.language.confidence");
+  }
+  if (state.traceability !== undefined && requirePlainObject(issues, state.traceability, "state.json.traceability")) {
+    requireNonEmptyString(issues, state.traceability.policy || "public audit summaries only", "state.json.traceability.policy");
+    requireArray(issues, state.traceability.iterations, "state.json.traceability.iterations");
+  }
+  if (state.documentation !== undefined && requirePlainObject(issues, state.documentation, "state.json.documentation")) {
+    ["apiChanges", "architectureNotes", "implementationNotes", "changelogEntries"].forEach((key) => {
+      requireArray(issues, state.documentation[key], `state.json.documentation.${key}`);
+    });
+  }
+  if (state.deliveryDocs !== undefined && requirePlainObject(issues, state.deliveryDocs, "state.json.deliveryDocs")) {
+    requireEnumValue(issues, state.deliveryDocs.status, ["pending", "generated", "blocked", "not_available"], "state.json.deliveryDocs.status");
+    requireNonEmptyString(issues, state.deliveryDocs.path || "docs", "state.json.deliveryDocs.path");
+    requireArray(issues, state.deliveryDocs.files, "state.json.deliveryDocs.files");
+  }
   requireArray(issues, state.requirements, "state.json.requirements");
 
   const task = state.task || {};
@@ -2657,7 +2845,8 @@ function validateStateJsonModel(state, expected = {}) {
   if (!mode.mode || !MODE_CONFIGS[mode.mode]) {
     addError(issues, `state.json.mode.mode=${mode.mode || "missing"} 不是有效模式`);
   }
-  requireBooleanFields(issues, mode, ["autopilot", "allowAgentInference", "allowModify"], "state.json.mode");
+  requireBooleanFields(issues, mode, ["autopilot", "runtimeAutopilot", "allowAgentInference", "allowModify"], "state.json.mode");
+  requireEnumValue(issues, mode.loopShape, ["default", "autopilot", "plan_once"], "state.json.mode.loopShape");
 
   const budgets = state.budgets || {};
   requireNonNegativeIntegerFields(issues, budgets, [
@@ -2840,6 +3029,125 @@ async function activateSession(sessionName, action = "switch") {
   console.log(`   将 ${toRelative(sessionPaths.sessionPromptPath)} 的内容发给 Agent`);
 }
 
+async function applyDecisionAnswer(sessionPaths, answer) {
+  if (!answer) {
+    return;
+  }
+  const stateJson = await readJsonFile(sessionPaths.sessionStateJsonPath);
+  if (!stateJson) {
+    return;
+  }
+  stateJson.decisionRequest = {
+    ...(stateJson.decisionRequest || {}),
+    status: "approved",
+    answer,
+  };
+  const targetField = stateJson.decisionRequest && stateJson.decisionRequest.targetField;
+  stateJson.decisions = {
+    ...(stateJson.decisions || {}),
+    lastAnswer: answer,
+    ...(targetField ? { [targetField]: answer } : {}),
+  };
+  stateJson.watchdog = {
+    ...(stateJson.watchdog || {}),
+    triggered: false,
+    requiredAction: "continue",
+  };
+  stateJson.updatedAt = new Date().toISOString();
+  await writeJsonFileAtomic(sessionPaths.sessionStateJsonPath, stateJson);
+}
+
+async function createAutoIterateSession(options, mode, source) {
+  const rawAnswers = options.yes || options.run
+    ? buildNonInteractiveConfig(mode, options, source)
+    : source
+      ? await promptAutoIterateConfigFromFile(source, mode, options)
+      : await promptAutoIterateConfig(mode, options);
+  const sessionName = options.session
+    ? slugifySessionName(options.session)
+    : await makeUniqueSessionName(buildDefaultSessionName(rawAnswers));
+  const sessionPaths = getSessionPaths(sessionName);
+  const answers = withSessionDefaults(rawAnswers, sessionPaths);
+
+  if (await pathExists(sessionPaths.sessionDir)) {
+    if (options.yes || options.run) {
+      throw new Error(`session 已存在，非交互模式不会覆盖: ${sessionPaths.session}`);
+    }
+
+    const { overwrite } = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "overwrite",
+        message: `检测到已存在的 auto-iterate session "${sessionPaths.session}"，是否覆盖?`,
+        default: false,
+      },
+    ]);
+
+    if (!overwrite) {
+      return null;
+    }
+  }
+
+  await fs.promises.mkdir(sessionPaths.sessionDir, { recursive: true });
+  await fs.promises.mkdir(sessionPaths.stateDir, { recursive: true });
+  const stateModel = buildStateModel(answers);
+  const stateModelIssues = validateStateJsonModel(stateModel, {
+    session: sessionPaths.session,
+  });
+  if (stateModelIssues.some((issue) => issue.severity === "error")) {
+    const message = stateModelIssues
+      .map((issue) => `${issue.severity.toUpperCase()}: ${issue.message}`)
+      .join("\n");
+    throw new Error(`生成 state.json 失败，结构化状态未通过校验:\n${message}`);
+  }
+  const promptContent = buildPromptContent(answers);
+  await writeJsonFileAtomic(sessionPaths.sessionStateJsonPath, stateModel);
+  await fs.promises.writeFile(
+    sessionPaths.sessionStatePath,
+    buildStateContent(answers),
+    "utf8",
+  );
+  await fs.promises.writeFile(
+    sessionPaths.sessionPromptPath,
+    promptContent,
+    "utf8",
+  );
+  await writeCurrentFile(sessionPaths, answers);
+
+  return {
+    sessionPaths,
+    answers,
+    promptContent,
+  };
+}
+
+async function ensurePipelineSession(options) {
+  if (options.resumeSession) {
+    const sessionPaths = getSessionPaths(options.resumeSession);
+    if (!(await pathExists(sessionPaths.sessionStateJsonPath))) {
+      throw new Error(`未找到可恢复的 pipeline session: ${sessionPaths.session}`);
+    }
+    const stateJson = await readJsonFile(sessionPaths.sessionStateJsonPath);
+    await writeCurrentFile(sessionPaths, {
+      mode: stateJson && stateJson.mode ? stateJson.mode.mode : "unknown",
+      modeLabel: stateJson && stateJson.mode ? stateJson.mode.label : "unknown",
+    });
+    await applyDecisionAnswer(sessionPaths, options.answer);
+    return sessionPaths;
+  }
+
+  const mode = await resolveMode(options);
+  if (!mode || !MODE_CONFIGS[mode]) {
+    throw new Error("无效启动模式，请使用 strict / quick / diagnose / verify / plan / optimize / prototype");
+  }
+  const source = options.from ? await readChecklistFile(options.from) : null;
+  const created = await createAutoIterateSession(options, mode, source);
+  if (!created) {
+    return null;
+  }
+  return created.sessionPaths;
+}
+
 function withSessionDefaults(answers, sessionPaths) {
   return {
     ...answers,
@@ -2900,6 +3208,9 @@ function buildModeInstructions(answers) {
 function withModeDefaults(answers) {
   const mode = answers.mode || "strict";
   const config = getModeConfig(mode);
+  const language = answers.language && answers.language.code
+    ? answers.language
+    : inferLanguageFromAnswers(answers);
   const maxIterations = formatNumber(
     answers.maxIterations,
     config.defaultMaxIterations,
@@ -2911,6 +3222,7 @@ function withModeDefaults(answers) {
 
   return {
     ...answers,
+    language,
     mode,
     modeLabel: config.label,
     modeDescription: config.description,
@@ -2936,7 +3248,12 @@ function buildStateModel(rawAnswers) {
 
   return {
     schemaVersion: STATE_SCHEMA_VERSION,
-    generatedFileNotice: "state.json is the machine-authoritative auto-iterate state; state.md is generated for human reading.",
+    generatedFileNotice: getLanguageText(answers.language).generatedFileNotice,
+    language: {
+      code: languageCode(answers.language),
+      source: answers.language.source || "inferred",
+      confidence: answers.language.confidence || "medium",
+    },
     task: {
       goal: answers.goal || "未指定",
       successCriteria: normalizeLines(answers.successCriteria),
@@ -2956,6 +3273,8 @@ function buildStateModel(rawAnswers) {
       label: answers.modeLabel,
       description: answers.modeDescription,
       autopilot: answers.autopilot,
+      runtimeAutopilot: answers.autopilot,
+      loopShape: answers.autopilot ? "autopilot" : answers.mode === "plan" ? "plan_once" : "default",
       allowAgentInference: Boolean(answers.allowAgentInference),
       allowModify: answers.allowModify !== false,
       instructions: answers.modeInstructions,
@@ -3085,6 +3404,20 @@ function buildStateModel(rawAnswers) {
       coderFileOwnership: "未分配",
       fallbackStrategy: "能力不足、无隔离或用户未确认时串行执行",
     },
+    traceability: {
+      policy: "只记录公开可审计推理摘要；不得记录私有思考链。",
+      iterations: [],
+    },
+    documentation: {
+      apiChanges: [],
+      architectureNotes: [],
+      implementationNotes: [],
+      changelogEntries: [],
+    },
+    notes: [],
+    diagnose: {
+      hypotheses: [],
+    },
     validation: {
       passed: [],
       failed: [],
@@ -3098,6 +3431,7 @@ function buildStateModel(rawAnswers) {
       result: null,
       reason: "尚未执行修改后验证",
       regressionDetected: false,
+      perCommand: [],
     },
     deltaAssessment: {
       status: "pending",
@@ -3168,6 +3502,17 @@ function buildStateModel(rawAnswers) {
       selectionCriteria: "只沉淀可复用、可验证、跨任务有价值的技能点；不要记录密钥、客户数据、一次性日志或完整源码",
       lastRunSummary: "尚未执行任务后技能沉淀",
     },
+    deliveryDocs: {
+      status: "pending",
+      path: `.agent-state/auto-iterate/${answers.session || "default"}/docs`,
+      files: [
+        `.agent-state/auto-iterate/${answers.session || "default"}/docs/api.md`,
+        `.agent-state/auto-iterate/${answers.session || "default"}/docs/changelog.md`,
+        `.agent-state/auto-iterate/${answers.session || "default"}/docs/architecture.md`,
+        `.agent-state/auto-iterate/${answers.session || "default"}/docs/implementation.md`,
+      ],
+      generatedAt: null,
+    },
     postAgentValidationGate: {
       enabled: true,
       command: `fastcar-cli auto-iterate --finalize ${answers.session || "default"} --yes`,
@@ -3191,8 +3536,11 @@ function buildStateModel(rawAnswers) {
 
 function buildStateContent(rawAnswers) {
   const answers = withModeDefaults(rawAnswers);
+  const lang = languageCode(answers.language);
   const sourceChecklist = answers.sourceChecklist
-    ? `\n## 来源清单\n来源文件：${answers.sourceChecklistPath}\n\n\`\`\`markdown\n${answers.sourceChecklist}\n\`\`\`\n`
+    ? lang === "en"
+      ? `\n## Source Checklist\nSource file: ${answers.sourceChecklistPath}\n\n\`\`\`markdown\n${answers.sourceChecklist}\n\`\`\`\n`
+      : `\n## 来源清单\n来源文件：${answers.sourceChecklistPath}\n\n\`\`\`markdown\n${answers.sourceChecklist}\n\`\`\`\n`
     : "";
   const autopilotText = answers.autopilot ? "true" : "false";
   const remainingImplementationIterations = answers.autopilot
@@ -3206,6 +3554,7 @@ ${sourceChecklist}
 
 ## At-a-Glance / 人类摘要
 tl;dr：整体 in_progress；模式：${answers.mode} / ${answers.modeLabel}
+语言：${lang}
 激活状态：active；这不是普通对话内多轮工作节奏，必须按 auto-iterate session 持久化流程执行
 进度：implementation 0 / ${answers.autopilot ? answers.autopilotMaxIterations : answers.maxIterations}；optimization 0 / 未开始
 需求：passed 0 / not_verified 全部 / blocked 0 / pending REQ-BOOTSTRAP
@@ -3239,11 +3588,15 @@ current 指针：${answers.currentFile || ".agent-state/auto-iterate-current.jso
 激活声明：Agent 开始执行前必须在对话中明确声明“auto-iterate 已激活”，并列出 mode、session、state 文件、current 指针和下一步最小动作
 恢复优先级：当前消息显式 session > session state > current 指针 > 对话推断
 语言规则：输出、状态记录和交付总结必须与用户当前提示语言保持一致；用户使用中文时不要突然切换为英文，除非术语、命令、代码或用户明确要求保留英文
+language：${lang}
+status_display_rule：机器枚举保持英文；人类摘要和原因文案跟随用户语言
 
 ## Mode / 模式
 模式：${answers.mode} / ${answers.modeLabel}
 模式说明：${answers.modeDescription}
 Autopilot：${autopilotText}
+runtime_autopilot：${autopilotText}
+loop_shape：${answers.autopilot ? "autopilot" : answers.mode === "plan" ? "plan_once" : "default"}
 允许 Agent 推断流程清单：${answers.allowAgentInference ? "true" : "false"}
 允许修改文件：${answers.allowModify ? "true" : "false"}
 
@@ -3471,9 +3824,27 @@ ${formatList(answers.constraints)}
   coder_file_ownership：未分配
   fallback_strategy：能力不足、无隔离或用户未确认时串行执行
 
+## Traceability / 可追溯记录
+policy：只记录公开可审计推理摘要；不得记录私有思考链
+iterations：无
+字段来源：Worker result.json 的 trace.rationaleSummary / trace.decisions / trace.evidence 由 CLI 清洗后合并；validation、prompt/result/log 路径由 CLI 补充
+文档去向：finalize 时汇总到 docs/architecture.md 和 docs/implementation.md
+
+## Delivery Docs / 交付文档
+status：pending
+path：.agent-state/auto-iterate/${answers.session || "default"}/docs
+files：api.md；changelog.md；architecture.md；implementation.md
+generated_at：未生成
+生成时机：fastcar-cli auto-iterate --finalize ${answers.session || "default"} --yes
+语言规则：文档标题和人类可读内容跟随用户语言；文件名、JSON key 和机器枚举保持英文
+
+## Notes / 备注
+无
+
 ## Hypotheses / 假设
 已排除假设：无
 排序候选假设：未生成
+结构化假设：无
 当前主要假设：可以通过当前 Agent 能力探测、现有项目结构和验证命令推进本模式
 下一步最小动作：${answers.nextAction}
 
@@ -3607,19 +3978,108 @@ Watchdog：enabled，交付前必须从 unknown 更新为 verifiable / partially
 
 function buildPromptContent(rawAnswers) {
   const answers = withModeDefaults(rawAnswers);
+  const lang = languageCode(answers.language);
   const sourceChecklist = answers.sourceChecklist
-    ? `\n原始清单文档：\n来源文件：${answers.sourceChecklistPath}\n\n\`\`\`markdown\n${answers.sourceChecklist}\n\`\`\`\n`
+    ? lang === "en"
+      ? `\nOriginal checklist document:\nSource file: ${answers.sourceChecklistPath}\n\n\`\`\`markdown\n${answers.sourceChecklist}\n\`\`\`\n`
+      : `\n原始清单文档：\n来源文件：${answers.sourceChecklistPath}\n\n\`\`\`markdown\n${answers.sourceChecklist}\n\`\`\`\n`
     : "";
   const startModeLine = answers.autopilot
     ? "请使用 auto-iterate-coding skill，进入 Autopilot 全自动迭代模式。"
     : "请使用 auto-iterate-coding skill，按当前模式执行有边界的 Agent 工作流。";
+
+  if (lang === "en") {
+    const startLine = answers.autopilot
+      ? "Use the auto-iterate-coding skill and enter Autopilot mode."
+      : "Use the auto-iterate-coding skill and follow the bounded workflow for the current mode.";
+    return `# Auto-Iterate Coding Start Prompt
+
+Send the following content to the Agent to start this project's auto-iterate-coding workflow.
+
+\`\`\`text
+First read auto-iterate-coding/skill.md and follow its natural-language routing, mode selection, session recovery, capability degradation, stop conditions, and language consistency rules.
+If this start prompt came from natural-language routing, confirm that the command used an independent --session <name>.
+
+${startLine}
+
+Current mode: ${answers.mode} / ${answers.modeLabel}
+${answers.modeDescription}
+
+Current session: ${answers.session || "default"}
+Session machine state: ${answers.sessionStateJsonFile || ".agent-state/auto-iterate/default/state.json"}
+Session state view: ${answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"}
+Session start prompt: ${answers.sessionPromptFile || ".agent-state/auto-iterate/default/start-prompt.md"}
+Current pointer: ${answers.currentFile || ".agent-state/auto-iterate-current.json"}
+Language: ${lang}
+Language rule: write human-readable output, state notes, summaries, Skill Capture content, and delivery summaries in English; keep commands, file names, JSON keys, API names, and machine enum values unchanged.
+
+Auto-iterate activation statement:
+Before starting, state in 1-3 lines that auto-iterate is active, including mode, session, state.json, state.md, current pointer, persistence status, and the next minimal action.
+
+Mode rules:
+${answers.modeInstructions}
+
+Context and state management:
+Treat ${answers.sessionStateJsonFile || ".agent-state/auto-iterate/default/state.json"} as the machine source of truth when it exists.
+Keep status-like machine fields such as pending, passed, blocked, not_verified, requiredAction, and mode values in English. Localize only human-readable summaries, reasons, evidence, and generated documents.
+Do not rely on conversation history as the only context.
+Probe available capabilities: file read/write, commands, real tests, persistent state, sub-agent/parallel support, network, database/secrets, and git diff.
+If a capability is unavailable, mark affected requirements not_verified or blocked instead of faking completion or validation.
+Run reconcile before resuming: current branch, git status/diff, state/code consistency, external edits after the last stop, and whether recent validation can be rerun.
+After each implementation iteration, optimization iteration, context compression, early stop, or pre-delivery step, update state.json first and refresh state.md.
+Maintain Watchdog, Requirement Coverage Matrix, Definition of Done, Style Consolidation, Context Reset Review, Delivery Evidence, and Skill Capture according to the skill.
+
+## Skill Capture
+After delivery, early stop, or milestone acceptance, run Skill Capture: extract high-value reusable skills from real failure signals, debugging paths, validation strategy, framework API constraints, scaffolding, anti-patterns, and stop conditions. Write English human-readable skill content under .agents/skills and update .agents/skills/index.md. If no high-value content exists, set skillCapture.status=skipped_no_high_value with reasons.
+
+Requirements:
+If the task comes from a long document, PRD, issue list, or checklist, first extract a Requirement Coverage Matrix from the original text.
+Every requirement must include ID, original summary, status, related files, validation evidence, blocking reason, and next step.
+Do not deliver successfully while any critical requirement is pending, implemented, or not_verified.
+Passing tests is not enough; final completion must be checked against the original requirements.
+
+AI implementation checklist:
+${sourceChecklist}
+
+User goal:
+${answers.goal || "not specified"}
+
+Success criteria:
+${formatList(answers.successCriteria, "not specified")}
+
+Non-goals:
+${formatList(answers.nonGoals, "not specified")}
+
+Allowed change scope:
+${answers.allowedScope || "not specified"}
+
+Compatibility requirements:
+${formatList(answers.compatibility, "not specified")}
+
+Runnable validation commands:
+${formatList(answers.validationCommands, "not specified")}
+
+External resources, secrets, database, network, or sandbox constraints:
+${formatList(answers.constraints, "not specified")}
+
+Delivery format:
+${answers.deliveryFormat}
+
+Iteration budget:
+max_iterations = ${answers.maxIterations}
+autopilot_max_iterations = ${answers.autopilotMaxIterations}
+
+Start directly after confirmation. Report only key progress; do not stop for questions unless a stop condition or required user decision is triggered.
+\`\`\`
+`;
+  }
 
   return `# 自动迭代编码启动提示
 
 将下面内容发给 Agent，用于启动本项目的 auto-iterate-coding 流程。
 
 \`\`\`text
-请先读取 auto-iterate-coding/SKILL.md，按该 skill 的自然语言命令路由、模式选择、session 恢复、能力降级、停止条件和语言一致性规则执行。
+请先读取 auto-iterate-coding/skill.md，按该 skill 的自然语言命令路由、模式选择、session 恢复、能力降级、停止条件和语言一致性规则执行。
 如果本启动提示来自自然语言路由，请确认命令已经包含独立 session；以后每次自然语言路由都必须显式传入 --session <name>。用户未指定 session 时，由 Agent 根据模式和目标生成英文小写、数字和连字符组成的默认 session 名，例如 quick-login-bugfix、diagnose-flaky-e2e、prototype-order-state-machine，不要省略 --session。
 
 ${startModeLine}
@@ -4690,6 +5150,8 @@ function isHighValueSkillCaptureText(value) {
 }
 
 function extractSkillCandidates(stateJson) {
+  const language = inferLanguageFromState(stateJson);
+  const isEnglish = languageCode(language) === "en";
   const requirements = Array.isArray(stateJson.requirements) ? stateJson.requirements : [];
   const decisions = stateJson.decisions || {};
   const deliveryEvidence = stateJson.deliveryEvidence || {};
@@ -4727,16 +5189,22 @@ function extractSkillCandidates(stateJson) {
   }
 
   const frameworkKeywords = [
-    { pattern: /fastcar|@fastcar|Koa|Controller|Component|Service|Autowired|Application/i, skill: "fastcar-framework", title: "FastCar Framework 实践经验" },
-    { pattern: /数据库|database|mysql|postgresql|pgsql|MongoDB|Redis|ORM|mapper|entity|transaction|事务/i, skill: "fastcar-database", title: "FastCar 数据库实践经验" },
-    { pattern: /RPC|rpc|微服务|microservice|gRPC|WebSocket|Socket\.IO|MQTT|protobuf/i, skill: "fastcar-rpc-microservices", title: "FastCar RPC/微服务实践经验" },
-    { pattern: /serverless|Serverless|阿里云|腾讯云|AWS Lambda|FC|SCF|云函数/i, skill: "fastcar-serverless", title: "FastCar Serverless 实践经验" },
-    { pattern: /缓存|cache|定时任务|cron|时间轮|time.wheel|workerpool|文件监听|COS|对象存储/i, skill: "fastcar-toolkit", title: "FastCar 工具集实践经验" },
-    { pattern: /队列|queue|pg.?boss|PgBoss|job|schedule|worker|dead.letter/i, skill: "fastcar-pgboss", title: "FastCar PgBoss 队列实践经验" },
-    { pattern: /TypeScript|类型|type|interface|enum|泛型|generic|类型安全/i, skill: "typescript-coding-style", title: "TypeScript 编码实践经验" },
+    { pattern: /fastcar|@fastcar|Koa|Controller|Component|Service|Autowired|Application/i, skill: "fastcar-framework", title: isEnglish ? "FastCar Framework Practice Notes" : "FastCar Framework 实践经验" },
+    { pattern: /数据库|database|mysql|postgresql|pgsql|MongoDB|Redis|ORM|mapper|entity|transaction|事务/i, skill: "fastcar-database", title: isEnglish ? "FastCar Database Practice Notes" : "FastCar 数据库实践经验" },
+    { pattern: /RPC|rpc|微服务|microservice|gRPC|WebSocket|Socket\.IO|MQTT|protobuf/i, skill: "fastcar-rpc-microservices", title: isEnglish ? "FastCar RPC/Microservices Practice Notes" : "FastCar RPC/微服务实践经验" },
+    { pattern: /serverless|Serverless|阿里云|腾讯云|AWS Lambda|FC|SCF|云函数/i, skill: "fastcar-serverless", title: isEnglish ? "FastCar Serverless Practice Notes" : "FastCar Serverless 实践经验" },
+    { pattern: /缓存|cache|定时任务|cron|时间轮|time.wheel|workerpool|文件监听|COS|对象存储/i, skill: "fastcar-toolkit", title: isEnglish ? "FastCar Toolkit Practice Notes" : "FastCar 工具集实践经验" },
+    { pattern: /队列|queue|pg.?boss|PgBoss|job|schedule|worker|dead.letter/i, skill: "fastcar-pgboss", title: isEnglish ? "FastCar PgBoss Queue Practice Notes" : "FastCar PgBoss 队列实践经验" },
+    { pattern: /TypeScript|类型|type|interface|enum|泛型|generic|类型安全/i, skill: "typescript-coding-style", title: isEnglish ? "TypeScript Coding Practice Notes" : "TypeScript 编码实践经验" },
   ];
 
   const sessionSkillName = slugifySessionName(`captured-${session.session || "session"}`);
+  const sessionSkillTitle = isEnglish
+    ? `Session ${session.session || "unknown"} Skill Notes`
+    : `Session ${session.session || "unknown"} 技能沉淀`;
+  const sessionSkillDescription = isEnglish
+    ? "General practice notes extracted from an auto-iterate session"
+    : "从自动迭代 session 提取的通用实战经验";
 
   for (const req of requirements) {
     const summary = req.summary || "";
@@ -4748,7 +5216,9 @@ function extractSkillCandidates(stateJson) {
       if (item.pattern.test(combined)) {
         addCandidate(item.skill, {
           title: item.title,
-          description: `从 session ${session.session || "unknown"} 自动提取的实战经验`,
+          description: isEnglish
+            ? `Practice notes automatically extracted from session ${session.session || "unknown"}`
+            : `从 session ${session.session || "unknown"} 自动提取的实战经验`,
           scenario: req.summary,
           approach: sanitizedEvidence,
           sourceReq: req.id || "",
@@ -4758,8 +5228,8 @@ function extractSkillCandidates(stateJson) {
 
     if (req.status === "passed" && isHighValueSkillCaptureText(sanitizedEvidence)) {
       addCandidate(sessionSkillName, {
-        title: `Session ${session.session || "unknown"} 技能沉淀`,
-        description: "从自动迭代 session 提取的通用实战经验",
+        title: sessionSkillTitle,
+        description: sessionSkillDescription,
         scenario: req.summary,
         approach: sanitizedEvidence,
         verification: sanitizedEvidence,
@@ -4769,7 +5239,7 @@ function extractSkillCandidates(stateJson) {
 
     if (req.status === "blocked" && isHighValueSkillCaptureText(req.blockedReason)) {
       addCandidate(sessionSkillName, {
-        title: `Session ${session.session || "unknown"} 技能沉淀`,
+        title: sessionSkillTitle,
         pitfall: `${req.summary}: ${req.blockedReason}`,
         sourceReq: req.id || "",
       });
@@ -4789,8 +5259,8 @@ function extractSkillCandidates(stateJson) {
     const sanitizedValue = sanitizeSkillCaptureText(decisions[field]);
     if (isHighValueSkillCaptureText(sanitizedValue)) {
       addCandidate(sessionSkillName, {
-        title: `Session ${session.session || "unknown"} 技能沉淀`,
-        approach: `决策 ${field}: ${sanitizedValue}`,
+        title: sessionSkillTitle,
+        approach: `${isEnglish ? "Decision" : "决策"} ${field}: ${sanitizedValue}`,
         sourceDecision: field,
       });
     }
@@ -4803,10 +5273,10 @@ function extractSkillCandidates(stateJson) {
       : "";
     if (isHighValueSkillCaptureText(commandText)) {
       const resultText = cmd.result === "passed" ? "通过" :
-        cmd.result === "failed" ? "失败" : "未运行";
+        cmd.result === "failed" ? (isEnglish ? "failed" : "失败") : (isEnglish ? "not run" : "未运行");
       const summary = sanitizeSkillCaptureText(cmd.summary);
       addCandidate(sessionSkillName, {
-        title: `Session ${session.session || "unknown"} 技能沉淀`,
+        title: sessionSkillTitle,
         verification: `${commandText} - ${resultText}${isHighValueSkillCaptureText(summary) ? `: ${summary}` : ""}`,
       });
     }
@@ -4817,8 +5287,8 @@ function extractSkillCandidates(stateJson) {
     const sanitizedValue = sanitizeSkillCaptureText(implementationContract[field]);
     if (isHighValueSkillCaptureText(sanitizedValue)) {
       addCandidate(sessionSkillName, {
-        title: `Session ${session.session || "unknown"} 技能沉淀`,
-        approach: `契约 ${field}: ${sanitizedValue}`,
+        title: sessionSkillTitle,
+        approach: `${isEnglish ? "Contract" : "契约"} ${field}: ${sanitizedValue}`,
       });
     }
   }
@@ -4834,8 +5304,10 @@ function extractSkillCandidates(stateJson) {
   }
   if (fileExtensions.has(".ts") || fileExtensions.has(".tsx")) {
     addCandidate(sessionSkillName, {
-      title: `Session ${session.session || "unknown"} 技能沉淀`,
-      approach: "涉及 TypeScript 文件修改，注意类型安全和 import 规范",
+      title: sessionSkillTitle,
+      approach: isEnglish
+        ? "TypeScript files changed; pay attention to type safety and import conventions"
+        : "涉及 TypeScript 文件修改，注意类型安全和 import 规范",
     });
   }
 
@@ -4864,11 +5336,12 @@ function extractSkillCandidates(stateJson) {
   return result;
 }
 
-function buildSkillMarkdown(candidate) {
+function buildSkillMarkdown(candidate, language) {
+  const text = getLanguageText(language);
   const lines = [
     "---",
     `name: ${candidate.name}`,
-    `description: ${candidate.description || `从自动迭代 session ${candidate.session || "unknown"} 自动捕获的实战技能点`}`,
+    `description: ${candidate.description || text.skillAutoDescription(candidate.session)}`,
     "---",
     "",
     `# ${candidate.title || candidate.name}`,
@@ -4876,10 +5349,10 @@ function buildSkillMarkdown(candidate) {
   ];
 
   const sections = [
-    ["触发场景", candidate.scenarios],
-    ["可靠做法", candidate.approaches],
-    ["验证方式", candidate.verifications],
-    ["常见误区", candidate.pitfalls],
+    [text.skillSections.scenarios, candidate.scenarios],
+    [text.skillSections.approaches, candidate.approaches],
+    [text.skillSections.verifications, candidate.verifications],
+    [text.skillSections.pitfalls, candidate.pitfalls],
   ];
   for (const [title, values] of sections) {
     if (values && values.length > 0) {
@@ -4892,18 +5365,22 @@ function buildSkillMarkdown(candidate) {
   }
 
   if (candidate.sourceRequirements && candidate.sourceRequirements.length > 0) {
-    lines.push("## 来源", "");
+    lines.push(`## ${text.skillSections.source}`, "");
     lines.push(`- Session: ${candidate.session || "unknown"}`);
-    lines.push(`- 相关需求: ${candidate.sourceRequirements.join(", ")}`);
+    lines.push(languageCode(language) === "en"
+      ? `- Related requirements: ${candidate.sourceRequirements.join(", ")}`
+      : `- 相关需求: ${candidate.sourceRequirements.join(", ")}`);
     if (candidate.sourceDecisions && candidate.sourceDecisions.length > 0) {
-      lines.push(`- 相关决策: ${candidate.sourceDecisions.join(", ")}`);
+      lines.push(languageCode(language) === "en"
+        ? `- Related decisions: ${candidate.sourceDecisions.join(", ")}`
+        : `- 相关决策: ${candidate.sourceDecisions.join(", ")}`);
     }
     lines.push("");
   }
 
-  lines.push("> 本文件由 fastcar-cli auto-iterate --capture-skills 自动生成。");
-  lines.push(`> 生成时间: ${getIsoTimestamp()}`);
-  lines.push("> 请根据实际情况审查和完善内容。");
+  lines.push(text.generatedByCapture);
+  lines.push(text.generatedAt(getIsoTimestamp()));
+  lines.push(text.reviewSkill);
   lines.push("");
   return lines.join("\n");
 }
@@ -4913,7 +5390,8 @@ function buildSkillsIndexEntry(candidate) {
   return `| ${escapeCell(candidate.name)} | ${escapeCell(candidate.title || candidate.name)} | ${candidate.scenarios ? escapeCell(candidate.scenarios.slice(0, 3).join("；")) : ""} | ${escapeCell(candidate.session || "unknown")} |`;
 }
 
-async function updateSkillsIndexFile(skillsDir, candidates) {
+async function updateSkillsIndexFile(skillsDir, candidates, language) {
+  const text = getLanguageText(language);
   const indexPath = path.join(skillsDir, "index.md");
   let existingContent = "";
   try {
@@ -4963,25 +5441,19 @@ async function updateSkillsIndexFile(skillsDir, candidates) {
   }
 
   const now = getIsoTimestamp();
-  let content = `# Skills 索引
+  let content = `${text.skillsIndexTitle}
 
-> 本索引由 fastcar-cli auto-iterate --capture-skills 自动维护。
-> 最后更新: ${now}
+${text.skillsIndexNotice(now)}
 
-## 已捕获技能
+${text.capturedSkillsHeading}
 
-| 技能名称 | 标题 | 关键触发场景 | 来源 Session |
+${text.skillsIndexHeader}
 |----------|------|-------------|-------------|
 `;
   for (const candidate of candidates) {
     content += `${buildSkillsIndexEntry(candidate)}\n`;
   }
-  content += `
-## 使用说明
-
-每个技能目录包含一个 \`SKILL.md\` 文件，AI Agent 在相关任务中会自动加载。
-技能点来自自动迭代 session 的实战经验，包括真实失败信号、调试路径、验证策略等。
-`;
+  content += `\n${text.skillsIndexUsage}\n`;
   return { content, changed: true };
 }
 
@@ -5019,6 +5491,8 @@ last_run_summary：${skillCapture.lastRunSummary || ""}
 }
 
 async function writeCapturedSkills(sessionPaths, candidates, session, stateJson, currentSkillCapture) {
+  const language = inferLanguageFromState(stateJson);
+  const text = getLanguageText(language);
   const skillsDir = path.join(process.cwd(), ".agents", "skills");
   await fs.promises.mkdir(skillsDir, { recursive: true });
 
@@ -5027,12 +5501,12 @@ async function writeCapturedSkills(sessionPaths, candidates, session, stateJson,
     const skillDir = path.join(skillsDir, candidate.name);
     await fs.promises.mkdir(skillDir, { recursive: true });
     const skillMdPath = path.join(skillDir, "SKILL.md");
-    await fs.promises.writeFile(skillMdPath, buildSkillMarkdown(candidate), "utf8");
+    await fs.promises.writeFile(skillMdPath, buildSkillMarkdown(candidate, language), "utf8");
     capturedFiles.push(toRelative(skillMdPath));
     console.log(`📝 已写入: ${toRelative(skillMdPath)}`);
   }
 
-  const { content: indexContent, changed } = await updateSkillsIndexFile(skillsDir, candidates);
+  const { content: indexContent, changed } = await updateSkillsIndexFile(skillsDir, candidates, language);
   const indexPath = path.join(skillsDir, "index.md");
   await fs.promises.writeFile(indexPath, indexContent, "utf8");
   capturedFiles.push(toRelative(indexPath));
@@ -5046,7 +5520,7 @@ async function writeCapturedSkills(sessionPaths, candidates, session, stateJson,
     status: "captured",
     capturedFiles: [...new Set([...(currentSkillCapture.capturedFiles || []), ...capturedFiles])],
     pendingCandidates: [],
-    lastRunSummary: `自动捕获于 ${now}：共沉淀 ${candidates.length} 个技能 (${candidates.map(c => c.name).join(", ")})`,
+    lastRunSummary: text.capturedSummary(now, candidates.length, candidates.map(c => c.name).join(", ")),
   };
   stateJson.skillCapture = updatedCapture;
   stateJson.updatedAt = now;
@@ -5078,6 +5552,8 @@ async function captureSkills(sessionName, options = {}) {
   }
 
   const currentSkillCapture = stateJson.skillCapture || {};
+  const language = inferLanguageFromState(stateJson);
+  const text = getLanguageText(language);
   if (currentSkillCapture.status === "captured") {
     console.log(`⚠️  Session "${session}" 已执行过技能沉淀 (status=captured)。`);
     console.log(`   已捕获文件: ${(currentSkillCapture.capturedFiles || []).join(", ") || "无"}`);
@@ -5093,9 +5569,9 @@ async function captureSkills(sessionName, options = {}) {
       status: "skipped_no_high_value",
       skippedReasons: [
         ...(currentSkillCapture.skippedReasons || []),
-        "自动分析未发现足够结构化的技能点；session 中的 RCM/Decisions/Validation 数据不足以提取高价值技能。",
+        text.noHighValueReason,
       ],
-      lastRunSummary: `自动捕获于 ${now}：未发现高价值技能候选`,
+      lastRunSummary: text.noHighValueSummary(now),
     };
     stateJson.skillCapture = updatedCapture;
     stateJson.updatedAt = now;
@@ -5150,9 +5626,9 @@ async function captureSkills(sessionName, options = {}) {
       status: "skipped_no_high_value",
       skippedReasons: [
         ...(currentSkillCapture.skippedReasons || []),
-        "用户手动选择跳过技能沉淀。",
+        text.userSkippedSkillCapture,
       ],
-      lastRunSummary: `自动捕获于 ${now}：用户选择跳过`,
+      lastRunSummary: text.userSkippedSkillCaptureSummary(now),
     };
     stateJson.skillCapture = updatedCapture;
     stateJson.updatedAt = now;
@@ -5190,6 +5666,22 @@ async function finalizeAutoIterateSession(sessionName, options = {}) {
     return;
   }
 
+  const sessionPaths = getSessionPaths(session);
+  const stateJson = await readJsonFile(sessionPaths.sessionStateJsonPath);
+  if (!stateJson) {
+    console.log("❌ finalize 已停止：无法读取 state.json 生成交付文档。");
+    process.exitCode = 1;
+    return;
+  }
+  stateJson.deliveryDocs = await generateDeliveryDocs({
+    state: stateJson,
+    sessionDir: sessionPaths.sessionDir,
+    stateJsonPath: sessionPaths.sessionStateJsonPath,
+  });
+  stateJson.updatedAt = new Date().toISOString();
+  await writeJsonFileAtomic(sessionPaths.sessionStateJsonPath, stateJson);
+  console.log(`📚 已生成交付文档: ${stateJson.deliveryDocs.files.join(", ")}`);
+
   const validationResult = await validateState(session, { strict: true });
   if (!validationResult || !validationResult.ok) {
     console.log("❌ finalize 未通过：strict state 门禁失败。");
@@ -5226,6 +5718,23 @@ async function initAutoIterate(args = []) {
     return;
   }
 
+  if (options.check) {
+    const report = checkEnvironment();
+    if (options.jsonProgress) {
+      emitProgress(report, { jsonProgress: true });
+    } else {
+      console.log("auto-iterate 环境检查");
+      console.log(`usable: ${report.usable}`);
+      console.log(`recommended: ${report.recommended || "none"}`);
+      console.log(`workers_available: ${report.workers_available.map((item) => item.id).join(", ") || "none"}`);
+      console.log(`workers_unavailable: ${report.workers_unavailable.map((item) => `${item.id}:${item.reason}`).join(", ") || "none"}`);
+      if (report.issues.length > 0) {
+        console.log(`issues: ${report.issues.join(", ")}`);
+      }
+    }
+    return;
+  }
+
   if (options.list) {
     await listSessions();
     return;
@@ -5236,8 +5745,53 @@ async function initAutoIterate(args = []) {
     return;
   }
 
-  if (options.resumeSession) {
+  if (options.resumeSession && (!options.run || options.noRun)) {
     await activateSession(options.resumeSession, "resume");
+    return;
+  }
+
+  if (options.run && !options.noRun) {
+    if (options.validateState || options.dispatchSession || options.finalizeSession || options.captureSkillsSession) {
+      console.log("❌ --run 不能与 --validate-state / --dispatch / --finalize / --capture-skills 组合使用。");
+      process.exitCode = 1;
+      return;
+    }
+    try {
+      const sessionPaths = await ensurePipelineSession({
+        ...options,
+        yes: true,
+      });
+      if (!sessionPaths) {
+        return;
+      }
+      await runPipeline({
+        session: sessionPaths.session,
+        stateJsonPath: sessionPaths.sessionStateJsonPath,
+        mode: options.mode,
+        agent: options.agent,
+        once: options.once,
+        jsonProgress: options.jsonProgress,
+        stepTimeoutSeconds: options.stepTimeoutSeconds,
+        progressIntervalSeconds: options.progressIntervalSeconds,
+        maxSteps: options.maxSteps,
+        autopilotRun: options.autopilotRun,
+        autopilotMaxIterations: options.autopilotMaxIterations,
+        validateCommand: options.validateCommand || options.verifyCommand,
+        noValidate: options.noValidate,
+        focus: options.focus,
+        validateStateModel: validateStateJsonModel,
+        scope: options.scope,
+        isolate: options.isolate,
+        allowModify: options.allowModify,
+      });
+    } catch (error) {
+      if (options.jsonProgress) {
+        emitProgress({ event: "error", reason: "pipeline_start_failed", detail: error.message }, { jsonProgress: true });
+      } else {
+        console.log(`❌ ${error.message}`);
+      }
+      process.exitCode = 1;
+    }
     return;
   }
 
@@ -5272,68 +5826,21 @@ async function initAutoIterate(args = []) {
   }
 
   const source = options.from ? await readChecklistFile(options.from) : null;
-  const rawAnswers = options.yes
-    ? buildNonInteractiveConfig(mode, options, source)
-    : source
-      ? await promptAutoIterateConfigFromFile(source, mode, options)
-      : await promptAutoIterateConfig(mode, options);
-  const sessionName = options.session
-    ? slugifySessionName(options.session)
-    : await makeUniqueSessionName(buildDefaultSessionName(rawAnswers));
-  const sessionPaths = getSessionPaths(sessionName);
-  const answers = withSessionDefaults(rawAnswers, sessionPaths);
-
-  if (await pathExists(sessionPaths.sessionDir)) {
-    if (options.yes) {
-      console.log(`❌ session 已存在，非交互模式不会覆盖: ${sessionPaths.session}`);
-      console.log("   请换一个 --session，或先使用 --resume / --switch。");
-      return;
-    }
-
-    const { overwrite } = await inquirer.prompt([
-      {
-        type: "confirm",
-        name: "overwrite",
-        message: `检测到已存在的 auto-iterate session "${sessionPaths.session}"，是否覆盖?`,
-        default: false,
-      },
-    ]);
-
-    if (!overwrite) {
+  try {
+    const created = await createAutoIterateSession(options, mode, source);
+    if (!created) {
       console.log("已取消生成，未修改现有 session。");
       return;
     }
-  }
-
-  await fs.promises.mkdir(sessionPaths.sessionDir, { recursive: true });
-  await fs.promises.mkdir(sessionPaths.stateDir, { recursive: true });
-  const stateModel = buildStateModel(answers);
-  const stateModelIssues = validateStateJsonModel(stateModel, {
-    session: sessionPaths.session,
-  });
-  if (stateModelIssues.some((issue) => issue.severity === "error")) {
-    console.log("❌ 生成 state.json 失败，结构化状态未通过校验:");
-    stateModelIssues.forEach((issue) => {
-      console.log(`- ${issue.severity.toUpperCase()}: ${issue.message}`);
-    });
+    console.log(created.promptContent);
+  } catch (error) {
+    console.log(`❌ ${error.message}`);
+    if (error.message.includes("session 已存在，非交互模式不会覆盖")) {
+      console.log("   请换一个 --session，或先使用 --resume / --switch。");
+      return;
+    }
     process.exitCode = 1;
-    return;
   }
-  const promptContent = buildPromptContent(answers);
-  await writeJsonFileAtomic(sessionPaths.sessionStateJsonPath, stateModel);
-  await fs.promises.writeFile(
-    sessionPaths.sessionStatePath,
-    buildStateContent(answers),
-    "utf8",
-  );
-  await fs.promises.writeFile(
-    sessionPaths.sessionPromptPath,
-    promptContent,
-    "utf8",
-  );
-  await writeCurrentFile(sessionPaths, answers);
-
-  console.log(promptContent);
 }
 
 module.exports = {

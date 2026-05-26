@@ -165,7 +165,7 @@ Agent：fastcar-cli auto-iterate --dispatch dispatch-codex --agent codex --task 
 Agent：先在当前 shell 设置 `AUTO_ITERATE_CODEX_CMD='codex exec --cd . --sandbox workspace-write -o "{result}" - < "{prompt}"'`，再运行同一条 `--dispatch ...` 命令并去掉 `--dry-run`
 
 用户：确认 prompt 后，让本地 Kimi 真实执行这个 worker
-Agent：先在当前 shell 设置 `AUTO_ITERATE_KIMI_CMD='powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:PYTHONUTF8=''1''; kimi --work-dir . --print --final-message-only --prompt (Get-Content -Raw -Encoding UTF8 ''{prompt}'') | Set-Content -Encoding UTF8 ''{result}''"'`，再运行同一条 `--dispatch ... --agent kimi ...` 命令并去掉 `--dry-run`
+Agent：优先使用 `fastcar-cli auto-iterate --run --agent kimi --json-progress ...` 的内置受限 Kimi Worker；旧 `--dispatch` 路径需要显式配置 `AUTO_ITERATE_KIMI_CMD='kimi --quiet --afk --no-thinking --max-steps-per-turn 8 --max-ralph-iterations 0 --agent-file src/adapters/kimi-worker-agent.yaml --work-dir . -p "@{prompt}"'` 后再去掉 `--dry-run`
 
 父任务启动推荐句式：让 auto-iterate goal 处理：<目标>，session 叫 <session>。
 
