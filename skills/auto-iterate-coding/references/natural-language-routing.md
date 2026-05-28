@@ -12,6 +12,7 @@
 - 调用命令后，直接把 CLI 输出的启动提示词作为后续执行依据。
 - 调用命令或无 CLI fallback 创建状态后，必须先在对话中输出 auto-iterate 激活声明，列出 mode、session、state 文件、current 指针、状态持久化能力和下一步最小动作。
 - 如果没有 session state、start-prompt 或 current 指针，不得把当前会话内的多轮修改称为完整 auto-iterate session；必须标记为 degraded / not_available。
+- CLI 驱动 `--run` 路径必须非交互；未显式传 mode 且无 `--from` 时 CLI 默认 quick，带 `--from` 时默认 strict。Router 仍应优先显式传入推断出的 mode，便于状态和事件可读。
 
 ## Goal 术语边界
 
@@ -72,10 +73,30 @@
 | “最少迭代 5 次” / “至少跑 5 轮” / “最少 5 轮” | 不要映射为 `--autopilot-max-iterations 5`；启动后在 state 的 `minimum_implementation_iterations` 记录 5，并继续使用默认或用户另给的最大预算 |
 | “普通预算 50 轮” / “max_iterations 50” | 在命令中追加 `--max-iterations 50` |
 | “Autopilot 预算 10 轮” | 在命令中追加 `--autopilot-max-iterations 10` |
+## 手动模式 / fallback 路径映射
+
+以下说法表示用户**主动要求**走路径 B（Agent 自治执行，不 spawn 子 Worker），Agent 应在对应启动命令中追加 `--no-run`。
+
+| 用户说法 | Agent 行为 |
+| --- | --- |
+| "手动模式" / "我自己来" / "在当前对话里执行" | 在已推断出的 mode 命令中追加 `--no-run` |
+| "不要 spawn worker" / "不用子 Agent" / "不走 CLI 驱动" | 在已推断出的 mode 命令中追加 `--no-run` |
+| "用老路径" / "旧模式" / "fallback 模式" / "无 CLI fallback" | 在已推断出的 mode 命令中追加 `--no-run` |
+| "不要自动迭代流水线" / "不要 --run" | 在已推断出的 mode 命令中追加 `--no-run` |
+| "生成大 prompt 我自己跑" / "把 start-prompt 给我" | 对应 mode 命令 + `--no-run`；CLI 输出后把 `start-prompt.md` 内容呈现给用户 |
+| "你直接改，不要调外部工具" | 对应 mode 命令 + `--no-run` |
+
+注意：
+
+- 手动模式通常与具体任务意图同时出现（例如"快速修复登录问题，手动模式"）。Agent 先按"意图判断顺序"推断 mode 和参数，再追加 `--no-run`。
+- 如果用户只说了"手动模式"但未给任务目标，先追问目标，再追加 `--no-run`。
+- 被动降级（`--check` 返回无可用 Worker、环境无法 spawn、CLI 版本不支持目标 flag）不需要用户开口，Agent 自动走路径 B，不追加 `--no-run`（默认不带 `--run` 即为路径 B）。
+
 
 ## 意图判断顺序
 
 ```text
+0. 明确要求手动模式 / 不走 CLI 驱动 / 不要 spawn worker：在后续推断出的命令中追加 --no-run
 1. state 校验：validate-state
 2. session 管理：列出 / 切换 / 恢复
 3. 明确派发给 Codex / worker / goal：dispatch；这里的 goal 多数是口语，不等于当前会话 Codex goal 模型

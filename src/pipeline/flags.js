@@ -1,5 +1,9 @@
+// @ts-check
+
+/** @type {readonly import("./types").FlagStage[]} */
 const FLAG_STAGES = ["documented", "parsed", "implemented", "routable", "stable"];
 
+/** @type {Record<string, import("./types").FlagInfo>} */
 const FLAG_REGISTRY = {
   "--run": { stage: "routable", kind: "pipeline", stable: false },
   "--once": { stage: "routable", kind: "pipeline", stable: false },
@@ -8,6 +12,8 @@ const FLAG_REGISTRY = {
   "--validate-cmd": { stage: "routable", kind: "pipeline", stable: false },
   "--max-steps": { stage: "implemented", kind: "pipeline", stable: false },
   "--step-timeout": { stage: "implemented", kind: "pipeline", stable: false },
+  "--inactivity-timeout": { stage: "implemented", kind: "pipeline", stable: false },
+  "--validation-timeout": { stage: "implemented", kind: "pipeline", stable: false },
   "--progress-interval": { stage: "implemented", kind: "pipeline", stable: false },
   "--focus": { stage: "implemented", kind: "pipeline", stable: false },
   "--answer": { stage: "routable", kind: "pipeline", stable: false },
@@ -36,14 +42,27 @@ const FLAG_REGISTRY = {
   "--strict-state": { stage: "stable", kind: "session", stable: true },
 };
 
+/**
+ * @param {import("./types").FlagStage} stage
+ * @returns {number}
+ */
 function stageRank(stage) {
   return FLAG_STAGES.indexOf(stage);
 }
 
+/**
+ * @param {string} flag
+ * @returns {import("./types").FlagInfo | null}
+ */
 function getFlagInfo(flag) {
   return FLAG_REGISTRY[flag] || null;
 }
 
+/**
+ * @param {string} flag
+ * @param {import("./types").FlagStage} minimumStage
+ * @returns {boolean}
+ */
 function isFlagAtLeast(flag, minimumStage) {
   const info = getFlagInfo(flag);
   if (!info) {
@@ -52,17 +71,38 @@ function isFlagAtLeast(flag, minimumStage) {
   return stageRank(info.stage) >= stageRank(minimumStage);
 }
 
+/**
+ * @param {import("./types").FlagStage} minimumStage
+ * @returns {string[]}
+ */
 function listFlagsByStage(minimumStage) {
   return Object.keys(FLAG_REGISTRY)
     .filter((flag) => isFlagAtLeast(flag, minimumStage))
     .sort();
 }
 
-function extractFlags(command) {
-  return command.filter((item) => typeof item === "string" && item.startsWith("--"));
+/**
+ * @param {unknown} item
+ * @returns {item is string}
+ */
+function isFlagToken(item) {
+  return typeof item === "string" && item.startsWith("--");
 }
 
+/**
+ * @param {unknown[]} command
+ * @returns {string[]}
+ */
+function extractFlags(command) {
+  return command.filter(isFlagToken);
+}
+
+/**
+ * @param {unknown[]} command
+ * @returns {import("./types").FlagValidationResult}
+ */
 function validateRoutableCommand(command) {
+  /** @type {import("./types").FlagIssue[]} */
   const issues = [];
   for (const flag of extractFlags(command)) {
     const info = getFlagInfo(flag);

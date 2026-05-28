@@ -116,6 +116,180 @@
         "instructions": { "type": "string", "minLength": 1 }
       }
     },
+    "budgets": {
+      "type": "object",
+      "required": [
+        "maxIterations",
+        "autopilotMaxIterations",
+        "implementationIterationsUsed",
+        "nonImplementationIterationsUsed",
+        "validationHardeningIterationsUsed",
+        "minimumValidationHardeningIterations",
+        "optimizationIterationsUsed",
+        "totalCycles",
+        "remainingImplementationIterations",
+        "remainingValidationHardeningIterations",
+        "remainingOptimizationIterations"
+      ],
+      "properties": {
+        "maxIterations": { "type": "integer", "minimum": 0 },
+        "autopilotMaxIterations": { "type": "integer", "minimum": 0 },
+        "minimumImplementationIterations": { "type": ["integer", "null"], "minimum": 1 },
+        "implementationIterationsUsed": { "type": "integer", "minimum": 0 },
+        "nonImplementationIterationsUsed": { "type": "integer", "minimum": 0 },
+        "validationHardeningIterationsUsed": { "type": "integer", "minimum": 0 },
+        "minimumValidationHardeningIterations": { "type": "integer", "minimum": 0 },
+        "optimizationIterationsUsed": { "type": "integer", "minimum": 0 },
+        "totalCycles": { "type": "integer", "minimum": 0 },
+        "remainingImplementationIterations": { "type": "integer", "minimum": 0 },
+        "remainingValidationHardeningIterations": { "type": "integer", "minimum": 0 },
+        "remainingOptimizationIterations": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "currentState": {
+      "type": "object",
+      "required": [
+        "currentPhase",
+        "currentTask",
+        "nextAction",
+        "overallStatus",
+        "recentChanges",
+        "keyFiles",
+        "lastValidationCommand",
+        "lastValidationResult"
+      ],
+      "properties": {
+        "currentPhase": { "type": "string", "minLength": 1 },
+        "currentTask": { "type": "string", "minLength": 1 },
+        "nextAction": { "type": "string", "minLength": 1 },
+        "overallStatus": { "type": "string", "minLength": 1 },
+        "recentChanges": { "type": "string", "minLength": 1 },
+        "keyFiles": { "type": "string", "minLength": 1 },
+        "lastValidationCommand": { "type": "string", "minLength": 1 },
+        "lastValidationResult": { "type": "string", "minLength": 1 }
+      }
+    },
+    "watchdog": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "stateDrift",
+        "deliveryVerifiability",
+        "triggered",
+        "requiredAction",
+        "freshEyesRequired"
+      ],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "stateDrift": { "type": "string", "minLength": 1 },
+        "deliveryVerifiability": {
+          "enum": ["verifiable", "partially_verifiable", "not_verifiable", "unknown"]
+        },
+        "triggered": { "type": "boolean" },
+        "requiredAction": {
+          "enum": ["continue", "narrow_scope", "run_validation", "reconcile", "ask_user", "stop", "context_compress_and_review"]
+        },
+        "freshEyesRequired": { "type": "boolean" },
+        "validationHardeningStatus": { "type": "string" },
+        "validationHardeningDimensionsDone": { "type": "array", "items": { "type": "string" } },
+        "newTestCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "phaseGate": {
+      "type": "object",
+      "required": ["currentPhase", "canProceed", "blockingReasons", "gates"],
+      "properties": {
+        "currentPhase": {
+          "enum": ["requirement", "contract", "baseline", "coding", "validation", "cleanup", "delivery"]
+        },
+        "canProceed": { "type": "boolean" },
+        "blockingReasons": { "type": "array", "items": { "type": "string" } },
+        "gates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["phase", "entryCriteria", "exitCriteria", "blockingRules", "status"],
+            "properties": {
+              "phase": {
+                "enum": ["requirement", "contract", "baseline", "coding", "validation", "cleanup", "delivery"]
+              },
+              "entryCriteria": { "type": "array", "items": { "type": "string" } },
+              "exitCriteria": { "type": "array", "items": { "type": "string" } },
+              "blockingRules": { "type": "array", "items": { "type": "string" } },
+              "status": { "enum": ["pending", "passed", "blocked", "skipped_with_reason"] }
+            }
+          }
+        }
+      }
+    },
+    "implementationContract": {
+      "type": "object",
+      "required": [
+        "status",
+        "goal",
+        "understanding",
+        "scope",
+        "nonGoals",
+        "successCriteria",
+        "validationPlan",
+        "riskPoints",
+        "openQuestions",
+        "userConfirmationRequired"
+      ],
+      "properties": {
+        "status": { "enum": ["pending", "approved", "blocked"] },
+        "goal": { "type": "string", "minLength": 1 },
+        "understanding": { "type": "string", "minLength": 1 },
+        "scope": { "type": "string", "minLength": 1 },
+        "nonGoals": { "type": "string", "minLength": 1 },
+        "successCriteria": { "type": "string", "minLength": 1 },
+        "validationPlan": { "type": "string", "minLength": 1 },
+        "riskPoints": { "type": "string", "minLength": 1 },
+        "openQuestions": { "type": "array", "items": { "type": "string" } },
+        "userConfirmationRequired": { "type": "boolean" }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "required": ["status", "command", "result", "reason", "failureCategory", "allowsCoding"],
+      "properties": {
+        "status": { "enum": ["pending", "passed", "failed", "skipped_with_reason", "not_available"] },
+        "command": { "type": "string", "minLength": 1 },
+        "result": { "type": ["string", "null"], "minLength": 1 },
+        "reason": { "type": ["string", "null"], "minLength": 1 },
+        "failureCategory": {
+          "enum": ["none", "existing_failure", "new_failure", "environment_failure", "test_unavailable", "unknown"]
+        },
+        "allowsCoding": { "type": "boolean" }
+      }
+    },
+    "iterationPolicy": {
+      "type": "object",
+      "required": [
+        "currentIterationGoal",
+        "maxGoalsPerIteration",
+        "maxChangedFiles",
+        "maxDiffLines",
+        "maxNoProgressIterations",
+        "consecutiveFailureCount",
+        "allowedFiles",
+        "stopConditions",
+        "rollbackPlan",
+        "lastDecision"
+      ],
+      "properties": {
+        "currentIterationGoal": { "type": "string", "minLength": 1 },
+        "maxGoalsPerIteration": { "const": 1 },
+        "maxChangedFiles": { "type": "integer", "minimum": 0 },
+        "maxDiffLines": { "type": "integer", "minimum": 0 },
+        "maxNoProgressIterations": { "type": "integer", "minimum": 0 },
+        "consecutiveFailureCount": { "type": "integer", "minimum": 0 },
+        "allowedFiles": { "type": "array", "items": { "type": "string" } },
+        "stopConditions": { "type": "array", "items": { "type": "string" } },
+        "rollbackPlan": { "type": "array", "items": { "type": "string" } },
+        "lastDecision": { "enum": ["continue", "stop", "ask_user", "replan", "revert"] }
+      }
+    },
     "notes": {
       "type": "array",
       "items": { "type": "string" }
@@ -166,6 +340,41 @@
         "generatedAt": { "type": ["string", "null"] }
       }
     },
+    "subAgentDispatch": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "currentPhase",
+        "activeSubAgents",
+        "subAgentHistory",
+        "dispatchedCount",
+        "completedCount",
+        "failedCount",
+        "lastDispatchRound",
+        "lastMergeResult"
+      ],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "currentPhase": { "type": "string", "minLength": 1 },
+        "activeSubAgents": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/subAgent" }
+        },
+        "subAgentHistory": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/subAgent" }
+        },
+        "dispatchedCount": { "type": "integer", "minimum": 0 },
+        "completedCount": { "type": "integer", "minimum": 0 },
+        "failedCount": { "type": "integer", "minimum": 0 },
+        "lastDispatchRound": { "type": "integer", "minimum": 0 },
+        "lastMergeResult": { "type": "string" },
+        "maxSubAgentRounds": { "type": "integer", "minimum": 0 },
+        "subAgentTimeoutSeconds": { "type": "integer", "minimum": 0 },
+        "maxFailedSubAgents": { "type": "integer", "minimum": 0 },
+        "concurrencyLimit": { "type": "integer", "minimum": 0 }
+      }
+    },
     "diagnose": {
       "type": "object",
       "required": ["hypotheses"],
@@ -186,6 +395,79 @@
               "status": { "enum": ["pending", "supported", "rejected", "inconclusive"] },
               "evidence": { "type": "string" }
             }
+          }
+        }
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "summary", "type", "status", "relatedFiles", "evidence", "blockedReason", "nextStep"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string", "minLength": 1 },
+          "type": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["pending", "implemented", "passed", "blocked", "not_verified"] },
+          "relatedFiles": { "type": "array", "items": { "type": "string" } },
+          "evidence": { "type": "string", "minLength": 1 },
+          "blockedReason": { "type": "string", "minLength": 1 },
+          "nextStep": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "decisions": {
+      "type": "object",
+      "required": [
+        "compatibility",
+        "constraints",
+        "parallelWriteAllowed",
+        "parallelWriteConfirmation",
+        "coderFileOwnership",
+        "fallbackStrategy"
+      ],
+      "properties": {
+        "compatibility": { "type": "array", "items": { "type": "string" } },
+        "constraints": { "type": "array", "items": { "type": "string" } },
+        "parallelWriteAllowed": { "type": "boolean" },
+        "parallelWriteConfirmation": { "type": "string", "minLength": 1 },
+        "coderFileOwnership": { "type": "string", "minLength": 1 },
+        "fallbackStrategy": { "type": "string", "minLength": 1 }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "required": ["passed", "failed", "notRunReason", "finalVerifiability", "commands"],
+      "properties": {
+        "passed": { "type": "array" },
+        "failed": { "type": "array" },
+        "notRunReason": { "type": "string", "minLength": 1 },
+        "finalVerifiability": {
+          "enum": ["verifiable", "partially_verifiable", "not_verifiable", "unknown"]
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "type": "string", "minLength": 1 },
+              {
+                "type": "object",
+                "additionalProperties": true,
+                "required": ["command"],
+                "properties": {
+                  "command": { "type": "string", "minLength": 1 },
+                  "result": {
+                    "enum": ["passed", "failed", "skipped", "not_run", "not_available", "skipped_with_reason"]
+                  },
+                  "status": {
+                    "enum": ["passed", "failed", "skipped", "not_run", "not_available", "skipped_with_reason"]
+                  },
+                  "summary": { "type": "string" },
+                  "exitCode": { "type": ["integer", "null"] },
+                  "iteration": { "type": "integer", "minimum": 1 }
+                }
+              }
+            ]
           }
         }
       }
@@ -223,14 +505,17 @@
           "items": {
             "type": "object",
             "additionalProperties": true,
+            "required": ["command", "status"],
             "properties": {
-              "command": { "type": "string" },
-              "status": { "type": "string" },
+              "command": { "type": "string", "minLength": 1 },
+              "status": {
+                "enum": ["not_run", "passed", "failed", "skipped", "skipped_with_reason", "not_available"]
+              },
               "result": { "type": ["string", "null"] },
               "exitCode": { "type": ["integer", "null"] },
               "signal": { "type": "string" },
               "error": { "type": "string" },
-              "durationMs": { "type": "integer" },
+              "durationMs": { "type": "integer", "minimum": 0 },
               "stdoutTail": { "type": "string" },
               "stderrTail": { "type": "string" }
             }
@@ -259,6 +544,15 @@
         "outOfScopeFiles": { "type": "array", "items": { "type": "string" } },
         "highRiskFiles": { "type": "array", "items": { "type": "string" } },
         "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "required": ["status", "artifactsToDelete", "prototypeFiles"],
+      "properties": {
+        "status": { "enum": ["pending", "completed", "blocked"] },
+        "artifactsToDelete": { "type": "string", "minLength": 1 },
+        "prototypeFiles": { "type": "string", "minLength": 1 }
       }
     },
     "styleConsolidation": {
@@ -298,6 +592,33 @@
         },
         "reopenedRequirements": { "type": "array", "items": { "type": "string" } },
         "lastRunSummary": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deliveryEvidence": {
+      "type": "object",
+      "required": [
+        "status",
+        "goal",
+        "changes",
+        "changedFiles",
+        "validationSummary",
+        "baselineComparison",
+        "cleanupSummary",
+        "risks",
+        "unfinishedItems",
+        "userConfirmation"
+      ],
+      "properties": {
+        "status": { "enum": ["pending", "ready", "blocked", "delivered"] },
+        "goal": { "type": "string", "minLength": 1 },
+        "changes": { "type": "string", "minLength": 1 },
+        "changedFiles": { "type": "array", "items": { "type": "string" } },
+        "validationSummary": { "type": "string", "minLength": 1 },
+        "baselineComparison": { "type": "string", "minLength": 1 },
+        "cleanupSummary": { "type": "string", "minLength": 1 },
+        "risks": { "type": "string", "minLength": 1 },
+        "unfinishedItems": { "type": "string", "minLength": 1 },
+        "userConfirmation": { "type": "string", "minLength": 1 }
       }
     },
     "postAgentValidationGate": {
@@ -340,6 +661,37 @@
         "unit": { "type": "string" },
         "direction": { "enum": ["lower_is_better", "higher_is_better"] },
         "source": { "type": "string" }
+      }
+    },
+    "subAgent": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "agentId": { "type": "string" },
+        "agent_id": { "type": "string" },
+        "type": { "type": "string" },
+        "task": { "type": "string" },
+        "taskSummary": { "type": "string" },
+        "task_summary": { "type": "string" },
+        "filesAssigned": { "type": "array", "items": { "type": "string" } },
+        "filesChanged": {},
+        "files_changed": {},
+        "status": { "type": "string" },
+        "failureReason": { "type": "string" },
+        "failure_reason": { "type": "string" },
+        "startedAt": { "type": ["string", "null"] },
+        "completedAt": { "type": ["string", "null"] },
+        "resultSummary": { "type": "string" },
+        "mergeStatus": { "type": "string" },
+        "mergeResult": { "type": "string" },
+        "merge_result": { "type": "string" },
+        "validationResult": { "type": "string" },
+        "validation_result": { "type": "string" },
+        "promptFile": { "type": "string" },
+        "resultFile": { "type": "string" },
+        "worktreeDir": { "type": ["string", "null"] },
+        "round": { "type": "integer", "minimum": 0 }
       }
     }
   }

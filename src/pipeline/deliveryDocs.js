@@ -1,7 +1,14 @@
+// @ts-check
+
 const fs = require("fs");
 const path = require("path");
 const { inferLanguageFromState, languageCode } = require("./language");
+const { isValidationHistoryEntry } = require("./validationCommands");
 
+/**
+ * @param {unknown} value
+ * @returns {unknown[]}
+ */
 function normalizeArray(value) {
   if (!value) {
     return [];
@@ -9,6 +16,10 @@ function normalizeArray(value) {
   return Array.isArray(value) ? value : [value];
 }
 
+/**
+ * @param {unknown} item
+ * @returns {string}
+ */
 function stringifyItem(item) {
   if (item === null || item === undefined) {
     return "";
@@ -24,6 +35,22 @@ function stringifyItem(item) {
   return String(item);
 }
 
+/**
+ * @param {import("./types").PipelineStateLike} state
+ * @returns {unknown[]}
+ */
+function traceabilityIterations(state) {
+  const traceability = state.traceability && typeof state.traceability === "object"
+    ? /** @type {{ iterations?: unknown }} */ (state.traceability)
+    : {};
+  return normalizeArray(traceability.iterations);
+}
+
+/**
+ * @param {unknown} items
+ * @param {string} fallback
+ * @returns {string}
+ */
 function bulletList(items, fallback) {
   const lines = normalizeArray(items)
     .map(stringifyItem)
@@ -35,6 +62,11 @@ function bulletList(items, fallback) {
   return lines.map((item) => `- ${item}`).join("\n");
 }
 
+/**
+ * @param {import("./types").PipelineStateLike} state
+ * @param {string} fallback
+ * @returns {string}
+ */
 function commandList(state, fallback) {
   const commands = normalizeArray(state.validation && state.validation.commands)
     .map((item) => {
@@ -42,6 +74,10 @@ function commandList(state, fallback) {
         return item;
       }
       if (item && typeof item === "object") {
+        const commandItem = /** @type {{ command?: unknown }} */ (item);
+        if (!isValidationHistoryEntry(item)) {
+          return typeof commandItem.command === "string" ? commandItem.command : "";
+        }
         return `${item.command || "not_run"} -> ${item.result || item.status || "unknown"}${item.summary ? ` (${item.summary})` : ""}`;
       }
       return "";
@@ -50,19 +86,30 @@ function commandList(state, fallback) {
   return bulletList(commands, fallback);
 }
 
+/**
+ * @param {import("./types").PipelineStateLike} state
+ * @param {string} fallback
+ * @returns {string}
+ */
 function traceLines(state, fallback) {
-  const iterations = normalizeArray(state.traceability && state.traceability.iterations);
+  const iterations = traceabilityIterations(state);
   if (iterations.length === 0) {
     return `- ${fallback}`;
   }
-  return iterations.map((item) => {
-    const focus = item.focus && item.focus.type
-      ? `${item.focus.type}${item.focus.reqId ? `:${item.focus.reqId}` : ""}`
+  return iterations.map((rawItem) => {
+    const item = rawItem && typeof rawItem === "object" ? /** @type {Record<string, unknown>} */ (rawItem) : {};
+    const focus = item.focus && typeof item.focus === "object" ? /** @type {Record<string, unknown>} */ (item.focus) : {};
+    const focusText = focus.type
+      ? `${focus.type}${focus.reqId ? `:${focus.reqId}` : ""}`
       : "unknown";
-    return `- Iteration ${item.iteration || "?"} (${focus}): ${item.rationaleSummary || item.summary || fallback}`;
+    return `- Iteration ${item.iteration || "?"} (${focusText}): ${item.rationaleSummary || item.summary || fallback}`;
   }).join("\n");
 }
 
+/**
+ * @param {unknown} language
+ * @returns {Record<string, string>}
+ */
 function docText(language) {
   if (languageCode(language) === "en") {
     return {
@@ -90,17 +137,24 @@ function docText(language) {
   };
 }
 
+/**
+ * @param {import("./types").PipelineStateLike} state
+ * @returns {Record<string, string>}
+ */
 function buildDocs(state) {
   const language = inferLanguageFromState(state);
   const text = docText(language);
-  const task = state.task || {};
+  const task = state.task && typeof state.task === "object" ? /** @type {Record<string, unknown>} */ (state.task) : {};
   const delivery = state.deliveryEvidence || {};
-  const documentation = state.documentation || {};
+  const documentation = state.documentation && typeof state.documentation === "object" ? /** @type {Record<string, unknown>} */ (state.documentation) : {};
   const requirements = normalizeArray(state.requirements);
   const changedFiles = normalizeArray(delivery.changedFiles).length > 0
     ? delivery.changedFiles
-    : normalizeArray(state.traceability && state.traceability.iterations)
-      .flatMap((item) => normalizeArray(item.filesChanged));
+    : traceabilityIterations(state)
+      .flatMap((item) => {
+        const record = item && typeof item === "object" ? /** @type {{ filesChanged?: unknown }} */ (item) : {};
+        return normalizeArray(record.filesChanged);
+      });
   const generatedAt = new Date().toISOString();
 
   if (languageCode(language) === "en") {
@@ -117,7 +171,10 @@ function buildDocs(state) {
         bulletList(documentation.apiChanges, text.noApi),
         "",
         "## Related Requirements",
-        bulletList(requirements.map((item) => `${item.id}: ${item.summary} (${item.status})`), text.noData),
+        bulletList(requirements.map((item) => {
+          const requirement = item && typeof item === "object" ? /** @type {Record<string, unknown>} */ (item) : {};
+          return `${requirement.id}: ${requirement.summary} (${requirement.status})`;
+        }), text.noData),
       ].join("\n"),
       "changelog.md": [
         "# Changelog",
@@ -142,7 +199,10 @@ function buildDocs(state) {
         bulletList(documentation.architectureNotes, text.noArch),
         "",
         "## Decisions",
-        bulletList((state.traceability && state.traceability.iterations || []).flatMap((item) => normalizeArray(item.decisions)), text.noData),
+        bulletList(traceabilityIterations(state).flatMap((item) => {
+          const record = item && typeof item === "object" ? /** @type {{ decisions?: unknown }} */ (item) : {};
+          return normalizeArray(record.decisions);
+        }), text.noData),
         "",
         "## Traceability",
         text.traceNotice,
@@ -188,7 +248,10 @@ function buildDocs(state) {
       bulletList(documentation.apiChanges, text.noApi),
       "",
       "## 关联需求",
-      bulletList(requirements.map((item) => `${item.id}: ${item.summary} (${item.status})`), text.noData),
+        bulletList(requirements.map((item) => {
+          const requirement = item && typeof item === "object" ? /** @type {Record<string, unknown>} */ (item) : {};
+          return `${requirement.id}: ${requirement.summary} (${requirement.status})`;
+        }), text.noData),
     ].join("\n"),
     "changelog.md": [
       "# 变更日志",
@@ -213,7 +276,10 @@ function buildDocs(state) {
       bulletList(documentation.architectureNotes, text.noArch),
       "",
       "## 决策记录",
-      bulletList((state.traceability && state.traceability.iterations || []).flatMap((item) => normalizeArray(item.decisions)), text.noData),
+      bulletList(traceabilityIterations(state).flatMap((item) => {
+        const record = item && typeof item === "object" ? /** @type {{ decisions?: unknown }} */ (item) : {};
+        return normalizeArray(record.decisions);
+      }), text.noData),
       "",
       "## 可追溯记录",
       text.traceNotice,
@@ -246,6 +312,10 @@ function buildDocs(state) {
   };
 }
 
+/**
+ * @param {import("./types").DeliveryDocsOptions} options
+ * @returns {Promise<import("./types").DeliveryDocsResult>}
+ */
 async function generateDeliveryDocs(options) {
   const state = options.state;
   const sessionDir = options.sessionDir || path.dirname(options.stateJsonPath);
@@ -255,10 +325,11 @@ async function generateDeliveryDocs(options) {
   for (const [fileName, content] of Object.entries(docs)) {
     await fs.promises.writeFile(path.join(docsDir, fileName), `${content.trimEnd()}\n`, "utf8");
   }
-  const files = Object.keys(docs).map((fileName) => `.agent-state/auto-iterate/${state.session.session}/docs/${fileName}`);
+  const sessionName = state.session && state.session.session ? state.session.session : "unknown";
+  const files = Object.keys(docs).map((fileName) => `.agent-state/auto-iterate/${sessionName}/docs/${fileName}`);
   return {
     status: "generated",
-    path: `.agent-state/auto-iterate/${state.session.session}/docs`,
+    path: `.agent-state/auto-iterate/${sessionName}/docs`,
     files,
     generatedAt: new Date().toISOString(),
   };

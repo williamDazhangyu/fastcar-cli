@@ -1,17 +1,33 @@
+// @ts-check
+
 const fs = require("fs");
 const path = require("path");
 const { runNativeCommandAsync } = require("./commandResolver");
+const { buildRunOptions } = require("./runOptions");
 
+/**
+ * @param {string} prompt
+ * @param {string} name
+ * @returns {string}
+ */
 function extractPromptField(prompt, name) {
   const pattern = new RegExp(`^${name}:\\s*(.+)$`, "m");
   const match = String(prompt || "").match(pattern);
   return match ? match[1].trim() : "";
 }
 
+/**
+ * @param {string} prompt
+ * @returns {string}
+ */
 function extractResultPath(prompt) {
   return extractPromptField(prompt, "Result path");
 }
 
+/**
+ * @param {import("../pipeline/types").PipelineWorkerAdapterOptions & { promptPath: string; resultPath: string }} options
+ * @returns {string}
+ */
 function buildCodexWorkerPrompt(options) {
   const source = fs.readFileSync(options.promptPath, "utf8");
   const focus = extractPromptField(source, "Focus") || "implement_req";
@@ -75,6 +91,10 @@ function buildCodexWorkerPrompt(options) {
   ].join("\n");
 }
 
+/**
+ * @param {string} text
+ * @returns {string | null}
+ */
 function extractJsonObject(text) {
   const value = String(text || "").trim().replace(/^\uFEFF/, "");
   if (!value) {
@@ -110,6 +130,12 @@ function extractJsonObject(text) {
   return null;
 }
 
+/**
+ * @param {import("../pipeline/types").PipelineWorkerBaseResult} result
+ * @param {string} outputPath
+ * @param {string} resultPath
+ * @returns {import("../pipeline/types").PipelineWorkerBaseResult}
+ */
 function ensureResultFromCodexOutput(result, outputPath, resultPath) {
   if (fs.existsSync(resultPath)) {
     return result;
@@ -132,6 +158,9 @@ function ensureResultFromCodexOutput(result, outputPath, resultPath) {
   };
 }
 
+/**
+ * @returns {string | null}
+ */
 function getCodexTargetTriple() {
   if (process.platform !== "win32") {
     return null;
@@ -145,6 +174,9 @@ function getCodexTargetTriple() {
   return null;
 }
 
+/**
+ * @returns {string | null}
+ */
 function resolveWindowsNativeCodex() {
   const targetTriple = getCodexTargetTriple();
   if (!targetTriple) {
@@ -169,6 +201,10 @@ function resolveWindowsNativeCodex() {
   return null;
 }
 
+/**
+ * @param {import("../pipeline/types").PipelineWorkerAdapterOptions & { promptPath: string; resultPath: string; cwd: string }} options
+ * @returns {Promise<import("../pipeline/types").PipelineWorkerBaseResult>}
+ */
 function runCodexAdapter(options) {
   const prompt = buildCodexWorkerPrompt(options);
   const codexPromptPath = path.join(path.dirname(options.promptPath), "codex-prompt.md");
@@ -185,12 +221,9 @@ function runCodexAdapter(options) {
     outputPath,
     "-",
   ];
-  return runNativeCommandAsync(resolveWindowsNativeCodex() || "codex", args, {
-    cwd: options.cwd,
+  return runNativeCommandAsync(resolveWindowsNativeCodex() || "codex", args, buildRunOptions(options, {
     input: prompt,
-    detached: true,
-    timeoutMs: options.timeoutMs,
-  }).then((result) => ensureResultFromCodexOutput(result, outputPath, options.resultPath));
+  })).then((result) => ensureResultFromCodexOutput(result, outputPath, options.resultPath));
 }
 
 module.exports = {

@@ -177,6 +177,36 @@ test("Codex adapter 在 Windows 可解析 native exe 或安全降级", () => {
   }
 });
 
+test("native Worker adapters 避免 detached console 并透传输出进度回调", () => {
+  const files = ["codex.js", "kimi.js", "claude.js", "gemini.js", "cursor.js"];
+  for (const file of files) {
+    const source = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", file), "utf8");
+    assert.ok(!source.includes("detached: true"), `${file} must not detach worker process`);
+    assert.ok(source.includes("buildRunOptions(options"), `${file} must use shared run option forwarding`);
+  }
+});
+
+test("native Worker adapters 统一透传 timeout policy 选项", () => {
+  const helper = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", "runOptions.js"), "utf8");
+  for (const expected of [
+    "timeoutMs",
+    "inactivityTimeoutMs",
+    "warnBeforeMs",
+    "graceKillMs",
+    "timeoutWarningPath",
+    "onOutput",
+  ]) {
+    assert.ok(helper.includes(`${expected}: options.${expected}`), `runOptions must forward ${expected}`);
+  }
+
+  const files = ["template.js", "codex.js", "kimi.js", "claude.js", "gemini.js", "cursor.js"];
+  for (const file of files) {
+    const source = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", file), "utf8");
+    assert.ok(source.includes("./runOptions"), `${file} must import shared run options`);
+    assert.ok(source.includes("buildRunOptions(options"), `${file} must forward timeout policy through helper`);
+  }
+});
+
 test("runNativeCommandAsync 超时后返回 timedOut", async () => {
   const result = await runNativeCommandAsync(process.execPath, [
     "-e",
@@ -189,6 +219,71 @@ test("runNativeCommandAsync 超时后返回 timedOut", async () => {
   });
   assert.strictEqual(result.status, 1);
   assert.strictEqual(result.timedOut, true);
+});
+
+test("runNativeCommandAsync 写入 timeout warning 并支持关闭 wall-clock timeout", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fastcar-timeout-warning-"));
+  const warningPath = path.join(dir, "timeout-warning.json");
+  const events = [];
+  const timedOut = await runNativeCommandAsync(process.execPath, [
+    "-e",
+    "setTimeout(()=>{}, 5000)",
+  ], {
+    cwd: dir,
+    timeoutMs: 250,
+    warnBeforeMs: 200,
+    graceKillMs: 10,
+    timeoutWarningPath: warningPath,
+    onOutput(event) {
+      events.push(event);
+    },
+  });
+  assert.strictEqual(timedOut.status, 1);
+  assert.strictEqual(timedOut.timedOut, true);
+  assert.ok(fs.existsSync(warningPath));
+  assert.ok(events.some((event) => event.event === "worker_timeout_warning"));
+
+  const disabled = await runNativeCommandAsync(process.execPath, [
+    "-e",
+    "setTimeout(()=>process.exit(0), 100)",
+  ], {
+    cwd: dir,
+    timeoutMs: 0,
+  });
+  assert.strictEqual(disabled.status, 0, disabled.stderr || disabled.error);
+  assert.strictEqual(disabled.timedOut, false);
+
+  const explicitDisabled = await runNativeCommandAsync(process.execPath, [
+    "-e",
+    "setTimeout(()=>process.exit(0), 100)",
+  ], {
+    cwd: dir,
+    timeout: 10,
+    timeoutMs: 0,
+  });
+  assert.strictEqual(explicitDisabled.status, 0, explicitDisabled.stderr || explicitDisabled.error);
+  assert.strictEqual(explicitDisabled.timedOut, false);
+});
+
+test("runNativeCommandAsync 同时触发 wall 与 inactivity timeout 时只终止一次", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fastcar-timeout-once-"));
+  const warningPath = path.join(dir, "timeout-warning.json");
+  const result = await runNativeCommandAsync(process.execPath, [
+    "-e",
+    "setTimeout(()=>{}, 5000)",
+  ], {
+    cwd: dir,
+    timeoutMs: 180,
+    inactivityTimeoutMs: 180,
+    warnBeforeMs: 0,
+    graceKillMs: 120,
+    timeoutWarningPath: warningPath,
+  });
+  assert.strictEqual(result.status, 1);
+  assert.strictEqual(result.timedOut, true);
+  const warning = JSON.parse(fs.readFileSync(warningPath, "utf8"));
+  assert.strictEqual(warning.event, "timeout_kill");
+  assert.match(warning.reason, /timed out/);
 });
 
 test("Worker 集成矩阵：TemplateAdapter 覆盖命令成功、非零退出和超时", () => {

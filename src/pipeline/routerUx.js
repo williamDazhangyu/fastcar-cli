@@ -1,5 +1,29 @@
+// @ts-check
+
 const { validateRoutableCommand } = require("./flags");
 
+/**
+ * @param {unknown} value
+ * @returns {Record<string, unknown>}
+ */
+function asRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? /** @type {Record<string, unknown>} */ (value)
+    : {};
+}
+
+/**
+ * @param {unknown} value
+ * @returns {unknown[]}
+ */
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+/**
+ * @param {unknown} stdout
+ * @returns {Record<string, unknown>[]}
+ */
 function parseNdjson(stdout) {
   return String(stdout || "")
     .split(/\r?\n/)
@@ -8,6 +32,10 @@ function parseNdjson(stdout) {
     .map((line) => JSON.parse(line));
 }
 
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
 function shellQuote(value) {
   const text = String(value || "");
   if (/^[a-zA-Z0-9_./:-]+$/.test(text)) {
@@ -16,6 +44,10 @@ function shellQuote(value) {
   return `"${text.replace(/"/g, '\\"')}"`;
 }
 
+/**
+ * @param {unknown} input
+ * @returns {import("./types").AutoIterateMode | string}
+ */
 function inferMode(input) {
   const text = String(input || "");
   if (/优化|性能|重构/.test(text)) {
@@ -30,6 +62,11 @@ function inferMode(input) {
   return /全部|完整|端到端|PRD|prd|文档|docs/.test(text) ? "strict" : "quick";
 }
 
+/**
+ * @param {unknown} input
+ * @param {string} mode
+ * @returns {string}
+ */
 function inferSession(input, mode) {
   const text = String(input || "");
   const explicit = text.match(/session\s*(?:叫|=|:)?\s*([a-zA-Z0-9_-]+)/i);
@@ -42,11 +79,20 @@ function inferSession(input, mode) {
   return `${mode}-${suffix}`;
 }
 
+/**
+ * @param {unknown} input
+ * @returns {string | null}
+ */
 function extractFromPath(input) {
   const match = String(input || "").match(/(?:docs|\.\/docs|[a-zA-Z]:\\[^\s"'，。]+)[^\s"'，。]*(?:\.md|\.markdown|\.txt)/i);
   return match ? match[0].replace(/\\/g, "/") : null;
 }
 
+/**
+ * @param {unknown} input
+ * @param {import("./types").RouterRunOptions} [options]
+ * @returns {string[]}
+ */
 function buildRunArgs(input, options = {}) {
   const mode = options.mode || inferMode(input);
   const session = options.session || inferSession(input, mode);
@@ -66,7 +112,7 @@ function buildRunArgs(input, options = {}) {
   if (fromPath) {
     args.push("--from", fromPath);
   } else {
-    args.push("--goal", options.goal || input);
+    args.push("--goal", options.goal || String(input || ""));
   }
   if (options.validateCmd) {
     args.push("--validate-cmd", options.validateCmd);
@@ -77,13 +123,18 @@ function buildRunArgs(input, options = {}) {
   return args;
 }
 
+/**
+ * @param {unknown} input
+ * @param {Record<string, unknown> | null | undefined} checkEvent
+ * @param {import("./types").RouterPlanOptions} [options]
+ * @returns {import("./types").RouterPlan}
+ */
 function buildRouterPlan(input, checkEvent, options = {}) {
-  const workers = Array.isArray(checkEvent && checkEvent.workers_available)
-    ? checkEvent.workers_available
-    : [];
+  const eventRecord = asRecord(checkEvent);
+  const workers = asArray(eventRecord.workers_available);
   const commands = [["fastcar-cli", "auto-iterate", "--check", "--json-progress"]];
   if (workers.length === 0) {
-    const fallbackArgs = ["auto-iterate", options.noRunMode || "--quick", "--goal", options.goal || input, "--session", options.session || inferSession(input, "quick"), "--yes"];
+    const fallbackArgs = ["auto-iterate", options.noRunMode || "--quick", "--goal", options.goal || String(input || ""), "--session", options.session || inferSession(input, "quick"), "--yes"];
     commands.push(["fastcar-cli", ...fallbackArgs]);
     const routeValidation = validateRoutableCommand(commands[1]);
     return {
@@ -105,25 +156,35 @@ function buildRouterPlan(input, checkEvent, options = {}) {
   };
 }
 
+/**
+ * @param {string[]} command
+ * @returns {string}
+ */
 function formatCommand(command) {
   return command.map(shellQuote).join(" ");
 }
 
+/**
+ * @param {Record<string, unknown> | null | undefined} event
+ * @returns {string}
+ */
 function summarizeProgress(event) {
   if (!event || !event.event) {
     return "";
   }
+  const focus = asRecord(event.focus);
+  const blockingReasons = asArray(event.blocking_reasons).map(String);
   switch (event.event) {
     case "session_started":
       return `已启动 ${event.mode} 模式，session 为 ${event.session}，Worker 为 ${event.agent || "unknown"}。`;
     case "iteration_start":
-      return `第 ${event.iter} 轮开始，当前 focus 是 ${event.focus && event.focus.summary ? event.focus.summary : "未命名任务"}。`;
+      return `第 ${event.iter} 轮开始，当前 focus 是 ${focus.summary ? String(focus.summary) : "未命名任务"}。`;
     case "validation_done":
       return `第 ${event.iter} 轮验证 ${event.status}，命令：${event.command || "not_run"}。`;
     case "state_merged":
       return `第 ${event.iter} 轮状态已合并。`;
     case "delivery_gate":
-      return event.ready ? "交付门禁已满足。" : `交付门禁未满足：${(event.blocking_reasons || []).join(", ") || "unknown"}。`;
+      return event.ready ? "交付门禁已满足。" : `交付门禁未满足：${blockingReasons.join(", ") || "unknown"}。`;
     case "pipeline_stopped":
       return `Pipeline 已停止，原因：${event.reason}。`;
     case "error":
@@ -133,12 +194,17 @@ function summarizeProgress(event) {
   }
 }
 
+/**
+ * @param {Record<string, unknown>} event
+ * @param {string} answer
+ * @returns {string[]}
+ */
 function buildResumeCommandFromDecision(event, answer) {
   return [
     "fastcar-cli",
     "auto-iterate",
     "--resume",
-    event.session || "<session>",
+    typeof event.session === "string" && event.session ? event.session : "<session>",
     "--run",
     "--autopilot",
     "--answer",
@@ -147,6 +213,12 @@ function buildResumeCommandFromDecision(event, answer) {
   ];
 }
 
+/**
+ * @param {number} exitCode
+ * @param {Record<string, unknown>[]} events
+ * @param {string} [answer]
+ * @returns {{ question: unknown; options: unknown[]; command: string[] } | null}
+ */
 function handleNeedDecision(exitCode, events, answer) {
   const decision = events.find((event) => event.event === "need_decision");
   if (exitCode !== 42 || !decision) {
@@ -154,20 +226,28 @@ function handleNeedDecision(exitCode, events, answer) {
   }
   return {
     question: decision.question,
-    options: decision.options || [],
+    options: asArray(decision.options),
     command: buildResumeCommandFromDecision(decision, answer || "<id>"),
   };
 }
 
+/**
+ * @param {Record<string, unknown>} listEvent
+ * @returns {string[] | null}
+ */
 function buildResumeFromList(listEvent) {
-  const sessions = Array.isArray(listEvent && listEvent.sessions) ? listEvent.sessions : [];
-  const current = sessions.find((item) => item && item.current) || sessions[0];
-  if (!current || !current.session) {
+  const sessions = asArray(listEvent && listEvent.sessions).map(asRecord);
+  const current = sessions.find((item) => item.current) || sessions[0];
+  if (!current || typeof current.session !== "string" || !current.session) {
     return null;
   }
   return ["fastcar-cli", "auto-iterate", "--resume", current.session, "--run", "--autopilot", "--json-progress"];
 }
 
+/**
+ * @param {unknown} text
+ * @returns {boolean}
+ */
 function containsForbiddenManualInstruction(text) {
   return /请你然后运行|请复制下面 prompt|请手动运行|你自己运行\s+(?:npm|fastcar-cli|node)/i.test(String(text || ""));
 }

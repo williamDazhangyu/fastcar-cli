@@ -1,16 +1,32 @@
+// @ts-check
+
 const { getLanguageText, languageCode } = require("./language");
 
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
 function formatJson(value) {
   return JSON.stringify(value, null, 2);
 }
 
+/**
+ * @param {unknown} value
+ * @returns {string[]}
+ */
 function normalizeList(value) {
   if (!value) {
     return [];
   }
-  return Array.isArray(value) ? value.filter(Boolean) : [value].filter(Boolean);
+  return (Array.isArray(value) ? value : [value])
+    .filter((item) => item !== null && item !== undefined && item !== "")
+    .map(String);
 }
 
+/**
+ * @param {Partial<import("./types").BuildIterationPromptContext>} [ctx]
+ * @returns {string[]}
+ */
 function buildAllowedFiles(ctx = {}) {
   const lang = languageCode(ctx.language);
   const files = normalizeList(ctx.writeScope || ctx.scope);
@@ -28,6 +44,12 @@ function buildAllowedFiles(ctx = {}) {
     : "未显式限制；仍只能修改本轮 focus 直接相关文件"];
 }
 
+/**
+ * @param {import("./types").PipelineFocus} [focus]
+ * @param {string} [mode]
+ * @param {unknown} [language]
+ * @returns {string[]}
+ */
 function buildFocusRules(focus = {}, mode, language) {
   const lang = languageCode(language);
   if (lang === "en") {
@@ -132,6 +154,10 @@ function buildFocusRules(focus = {}, mode, language) {
   return rules;
 }
 
+/**
+ * @param {import("./types").ValidationResult | null | undefined} lastValidation
+ * @returns {string}
+ */
 function buildLastValidation(lastValidation) {
   if (!lastValidation) {
     return "none";
@@ -144,6 +170,10 @@ function buildLastValidation(lastValidation) {
   });
 }
 
+/**
+ * @param {import("./types").BuildIterationPromptContext} ctx
+ * @returns {string}
+ */
 function buildIterationPrompt(ctx) {
   const allowedFiles = buildAllowedFiles(ctx);
   const focusRules = buildFocusRules(ctx.focus, ctx.mode, ctx.language);

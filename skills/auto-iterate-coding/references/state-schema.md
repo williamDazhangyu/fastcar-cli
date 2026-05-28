@@ -59,20 +59,22 @@
 - `state.json.language` 可选记录用户语言推断结果，当前支持 `zh` / `en`；旧 session 缺失该字段时可从 `task.goal` 或来源文档推断，不得阻断恢复。
 - `status`、`mode`、`requiredAction`、`deliveryVerifiability` 等机器枚举必须保持英文；只允许人类可读摘要、原因、证据、`state.md` 视图、Worker prompt 和 Skill Capture 文档跟随用户语言。
 - `state.json.mode.runtimeAutopilot` 记录运行时是否启用 CLI 多轮 Autopilot；`mode.loopShape` 只能是 `default`、`autopilot` 或 `plan_once`，用于区分模式默认值和本次 `--run` 形态。
-- `state.json.notes[]`、`state.json.diagnose.hypotheses[]` 和 `state.json.diagnose.hypothesisQueue[]` 是 Worker `state_patch.notes` / `state_patch.hypotheses` 的白名单合并目标；Worker 不得通过它们覆盖预算、验证或交付门禁。`hypothesisQueue` 必须按 `pending -> supported/rejected/inconclusive` 推进，避免重复验证同一个假设。
-- `state.json.traceability.iterations[]` 是每轮公开审计记录，只能保存 `rationaleSummary`、决策、证据、文件、验证结果和 prompt/result/log 路径；不得记录或要求 Worker 输出私有 chain-of-thought。
-- `state.json.documentation` 汇总 Worker 的 `documentation.apiChanges`、`architectureNotes`、`implementationNotes` 和 `changelogEntries`，作为 `--finalize` 生成 docs 的输入；Worker 不能直接写 `deliveryDocs`。
+- `state.json.notes[]`、`state.json.diagnose.hypotheses[]` 和 `state.json.diagnose.hypothesisQueue[]` 是 Worker `state_patch.notes` / `state_patch.hypotheses` 的白名单合并目标；Worker 不得通过它们覆盖预算、验证或交付门禁。CLI merge 每类最多保留最近 200 条，避免长期诊断 session 无界膨胀；`hypothesisQueue` 入队时必须保持唯一 `H<n>` ID，旧状态只有 `diagnose.hypotheses[]` 且缺少 `hypothesisQueue[]` 时必须先物化为 pending 队列，`hypothesis_test` focus 必须携带待验证假设 ID，并按 `pending -> supported/rejected/inconclusive` 推进匹配队列项，避免重复验证或误更新同一个假设。
+- `state.json.traceability.iterations[]` 是每轮公开审计记录，只能保存 `rationaleSummary`、决策、证据、文件、验证结果和 prompt/result/log 路径；不得记录或要求 Worker 输出私有 chain-of-thought；CLI merge 只保留最近 200 条，完整每轮原始证据以 `iterations/<n>/result.json`、`worker.log` 和 `validation.log` 为准。
+- `state.json.documentation` 汇总 Worker 的 `documentation.apiChanges`、`architectureNotes`、`implementationNotes` 和 `changelogEntries`，作为 `--finalize` 生成 docs 的输入；Worker 不能直接写 `deliveryDocs`；CLI merge 每类最多保留最近 200 条，避免长期 session 让 `state.json` 无界膨胀。
 - `state.json.deliveryDocs` 由 CLI 在 `--finalize` 阶段生成，默认路径为 `.agent-state/auto-iterate/<session>/docs/`，固定产物为 `api.md`、`changelog.md`、`architecture.md`、`implementation.md`。
 - `state.json.optimization.baselineMetrics` / `postMetrics` / `metricComparison` 记录优化前后可比较指标；连续无改善通过 `noImprovementStreak` 与 `maxNoImprovementIterations` 控制停止，不得在没有改善证据时无限优化。
+- `state.json.validation.commands[]` 允许启动时的字符串命令和未执行配置对象，也允许运行后的对象历史；带 `iteration/result/status/phase/exitCode/summary` 的对象只作为历史证据，不会被 `parseValidationCommands` 回流为下一轮执行命令；历史对象最多保留最近 200 条，字符串和未执行配置对象作为验证配置保留。
+- `state.json.postChange.perCommand[]` 必须逐条记录本轮实际执行的验证命令；`postChange.status=passed` 时不得包含 `failed` 命令。
 - `task.successCriteria` 不能为空；成功标准缺失时不得进入交付门禁，也不得把“按目标推断”伪装成已确认验收标准。
-- 写入 `state.json` 必须使用临时文件加原子 rename；写入后必须校验通过，再渲染 `state.md`。
+- 写入 `state.json` 必须使用临时文件加原子 rename；写入后必须校验通过，再渲染 `state.md`。如果 `state.json` 已成功写入但 `state.md` 生成视图刷新失败，CLI 只能输出 `state_markdown_refresh_failed` warning 并继续以 `state.json` 为权威源，不得回滚或阻断 pipeline。
 - `auto-iterate-current.json.stateJsonFile` 必须存在，且指向 `.agent-state/auto-iterate/<session>/state.json`。
 - `auto-iterate-current.json.stateFile` 必须存在，且指向 `.agent-state/auto-iterate/<session>/state.md`；`promptFile` 必须存在，且指向同一 session 的 `start-prompt.md`。
 - `auto-iterate-current.json.session` 必须与 `state.json.session.session` 和 `state.md` 的 `## Session / 会话` 中的 session 一致。
 - 交付前必须执行状态一致性检查：session 指针、state 文件、prompt 文件、迭代计数、最近验证命令、最近验证结果和 RCM/DoD 状态均一致；任一不一致时必须先进入 `reconcile`。
 - `At-a-Glance` 的进度、需求计数、验证状态、看门狗状态和交付可验证性必须与 `Budgets`、`Requirement Coverage Matrix`、`Watchdog`、`Validation` 一致。
 - `Definition of Done` 的成功标准状态必须引用 RCM 中对应关键 REQ 的状态和验证证据；RCM 与 DoD 不一致时，以 RCM 为准并重新派生 DoD。
-- `total_cycles` 必须等于 `implementation_iterations_used + optimization_iterations_used`。
+- `total_cycles` 必须等于 `implementation_iterations_used + optimization_iterations_used + non_implementation_iterations_used`。
 - `minimum_implementation_iterations` 只在用户明确说"最少/至少 N 轮"时启用；它是最小下限检查点，不得写入或等同于 `max_iterations` / `autopilot_max_iterations`。
 - 若存在 `minimum_implementation_iterations`，交付前必须确认 `implementation_iterations_used >= minimum_implementation_iterations`；未达到下限只能因 blocked、unsafe、需要用户决策、真实验证不可用或无安全有效工作提前停止，并记录证据。
 - 达到 `minimum_implementation_iterations` 后仍有 RCM 未通过项、Watchdog required_action、验证失败、清理项或有效优化空间时，必须继续按最大预算和停止条件推进，不得把下限当成停止线。
@@ -83,7 +85,7 @@
 - `implementationContract` 是编码前契约；`contract` 阶段通过时，`implementationContract.status` 必须为 `approved` 且 `openQuestions` 必须为空。
 - `baseline` 必须在 coding 前可判定，状态只能是 `passed`、`failed`、`skipped_with_reason` 或 `not_available`；结构化跳过必须记录原因，不得用 `unknown` 冒充验证。
 - `iterationPolicy.maxGoalsPerIteration` 必须等于 1；连续失败达到阈值时不得继续自动编码。
-- `taskProfile.complexity=large` 或 `taskProfile.risk=high` 时，必须要求用户确认；`taskProfile.needsUserConfirmation=true` 时，`decisionRequest.status` 必须为 `approved` 或 `blocked`。
+- `taskProfile.complexity=large` 或 `taskProfile.risk=high` 时，必须要求用户确认；`taskProfile.needsUserConfirmation=true` 时，`decisionRequest.status` 必须为 `approved` 或 `blocked`。唯一例外是 CLI 运行中由 Worker 触发的人工决策中断：`decisionRequest.status="pending"`、`decisionRequest.triggers` 包含 `pipeline_worker`，且 `watchdog.requiredAction="ask_user"` 时可以持久化，等待 Router 用 `--resume --answer <id>` 批准后再继续。
 - `postChange.regressionDetected=true` 或 `deltaAssessment.status=regression` 时，`deltaAssessment.decision` 不得为 `keep`，`iterationPolicy.lastDecision` 不得为 `continue`。
 - `diffBudget.changedFiles` / `diffBudget.diffLines` 不得超过 `iterationPolicy.maxChangedFiles` / `iterationPolicy.maxDiffLines`；`diffBudget.status=over_budget` 或存在 `outOfScopeFiles` / `highRiskFiles` 时，`iterationPolicy.lastDecision` 不得为 `continue`。
 - `deliveryEvidence.status=ready / delivered` 时，关键 RCM 不得存在开放项，`validation.finalVerifiability` 不得为 `unknown`，且 `cleanup.status` 必须为 `completed`。
@@ -98,13 +100,14 @@
 - 技能沉淀只沉淀可复用、可验证、跨任务有价值的技能点；不得记录密钥、客户数据、一次性日志、大段源码或只对本次任务有效的流水账。
 - `deliveryEvidence.status=ready / delivered` 时，`skillCapture.status` 不得为 `pending`；如果没有高价值技能点，必须标记 `skipped_no_high_value` 并记录 `skippedReasons`，不得静默跳过。
 - `skillCapture.status=captured` 时，`capturedFiles` 必须列出本次写入或更新的 `.agents/skills` 文件，且 `.agents/skills/index.md` 必须同步维护为检索入口。
-- `postAgentValidationGate` 必须启用交付前 CLI 门禁，推荐命令为 `fastcar-cli auto-iterate --finalize <session> --yes`；旧格式 `--validate-state <session> --strict-state` 仅作为兼容路径。失败时 `nextAction` 必须为 `context_reset_and_repair` 或 `stop`。
+- `postAgentValidationGate` 必须启用交付前 CLI 门禁，推荐命令为 `fastcar-cli auto-iterate --finalize <session> --yes`；旧格式 `--validate-state <session> --strict-state` 仅作为兼容路径。`deliveryEvidence.status=ready / delivered` 时 `lastResult` 必须为 `passed` 且 `nextAction` 必须为 `deliver`；失败时 `nextAction` 必须为 `context_reset_and_repair` 或 `stop`。
+- `deliveryEvidence.status=ready / delivered` 时，`postChange.status` 必须为 `passed` 且 `postChange.regressionDetected` 必须为 false；最近修改后验证失败、未运行或检测到 regression 时不得交付。
 - 所有关键 REQ 均为 `passed` 且 `remaining_implementation_iterations > 0` 时，`Watchdog.fresh_eyes_required` 必须为 `true`，`Watchdog.triggered` 必须为 `true`，且 `required_action` 必须为 `context_compress_and_review`；Agent 不得在此时跳过上下文压缩直接交付。
 - 所有关键 REQ 均为 `passed` 且 fresh-eyes 已处理后，必须完成 `validation_hardening` 门禁：`validation_hardening_iterations_used >= minimum_validation_hardening_iterations`，并覆盖 `boundary / negative / regression`；无法覆盖时必须把 `validation_hardening_status` 标记为 `blocked / not_available / user_accepted_limited` 并记录原因。
 - `delivery_verifiability = not_verifiable / unknown` 时，不允许按成功交付输出。
 - `Temporary Artifacts / Cleanup` 未完成且没有用户确认保留理由时，不允许按成功交付输出。
 - `Sub-Agent Dispatch` 中 `active_sub_agents` 的 `files_assigned` 在不同子 Agent 间不得重叠（coder 类型必须互斥；explore 类型允许重叠）。
-- 每轮 merge 后，`active_sub_agents` 中 `merge_status=merged` 或 `status=failed` 的条目必须移入 `sub_agent_history`，下一轮 dispatch 前 `active_sub_agents` 必须为空。
+- 每轮 merge 后，`active_sub_agents` 中 `merge_status=merged` 或 `status=failed` 的条目必须移入 `sub_agent_history`，下一轮 dispatch 前 `active_sub_agents` 必须为空；CLI dispatch 写入 `state.json.subAgentDispatch.subAgentHistory` 时保留最近 200 条并累计 `dispatchedCount` / `completedCount` / `failedCount`，不得重置已有历史。
 - 并行实现的 N 个 coder 子 Agent 完成后，`implementation_iterations_used` 只增加 1；explore 和 verify 子 Agent 不增加迭代计数。
 - `failed_count >= max_failed_sub_agents` 时，后续实现轮次不得再 dispatch 新的 coder 子 Agent。
 - 恢复 session 时，`active_sub_agents` 中 `merge_status=pending` 的条目必须在进入下一轮前完成 merge 或标记 skipped；完成后移入 `sub_agent_history`。

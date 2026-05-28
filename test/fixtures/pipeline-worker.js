@@ -12,7 +12,27 @@ if (process.env.PIPELINE_WORKER_EXIT_CODE) {
   process.exit(Number(process.env.PIPELINE_WORKER_EXIT_CODE));
 }
 
-if (process.env.PIPELINE_WORKER_SLEEP_MS) {
+if (process.env.PIPELINE_WORKER_STDOUT) {
+  console.log(process.env.PIPELINE_WORKER_STDOUT);
+}
+
+if (process.env.PIPELINE_WORKER_STDERR) {
+  console.error(process.env.PIPELINE_WORKER_STDERR);
+}
+
+if (process.env.PIPELINE_WORKER_TICK_COUNT) {
+  const count = Number(process.env.PIPELINE_WORKER_TICK_COUNT);
+  const intervalMs = Number(process.env.PIPELINE_WORKER_TICK_INTERVAL_MS || 100);
+  for (let index = 0; index < count; index += 1) {
+    console.log(`fixture tick ${index + 1}`);
+    const deadline = Date.now() + intervalMs;
+    while (Date.now() < deadline) {
+      // Busy wait keeps output activity deterministic for inactivity timeout tests.
+    }
+  }
+}
+
+if (process.env.PIPELINE_WORKER_SLEEP_MS && process.env.PIPELINE_WORKER_SLEEP_AFTER_RESULT !== "1") {
   const deadline = Date.now() + Number(process.env.PIPELINE_WORKER_SLEEP_MS);
   while (Date.now() < deadline) {
     // Busy wait keeps the fixture dependency-free and lets spawn timeout kill it.
@@ -42,10 +62,38 @@ if (process.env.PIPELINE_WORKER_SET_FILE && changedFile) {
   fs.appendFileSync(changedFile, process.env.PIPELINE_WORKER_WRITE_FILE, "utf8");
 }
 
+if (process.env.PIPELINE_WORKER_EXTRA_FILE) {
+  const extraFile = path.resolve(process.env.PIPELINE_WORKER_EXTRA_FILE);
+  fs.mkdirSync(path.dirname(extraFile), { recursive: true });
+  fs.writeFileSync(extraFile, process.env.PIPELINE_WORKER_EXTRA_CONTENT || "", "utf8");
+}
+
+if (process.env.PIPELINE_WORKER_SYMLINK_FILE) {
+  const linkPath = path.resolve(process.env.PIPELINE_WORKER_SYMLINK_FILE);
+  const targetPath = path.resolve(process.env.PIPELINE_WORKER_SYMLINK_TARGET || "README.md");
+  fs.mkdirSync(path.dirname(linkPath), { recursive: true });
+  fs.symlinkSync(targetPath, linkPath, "file");
+}
+
+if (process.env.PIPELINE_WORKER_ABSOLUTE_WRITE_FILE) {
+  const absoluteFile = path.resolve(process.env.PIPELINE_WORKER_ABSOLUTE_WRITE_FILE);
+  fs.mkdirSync(path.dirname(absoluteFile), { recursive: true });
+  fs.appendFileSync(absoluteFile, process.env.PIPELINE_WORKER_ABSOLUTE_WRITE_CONTENT || "", "utf8");
+}
+
+const promptFocus = readPromptFocus();
+
 const result = {
   status: process.env.PIPELINE_WORKER_STATUS || "completed",
   summary: "fixture worker completed one focus",
-  files_changed: changedFile ? [changedFile] : [],
+  focus: promptFocus.raw ? {
+    raw: promptFocus.raw,
+    type: promptFocus.type,
+    req_id: promptFocus.reqId || null,
+  } : null,
+  files_changed: Object.prototype.hasOwnProperty.call(process.env, "PIPELINE_WORKER_REPORTED_FILE")
+    ? (process.env.PIPELINE_WORKER_REPORTED_FILE ? [process.env.PIPELINE_WORKER_REPORTED_FILE] : [])
+    : (changedFile ? [changedFile] : []),
   requirements: [
     {
       id: "REQ-BOOTSTRAP",
@@ -83,7 +131,7 @@ const result = {
 };
 
 if (process.env.PIPELINE_WORKER_MODE_AWARE === "1") {
-  const focus = readPromptFocus();
+  const focus = promptFocus;
   result.summary = `fixture worker completed ${focus.raw || "unknown"} focus`;
   result.files_changed = [];
   result.requirements = [];
@@ -132,6 +180,10 @@ if (process.env.PIPELINE_WORKER_STATE_PATCH) {
   result.state_patch = JSON.parse(process.env.PIPELINE_WORKER_STATE_PATCH);
 }
 
+if (process.env.PIPELINE_WORKER_FILES_CHANGED_JSON) {
+  result.files_changed = JSON.parse(process.env.PIPELINE_WORKER_FILES_CHANGED_JSON);
+}
+
 if (result.status === "need_decision") {
   result.decision_request = {
     question: "选择 fixture 方案？",
@@ -147,4 +199,11 @@ if (process.env.PIPELINE_WORKER_INVALID_RESULT === "1") {
   fs.writeFileSync(resultPath, "{ invalid json", "utf8");
 } else if (process.env.PIPELINE_WORKER_SKIP_RESULT !== "1") {
   fs.writeFileSync(resultPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+}
+
+if (process.env.PIPELINE_WORKER_SLEEP_MS && process.env.PIPELINE_WORKER_SLEEP_AFTER_RESULT === "1") {
+  const deadline = Date.now() + Number(process.env.PIPELINE_WORKER_SLEEP_MS);
+  while (Date.now() < deadline) {
+    // Simulates an agent CLI that wrote result.json but failed to terminate.
+  }
 }

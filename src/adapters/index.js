@@ -1,3 +1,5 @@
+// @ts-check
+
 const { runTemplateAdapterAsync } = require("./template");
 const { runKimiAdapter } = require("./kimi");
 const { runCodexAdapter } = require("./codex");
@@ -5,39 +7,53 @@ const { runClaudeAdapter } = require("./claude");
 const { runGeminiAdapter } = require("./gemini");
 const { runCursorAdapter } = require("./cursor");
 
+/**
+ * @param {(options: any) => Promise<import("../pipeline/types").PipelineWorkerBaseResult> | import("../pipeline/types").PipelineWorkerBaseResult} runNative
+ * @returns {(options: import("../pipeline/types").PipelineWorkerAdapterOptions) => Promise<import("../pipeline/types").PipelineWorkerBaseResult> | import("../pipeline/types").PipelineWorkerBaseResult}
+ */
+function asAdapterRun(runNative) {
+  return runNative;
+}
+
+/** @type {Record<string, import("../pipeline/types").AdapterConfig>} */
 const ADAPTERS = {
   kimi: {
     label: "Kimi Code",
     env: "AUTO_ITERATE_KIMI_CMD",
     fallbackCommand: "kimi",
-    runNative: runKimiAdapter,
+    runNative: asAdapterRun(runKimiAdapter),
   },
   codex: {
     label: "Codex",
     env: "AUTO_ITERATE_CODEX_CMD",
     fallbackCommand: "codex",
-    runNative: runCodexAdapter,
+    runNative: asAdapterRun(runCodexAdapter),
   },
   claude: {
     label: "Claude Code",
     env: "AUTO_ITERATE_CLAUDE_CMD",
     fallbackCommand: "claude",
-    runNative: runClaudeAdapter,
+    runNative: asAdapterRun(runClaudeAdapter),
   },
   gemini: {
     label: "Gemini CLI",
     env: "AUTO_ITERATE_GEMINI_CMD",
     fallbackCommand: "gemini",
-    runNative: runGeminiAdapter,
+    runNative: asAdapterRun(runGeminiAdapter),
   },
   cursor: {
     label: "Cursor",
     env: "AUTO_ITERATE_CURSOR_CMD",
     fallbackCommand: "cursor",
-    runNative: runCursorAdapter,
+    runNative: asAdapterRun(runCursorAdapter),
   },
 };
 
+/**
+ * @param {string} agent
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {import("../pipeline/types").PipelineWorkerAdapter & import("../pipeline/types").AdapterConfig & { id: string; commandTemplate?: string }}
+ */
 function getAdapter(agent, env = process.env) {
   const key = ADAPTERS[agent] ? agent : "codex";
   const config = ADAPTERS[key];
@@ -46,7 +62,7 @@ function getAdapter(agent, env = process.env) {
     id: key,
     ...config,
     commandTemplate,
-    run(options) {
+    async run(options) {
       if (commandTemplate) {
         return runTemplateAdapterAsync({
           ...options,
@@ -54,19 +70,17 @@ function getAdapter(agent, env = process.env) {
         });
       }
       if (config.runNative) {
-        return config.runNative(options);
+        return await config.runNative(options);
       }
-      if (!commandTemplate) {
-        return {
-          command: null,
-          status: 1,
-          signal: null,
-          error: `未设置 ${config.env}`,
-          stdout: "",
-          stderr: "",
-          timedOut: false,
-        };
-      }
+      return {
+        command: null,
+        status: 1,
+        signal: null,
+        error: `未设置 ${config.env}`,
+        stdout: "",
+        stderr: "",
+        timedOut: false,
+      };
     },
   };
 }

@@ -139,7 +139,7 @@ stateJson=.agent-state/auto-iterate/login-bugfix/state.json，state=.agent-state
 - 如果同一轮内连续追加多个不相关 patch，应拆分为多轮；每轮只能服务一个最小目标或失败信号。
 - 如果一轮修改发现方向错误并安全回退，仍计为 1 轮；回退原因和下一步必须写入状态。
 - 递归优化不计入 `implementation_iterations_used`，单独计入 `optimization_iterations_used`。
-- `total_cycles = implementation_iterations_used + optimization_iterations_used`，只用于汇报总循环量，不替代任一预算。
+- `total_cycles = implementation_iterations_used + optimization_iterations_used + non_implementation_iterations_used`，只用于汇报总循环量，不替代任一预算。
 
 预算含义：
 

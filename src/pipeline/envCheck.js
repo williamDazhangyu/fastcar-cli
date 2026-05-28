@@ -1,5 +1,8 @@
+// @ts-check
+
 const which = require("which");
 
+/** @type {import("./types").WorkerCandidate[]} */
 const WORKER_CANDIDATES = [
   { id: "kimi", command: "kimi", env: "AUTO_ITERATE_KIMI_CMD", priority: 10 },
   { id: "codex", command: "codex", env: "AUTO_ITERATE_CODEX_CMD", priority: 9 },
@@ -14,6 +17,10 @@ const WORKER_CANDIDATES = [
   },
 ];
 
+/**
+ * @param {string} command
+ * @returns {boolean}
+ */
 function commandExists(command) {
   try {
     which.sync(command);
@@ -23,6 +30,10 @@ function commandExists(command) {
   }
 }
 
+/**
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {import("./types").EnvCheckEvent}
+ */
 function checkEnvironment(env = process.env) {
   const workers = WORKER_CANDIDATES.map((candidate) => {
     const fromEnv = Boolean(env[candidate.env]);
@@ -30,12 +41,14 @@ function checkEnvironment(env = process.env) {
     const foundCommand = commandCandidates.find((command) => commandExists(command));
     const onPath = Boolean(foundCommand);
     const available = fromEnv || onPath;
+    /** @type {"env" | "path" | "missing"} */
+    const source = fromEnv ? "env" : onPath ? "path" : "missing";
     return {
       id: candidate.id,
       command: foundCommand || candidate.command,
       env: candidate.env,
       available,
-      source: fromEnv ? "env" : onPath ? "path" : "missing",
+      source,
       reason: available ? null : "not_found",
       priority: candidate.priority,
     };

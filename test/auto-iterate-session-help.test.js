@@ -1,0 +1,98 @@
+const assert = require("assert");
+const { spawnSync } = require("child_process");
+const path = require("path");
+const {
+  buildAutoIterateHelp,
+  showAutoIterateHelp,
+} = require("../src/auto-iterate/sessionHelp");
+const { DISPATCH_AGENT_CONFIGS } = require("../src/auto-iterate/dispatch");
+
+const cases = [];
+
+function test(name, fn) {
+  cases.push({ name, fn });
+}
+
+function captureConsole(fn) {
+  const lines = [];
+  const original = console.log;
+  console.log = (...args) => {
+    lines.push(args.join(" "));
+  };
+  try {
+    const result = fn();
+    return { result, lines };
+  } finally {
+    console.log = original;
+  }
+}
+
+test("buildAutoIterateHelp renders major command groups and flags", () => {
+  const help = buildAutoIterateHelp();
+
+  assert(help.startsWith("Usage: fastcar-cli auto-iterate [options]"));
+  for (const section of ["Modes:", "Session:", "Dispatch:", "Pipeline:", "Skill Capture:", "Other:"]) {
+    assert(help.includes(section), `missing ${section}`);
+  }
+  for (const flag of [
+    "--strict",
+    "--quick",
+    "--validate-state [session|state.md|state.json]",
+    "--dispatch <session>",
+    "--run --once [--json-progress]",
+    "--inactivity-timeout <seconds>",
+    "--validation-timeout <seconds>",
+    "--scope <glob[,glob]>",
+    "--capture-skills <session> [--yes]",
+    "--examples [keyword]",
+  ]) {
+    assert(help.includes(flag), `missing ${flag}`);
+  }
+});
+
+test("buildAutoIterateHelp reflects supported dispatch agents", () => {
+  const help = buildAutoIterateHelp();
+  const supportedAgents = Object.keys(DISPATCH_AGENT_CONFIGS).join("|");
+
+  assert(help.includes(`--agent <${supportedAgents}>`));
+  assert(help.includes("codex|claude|gemini"));
+  assert(help.includes("openhands|replit"));
+});
+
+test("showAutoIterateHelp prints the built help text", () => {
+  const { lines } = captureConsole(() => showAutoIterateHelp());
+
+  assert.strictEqual(lines.length, 1);
+  assert.strictEqual(lines[0], buildAutoIterateHelp());
+});
+
+test("CLI --help uses the extracted help renderer", () => {
+  const cliPath = path.join(__dirname, "..", "bin", "cli.js");
+  const result = spawnSync(process.execPath, [cliPath, "auto-iterate", "--help"], {
+    cwd: path.join(__dirname, ".."),
+    encoding: "utf8",
+  });
+
+  assert.strictEqual(result.status, 0, result.stderr);
+  assert.strictEqual(result.stdout.trimEnd(), buildAutoIterateHelp().trimEnd());
+});
+
+(async () => {
+  let passed = 0;
+  for (const item of cases) {
+    try {
+      await item.fn();
+      passed += 1;
+      console.log(`✓ ${item.name}`);
+    } catch (error) {
+      console.error(`✗ ${item.name}`);
+      console.error(error);
+      process.exitCode = 1;
+      break;
+    }
+  }
+
+  if (process.exitCode !== 1) {
+    console.log(`\n${passed} test(s) passed.`);
+  }
+})();

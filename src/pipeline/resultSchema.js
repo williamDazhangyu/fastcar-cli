@@ -1,9 +1,20 @@
+// @ts-check
+
+/** @type {ReadonlySet<import("./types").WorkerResultStatus>} */
 const VALID_STATUSES = new Set(["completed", "failed", "blocked", "need_decision", "no_progress"]);
+/** @type {ReadonlySet<import("./types").RequirementStatus>} */
+const VALID_REQUIREMENT_STATUSES = new Set(["pending", "implemented", "passed", "blocked", "not_verified"]);
 const MAX_TEXT_LENGTH = 2000;
 const MAX_ARRAY_LENGTH = 30;
+const MAX_OBJECT_KEYS = 50;
+const MAX_SANITIZE_DEPTH = 8;
 const SENSITIVE_PATTERNS = [
   {
-    pattern: /\b(authorization|api[-_]?key|token|password|secret)\s*[:=]\s*["']?[^"'\s,;]+/gi,
+    pattern: /\b(authorization)\s*[:=]\s*["']?(?:bearer|basic)?\s*[^"'\s,;]+/gi,
+    replacement: "$1=[REDACTED]",
+  },
+  {
+    pattern: /\b(api[-_]?key|token|password|secret)\s*[:=]\s*["']?[^"'\s,;]+/gi,
     replacement: "$1=[REDACTED]",
   },
   {
@@ -12,6 +23,10 @@ const SENSITIVE_PATTERNS = [
   },
 ];
 
+/**
+ * @param {unknown} value
+ * @returns {unknown[]}
+ */
 function normalizeArray(value) {
   if (!value) {
     return [];
@@ -19,6 +34,29 @@ function normalizeArray(value) {
   return Array.isArray(value) ? value : [value];
 }
 
+/**
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+function normalizeRelativePath(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.replace(/\\/g, "/").replace(/^\.\//, "").trim();
+  if (!normalized || normalized.startsWith("/") || /^[A-Za-z]:\//.test(normalized)) {
+    return null;
+  }
+  const parts = normalized.split("/");
+  if (parts.includes("..")) {
+    return null;
+  }
+  return normalized;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
 function sanitizeText(value) {
   if (value === null || value === undefined) {
     return "";
@@ -30,21 +68,70 @@ function sanitizeText(value) {
   return text.length > MAX_TEXT_LENGTH ? `${text.slice(0, MAX_TEXT_LENGTH - 3).trim()}...` : text;
 }
 
-function sanitizeValue(value) {
+/**
+ * @param {unknown} value
+ * @param {number} [depth]
+ * @returns {unknown}
+ */
+function sanitizeValue(value, depth = 0) {
+  if (depth >= MAX_SANITIZE_DEPTH) {
+    return "[TRUNCATED_DEPTH]";
+  }
   if (Array.isArray(value)) {
-    return value.slice(0, MAX_ARRAY_LENGTH).map(sanitizeValue);
+    return value.slice(0, MAX_ARRAY_LENGTH).map((item) => sanitizeValue(item, depth + 1));
   }
   if (value && typeof value === "object") {
-    return Object.entries(value).reduce((result, [key, item]) => {
-      result[key] = sanitizeValue(item);
-      return result;
-    }, {});
+    /** @type {Record<string, unknown>} */
+    const result = {};
+    for (const [key, item] of Object.entries(value).slice(0, MAX_OBJECT_KEYS)) {
+      result[key] = sanitizeValue(item, depth + 1);
+    }
+    return result;
   }
-  return sanitizeText(value);
+  return typeof value === "string" ? sanitizeText(value) : value;
 }
 
+/**
+ * @param {unknown} value
+ * @returns {Record<string, unknown>}
+ */
+function normalizeObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? /** @type {Record<string, unknown>} */ (value)
+    : {};
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} key
+ * @returns {unknown}
+ */
+function getObjectValue(value, key) {
+  return normalizeObject(value)[key];
+}
+
+/**
+ * @param {unknown} value
+ * @returns {value is import("./types").RequirementStatus}
+ */
+function isRequirementStatus(value) {
+  return typeof value === "string" && VALID_REQUIREMENT_STATUSES.has(/** @type {import("./types").RequirementStatus} */ (value));
+}
+
+/**
+ * @param {unknown} value
+ * @returns {value is import("./types").WorkerResultStatus}
+ */
+function isWorkerResultStatus(value) {
+  return typeof value === "string" && VALID_STATUSES.has(/** @type {import("./types").WorkerResultStatus} */ (value));
+}
+
+/**
+ * @param {unknown} value
+ * @returns {import("./types").WorkerIterationResult["trace"]}
+ */
 function normalizeTrace(value) {
-  const trace = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const trace = normalizeObject(value);
   return {
     rationaleSummary: sanitizeText(trace.rationaleSummary || trace.reasoningSummary || trace.summary || ""),
     decisions: normalizeArray(trace.decisions).slice(0, MAX_ARRAY_LENGTH).map(sanitizeValue),
@@ -52,8 +139,12 @@ function normalizeTrace(value) {
   };
 }
 
+/**
+ * @param {unknown} value
+ * @returns {import("./types").WorkerIterationResult["documentation"]}
+ */
 function normalizeDocumentation(value) {
-  const documentation = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const documentation = normalizeObject(value);
   return {
     apiChanges: normalizeArray(documentation.apiChanges || documentation.api_changes).slice(0, MAX_ARRAY_LENGTH).map(sanitizeValue),
     architectureNotes: normalizeArray(documentation.architectureNotes || documentation.architecture_notes).slice(0, MAX_ARRAY_LENGTH).map(sanitizeValue),
@@ -62,7 +153,79 @@ function normalizeDocumentation(value) {
   };
 }
 
+/**
+ * @param {unknown} value
+ * @returns {unknown[]}
+ */
+function normalizeRequirements(value) {
+  return normalizeArray(value)
+    .slice(0, MAX_ARRAY_LENGTH)
+    .map(sanitizeValue);
+}
+
+/**
+ * @param {unknown} value
+ * @param {string[]} errors
+ * @returns {void}
+ */
+function validateRequirements(value, errors) {
+  normalizeArray(value).slice(0, MAX_ARRAY_LENGTH).forEach((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      errors.push(`requirements[${index}] 必须是对象`);
+      return;
+    }
+    const status = getObjectValue(item, "status");
+    if (status !== undefined && !isRequirementStatus(status)) {
+      errors.push(`requirements[${index}].status 必须是 pending / implemented / passed / blocked / not_verified`);
+    }
+  });
+}
+
+/**
+ * @param {unknown} value
+ * @returns {Record<string, unknown>}
+ */
+function normalizeStatePatch(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? normalizeObject(sanitizeValue(value))
+    : {};
+}
+
+/**
+ * @param {unknown} value
+ * @returns {import("./types").WorkerDecisionRequest | null}
+ */
+function normalizeDecisionRequest(value) {
+  const request = sanitizeValue(value);
+  return request && typeof request === "object" && !Array.isArray(request)
+    ? normalizeObject(request)
+    : null;
+}
+
+/**
+ * @param {Record<string, unknown>} result
+ * @returns {unknown}
+ */
+function normalizeRaw(result) {
+  const focus = result.focus && typeof result.focus === "object" && !Array.isArray(result.focus)
+    ? normalizeObject(result.focus)
+    : null;
+  return {
+    focus: focus ? {
+      raw: sanitizeText(focus.raw || ""),
+      type: focus.type === undefined || focus.type === null ? null : String(focus.type),
+      req_id: focus.req_id === undefined || focus.req_id === null ? null : String(focus.req_id),
+      reqId: focus.reqId === undefined || focus.reqId === null ? null : String(focus.reqId),
+    } : sanitizeValue(result.focus),
+  };
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {import("./types").ParsedIterationResult}
+ */
 function parseAndValidateIterationResult(raw) {
+  /** @type {string[]} */
   const errors = [];
   let result = raw;
 
@@ -70,10 +233,11 @@ function parseAndValidateIterationResult(raw) {
     try {
       result = JSON.parse(raw.replace(/^\uFEFF/, ""));
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       return {
         valid: false,
         result: null,
-        errors: [`result.json 不是合法 JSON: ${error.message}`],
+        errors: [`result.json 不是合法 JSON: ${message}`],
       };
     }
   }
@@ -86,41 +250,56 @@ function parseAndValidateIterationResult(raw) {
     };
   }
 
-  if (!VALID_STATUSES.has(result.status)) {
+  const resultObject = normalizeObject(result);
+  const status = getObjectValue(resultObject, "status");
+  if (!isWorkerResultStatus(status)) {
     errors.push("result.status 必须是 completed / failed / blocked / need_decision / no_progress");
   }
 
-  if (result.status === "need_decision") {
-    const request = result.decision_request || result.decisionRequest;
+  if (status === "need_decision") {
+    const request = getObjectValue(resultObject, "decision_request") || getObjectValue(resultObject, "decisionRequest");
     if (!request || typeof request !== "object") {
       errors.push("need_decision 结果必须包含 decision_request 对象");
-    } else if (!request.question) {
+    } else if (!getObjectValue(request, "question")) {
       errors.push("decision_request.question 不能为空");
     }
   }
+  const rawFilesChanged = normalizeArray(getObjectValue(resultObject, "files_changed") || getObjectValue(resultObject, "filesChanged"));
+  /** @type {string[]} */
+  const filesChanged = [];
+  for (const file of rawFilesChanged) {
+    const normalized = normalizeRelativePath(file);
+    if (!normalized) {
+      errors.push("files_changed 只能包含项目内相对路径，不能包含绝对路径、.. 或非字符串值");
+      continue;
+    }
+    filesChanged.push(normalized);
+  }
+  validateRequirements(getObjectValue(resultObject, "requirements"), errors);
 
+  const decisionRequest = normalizeDecisionRequest(getObjectValue(resultObject, "decision_request") || getObjectValue(resultObject, "decisionRequest"));
+  const normalizedStatus = isWorkerResultStatus(status) ? status : "failed";
   return {
     valid: errors.length === 0,
     result: {
-      status: result.status,
-      summary: String(result.summary || result.handoff || ""),
-      files_changed: normalizeArray(result.files_changed || result.filesChanged),
-      requirements: normalizeArray(result.requirements),
-      state_patch: result.state_patch && typeof result.state_patch === "object"
-        ? result.state_patch
-        : {},
-      validation: result.validation || null,
-      risks: String(result.risks || ""),
-      blocked_reason: String(result.blocked_reason || result.blockedReason || ""),
-      decision_request: result.decision_request || result.decisionRequest || null,
-      trace: normalizeTrace(result.trace),
-      documentation: normalizeDocumentation(result.documentation),
-      raw: result,
+      status: normalizedStatus,
+      summary: sanitizeText(getObjectValue(resultObject, "summary") || getObjectValue(resultObject, "handoff") || ""),
+      files_changed: filesChanged,
+      requirements: normalizeRequirements(getObjectValue(resultObject, "requirements")),
+      state_patch: normalizeStatePatch(getObjectValue(resultObject, "state_patch")),
+      validation: getObjectValue(resultObject, "validation") ? sanitizeValue(getObjectValue(resultObject, "validation")) : null,
+      risks: sanitizeText(getObjectValue(resultObject, "risks") || ""),
+      blocked_reason: sanitizeText(getObjectValue(resultObject, "blocked_reason") || getObjectValue(resultObject, "blockedReason") || ""),
+      decision_request: decisionRequest,
+      trace: normalizeTrace(getObjectValue(resultObject, "trace")),
+      documentation: normalizeDocumentation(getObjectValue(resultObject, "documentation")),
+      raw: normalizeRaw(resultObject),
     },
     errors,
   };
 }
 
 module.exports = {
+  normalizeRelativePath,
   parseAndValidateIterationResult,
 };

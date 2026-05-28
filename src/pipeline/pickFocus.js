@@ -1,23 +1,64 @@
-function getRequirements(state) {
-  return Array.isArray(state && state.requirements) ? state.requirements : [];
+// @ts-check
+
+/**
+ * @param {unknown} item
+ * @returns {item is { id?: string; status?: string; summary?: string; text?: string; hypothesis?: string }}
+ */
+function hasFocusFields(item) {
+  return Boolean(item && typeof item === "object" && !Array.isArray(item));
 }
 
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @returns {Array<{ id?: string; status?: string; summary?: string }>}
+ */
+function getRequirements(state) {
+  return state && Array.isArray(state.requirements)
+    ? state.requirements.filter(hasFocusFields)
+    : [];
+}
+
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @returns {{ id?: string; status?: string; summary?: string } | undefined}
+ */
 function firstOpenRequirement(state) {
   const requirements = getRequirements(state);
-  return requirements.find((item) => item && !["passed", "blocked"].includes(item.status));
+  return requirements.find((item) => hasFocusFields(item) && !["passed", "blocked"].includes(item.status || ""));
 }
 
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @param {string[]} statuses
+ * @returns {{ id?: string; status?: string; summary?: string } | undefined}
+ */
 function firstRequirementWithStatus(state, statuses) {
-  const requirements = Array.isArray(state && state.requirements) ? state.requirements : [];
+  const requirements = getRequirements(state);
   const allowed = new Set(statuses);
-  return requirements.find((item) => item && allowed.has(item.status));
+  return requirements.find((item) => hasFocusFields(item) && allowed.has(item.status || ""));
 }
 
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @returns {boolean}
+ */
 function allRequirementsPassed(state) {
   const requirements = getRequirements(state);
-  return requirements.length > 0 && requirements.every((item) => item && item.status === "passed");
+  return requirements.length > 0 && requirements.every((item) => hasFocusFields(item) && item.status === "passed");
 }
 
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @returns {boolean}
+ */
+function hasBlockedRequirement(state) {
+  return getRequirements(state).some((item) => hasFocusFields(item) && item.status === "blocked");
+}
+
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @returns {boolean}
+ */
 function hardeningDone(state) {
   const watchdog = (state && state.watchdog) || {};
   const phaseGate = (state && state.phaseGate) || {};
@@ -27,6 +68,10 @@ function hardeningDone(state) {
     phaseGate.hardeningDone === true;
 }
 
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @returns {boolean}
+ */
 function optimizeDone(state) {
   const optimization = (state && state.optimization) || {};
   const phaseGate = (state && state.phaseGate) || {};
@@ -35,6 +80,10 @@ function optimizeDone(state) {
     phaseGate.optimizationDone === true;
 }
 
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @returns {boolean}
+ */
 function optimizationNeedsVerification(state) {
   const optimization = (state && state.optimization) || {};
   const phaseGate = (state && state.phaseGate) || {};
@@ -43,29 +92,77 @@ function optimizationNeedsVerification(state) {
     phaseGate.optimizationNeedsVerification === true;
 }
 
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @returns {boolean}
+ */
 function optimizationStoppedForNoImprovement(state) {
   const optimization = (state && state.optimization) || {};
   return optimization.stopReason === "no_improvement" ||
     (Number.isInteger(optimization.noImprovementStreak) &&
       Number.isInteger(optimization.maxNoImprovementIterations) &&
-      optimization.noImprovementStreak >= optimization.maxNoImprovementIterations);
+      Number(optimization.noImprovementStreak) >= Number(optimization.maxNoImprovementIterations));
 }
 
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @returns {boolean}
+ */
 function hasDiagnoseHypotheses(state) {
   const diagnose = (state && state.diagnose) || {};
   const queue = Array.isArray(diagnose.hypothesisQueue) ? diagnose.hypothesisQueue : [];
-  if (queue.some((item) => item && item.status === "pending")) {
+  if (queue.some((item) => hasFocusFields(item) && item.status === "pending")) {
     return true;
   }
   const hypotheses = diagnose.hypotheses;
   return Array.isArray(hypotheses) && hypotheses.length > 0 && !diagnose.lastHypothesisResult;
 }
 
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @returns {{ id: string | null; summary: string } | null}
+ */
+function firstPendingDiagnoseHypothesis(state) {
+  const diagnose = (state && state.diagnose) || {};
+  const queue = Array.isArray(diagnose.hypothesisQueue) ? diagnose.hypothesisQueue : [];
+  const pending = queue.find((item) => hasFocusFields(item) && item.status === "pending");
+  if (pending) {
+    return {
+      id: pending.id || null,
+      summary: pending.summary || pending.text || pending.hypothesis || pending.id || "",
+    };
+  }
+  const hypotheses = Array.isArray(diagnose.hypotheses) ? diagnose.hypotheses : [];
+  if (hypotheses.length === 0 || diagnose.lastHypothesisResult) {
+    return null;
+  }
+  const first = hypotheses[0];
+  if (hasFocusFields(first)) {
+    return {
+      id: first.id || "H1",
+      summary: first.summary || first.text || first.hypothesis || first.id || "",
+    };
+  }
+  return {
+    id: "H1",
+    summary: String(first),
+  };
+}
+
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @returns {boolean}
+ */
 function regressionCheckDone(state) {
   const diagnose = (state && state.diagnose) || {};
   return diagnose.regressionCheckStatus === "passed" || diagnose.regression_check_status === "passed";
 }
 
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @param {string} mode
+ * @returns {boolean}
+ */
 function baselineDone(state, mode) {
   const baseline = (state && state.baseline) || {};
   const modeBaseline = baseline[mode];
@@ -74,38 +171,53 @@ function baselineDone(state, mode) {
     baseline.status === "ready" ||
     baseline.status === "skipped_with_reason" ||
     baseline.status === "not_available" ||
-    (modeBaseline && ["passed", "failed", "ready", "skipped_with_reason", "not_available"].includes(modeBaseline.status));
+    (hasFocusFields(modeBaseline) && ["passed", "failed", "ready", "skipped_with_reason", "not_available"].includes(modeBaseline.status || ""));
 }
 
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @returns {boolean}
+ */
 function lastCliValidationFailed(state) {
   const postChange = (state && state.postChange) || {};
   const currentState = (state && state.currentState) || {};
   return postChange.status === "failed" || currentState.lastValidationResult === "failed";
 }
 
+/**
+ * @param {unknown} value
+ * @returns {import("./types").PipelineFocus | null}
+ */
 function parseFocusOverride(value) {
   if (!value) {
     return null;
   }
   const [type, ...rest] = String(value).split(":");
   const id = rest.join(":");
+  const summary = String(value);
   return {
     type: type || "custom",
     req_id: id || null,
-    summary: value,
+    summary,
   };
 }
 
+/** @type {Record<string, Set<string>>} */
 const ALLOWED_FOCUS_BY_MODE = {
   plan: new Set(["plan_once"]),
   verify: new Set(["verify_req"]),
   diagnose: new Set(["reproduce", "hypothesis_test", "fix_bug", "regression_check"]),
   optimize: new Set(["establish_baseline", "optimize", "verify_optimization"]),
-  strict: new Set(["extract_requirements", "implement_req", "fix_bug", "harden_validation", "optimize"]),
+  strict: new Set(["extract_requirements", "implement_req", "fix_bug", "harden_validation", "optimize", "verify_optimization"]),
   quick: new Set(["extract_requirements", "implement_req", "fix_bug", "harden_validation"]),
   prototype: new Set(["extract_requirements", "implement_req", "fix_bug", "harden_validation"]),
 };
 
+/**
+ * @param {import("./types").PipelineFocus | null | undefined} focus
+ * @param {string} [mode]
+ * @returns {boolean}
+ */
 function isFocusAllowedForMode(focus, mode) {
   if (!focus || !focus.type) {
     return false;
@@ -114,8 +226,14 @@ function isFocusAllowedForMode(focus, mode) {
   return allowed.has(focus.type);
 }
 
+/**
+ * @param {import("./types").PickFocusStateLike | null | undefined} state
+ * @param {unknown} override
+ * @param {string} [mode]
+ * @returns {import("./types").PipelineFocus | null}
+ */
 function pickNextFocus(state, override, mode) {
-  const stateMode = mode || (state && state.mode && state.mode.mode) || "strict";
+  const stateMode = mode || (state && state.mode && typeof state.mode.mode === "string" ? state.mode.mode : "strict");
   const forced = parseFocusOverride(override);
   if (forced) {
     return isFocusAllowedForMode(forced, stateMode) ? forced : null;
@@ -139,6 +257,9 @@ function pickNextFocus(state, override, mode) {
   }
 
   if (stateMode === "diagnose") {
+    if (hasBlockedRequirement(state)) {
+      return null;
+    }
     if (!baselineDone(state, "diagnose")) {
       return {
         type: "reproduce",
@@ -147,13 +268,16 @@ function pickNextFocus(state, override, mode) {
       };
     }
     if (hasDiagnoseHypotheses(state)) {
+      const hypothesis = firstPendingDiagnoseHypothesis(state);
+      const hypothesisLabel = hypothesis && hypothesis.id ? ` ${hypothesis.id}` : "";
+      const hypothesisSummary = hypothesis && hypothesis.summary ? `: ${hypothesis.summary}` : "";
       return {
         type: "hypothesis_test",
-        req_id: null,
-        summary: "验证当前最高优先级诊断假设",
+        req_id: hypothesis ? hypothesis.id : null,
+        summary: `验证诊断假设${hypothesisLabel}${hypothesisSummary}`,
       };
     }
-    const failed = firstRequirementWithStatus(state, ["failed", "blocked", "implemented", "not_verified", "pending"]);
+    const failed = firstRequirementWithStatus(state, ["failed", "implemented", "not_verified", "pending"]);
     if (failed) {
       return {
         type: "fix_bug",
@@ -230,6 +354,14 @@ function pickNextFocus(state, override, mode) {
       type: "harden_validation",
       req_id: null,
       summary: "全部需求 passed 后补齐边界、反例和回归验证加固",
+    };
+  }
+
+  if (allRequirementsPassed(state) && stateMode === "strict" && hardeningDone(state) && optimizationNeedsVerification(state)) {
+    return {
+      type: "verify_optimization",
+      req_id: null,
+      summary: "验证优化后行为和指标",
     };
   }
 

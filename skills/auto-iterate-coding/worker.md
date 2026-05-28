@@ -75,6 +75,6 @@ Worker 必须向 prompt 指定的路径写入 JSON：
 - `blocked`：缺少文件范围、产品决策、外部资源或安全确认。
 - `need_decision`：必须问用户；同时提供 `decision_request.question` 和 `decision_request.options`。
 
-`state_patch` 只允许建议非权威字段，例如 `currentState`、`deliveryEvidence`、`notes`、`hypotheses`。Worker 不得写 `budgets`、`watchdog`、`postChange`、`validation`、`session`、`mode` 或 `schemaVersion`。
+`state_patch` 只允许建议非权威字段，例如 `currentState.currentTask/recentChanges/keyFiles`、`notes`、`hypotheses`，以及 `deliveryEvidence` 中的描述性摘要字段。Worker 不得写 `budgets`、`watchdog`、`postChange`、`validation`、`session`、`mode`、`schemaVersion`，也不得写 `currentState.nextAction`、`currentState.overallStatus`、`currentState.lastValidationResult`、`deliveryEvidence.status`、`deliveryEvidence.goal` 等权威字段。
 
 `trace` 与 `documentation` 是顶层建议字段，由 CLI 清洗并合并进 `state.traceability` 和 `state.documentation`。Worker 不得直接写 `deliveryDocs`；`--finalize` 会在 `.agent-state/auto-iterate/<session>/docs/` 生成 `api.md`、`changelog.md`、`architecture.md`、`implementation.md`。

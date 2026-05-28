@@ -1,5 +1,12 @@
+// @ts-check
+
 const path = require("path");
 
+/**
+ * @param {string} stateJsonPath
+ * @param {number} iteration
+ * @returns {import("./types").IterationPaths}
+ */
 function buildIterationPaths(stateJsonPath, iteration) {
   const iterationDir = path.join(
     path.dirname(stateJsonPath),

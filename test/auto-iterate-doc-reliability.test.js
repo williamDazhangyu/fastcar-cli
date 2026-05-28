@@ -203,6 +203,24 @@ function markSessionReadyForSkillCapture(stateJson) {
       summary: "capture-skills regression passed",
     },
   ];
+  stateJson.postChange.status = "passed";
+  stateJson.postChange.command = "npm test";
+  stateJson.postChange.result = "0";
+  stateJson.postChange.reason = "capture-skills regression passed";
+  stateJson.postChange.regressionDetected = false;
+  stateJson.postChange.perCommand = [
+    {
+      command: "npm test",
+      status: "passed",
+      result: "0",
+      exitCode: 0,
+      signal: "none",
+      error: "none",
+      durationMs: 1,
+      stdoutTail: "capture-skills regression passed",
+      stderrTail: "",
+    },
+  ];
   stateJson.cleanup.status = "completed";
   stateJson.styleConsolidation.status = "completed";
   stateJson.styleConsolidation.localSkillsReviewed = [".agents/skills/index.md"];
@@ -491,6 +509,31 @@ test("prototype 模式标记一次性原型状态和清理门禁", () => {
   assertIncludes(state, "原型状态：proposed", "state.md");
   assertIncludes(state, "原型文件或路由：待创建并明确标记", "state.md");
   assertIncludes(state, "清理状态：pending", "state.md");
+});
+
+test("optimize 模式初始化独立优化预算", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--optimize",
+    "--goal",
+    "优化查询性能",
+    "--session",
+    "query-optimize",
+    "--max-iterations",
+    "7",
+    "--yes",
+  ]);
+
+  const { state, stateJson, current } = readSession(projectDir, "query-optimize");
+
+  assert.strictEqual(current.session, "query-optimize");
+  assert.strictEqual(current.mode, "optimize");
+  assert.strictEqual(stateJson.budgets.remainingImplementationIterations, 7);
+  assert.strictEqual(stateJson.budgets.remainingOptimizationIterations, 7);
+  assertIncludes(state, "模式：optimize /", "state.md");
+  assertIncludes(state, "optimization 0 / 7", "state.md");
+  assertIncludes(state, "remaining_optimization_iterations：7", "state.md");
 });
 
 test("重复 session 在非交互模式不会覆盖已有状态", () => {
@@ -868,29 +911,61 @@ test("独立 state.schema.json 覆盖关键门禁实体", () => {
   assert.ok(fs.existsSync(schemaPath), "state.schema.json should exist");
 
   const schema = JSON.parse(fs.readFileSync(schemaPath, "utf8"));
+  for (const key of schema.required) {
+    assert.ok(
+      Object.hasOwn(schema.properties, key),
+      `state.schema.json required key must define properties.${key}`,
+    );
+  }
   for (const key of [
+    "currentState",
+    "watchdog",
+    "phaseGate",
+    "implementationContract",
+    "baseline",
+    "iterationPolicy",
     "taskProfile",
     "decisionRequest",
+    "requirements",
+    "decisions",
     "notes",
     "diagnose",
+    "validation",
     "postChange",
     "deltaAssessment",
     "diffBudget",
+    "cleanup",
     "styleConsolidation",
     "contextResetReview",
+    "deliveryEvidence",
     "postAgentValidationGate",
   ]) {
     assert.ok(schema.required.includes(key), `state.schema.json required missing ${key}`);
     assert.ok(schema.properties[key], `state.schema.json properties missing ${key}`);
   }
   assert.strictEqual(schema.properties.task.properties.successCriteria.minItems, 1);
+  assert.ok(schema.properties.watchdog.properties.requiredAction.enum.includes("context_compress_and_review"));
+  assert.ok(schema.properties.validation.properties.finalVerifiability.enum.includes("partially_verifiable"));
+  assert.ok(schema.properties.requirements.items.properties.status.enum.includes("not_verified"));
+  assert.ok(schema.properties.iterationPolicy.properties.lastDecision.enum.includes("replan"));
   assert.ok(schema.properties.taskProfile.properties.complexity.enum.includes("large"));
   assert.ok(schema.properties.diffBudget.properties.status.enum.includes("over_budget"));
+  assert.ok(schema.properties.cleanup.properties.status.enum.includes("completed"));
+  assert.ok(schema.properties.deliveryEvidence.properties.status.enum.includes("ready"));
   assert.ok(schema.properties.styleConsolidation.properties.status.enum.includes("completed"));
   assert.ok(schema.properties.contextResetReview.properties.status.enum.includes("passed"));
   assert.ok(schema.properties.contextResetReview.properties.decision.enum.includes("reopen_requirements"));
   assert.ok(schema.properties.mode.properties.loopShape.enum.includes("autopilot"));
   assert.strictEqual(schema.properties.diagnose.required[0], "hypotheses");
+  const validationCommandObject = schema.properties.validation.properties.commands.items.anyOf[1];
+  assert.ok(validationCommandObject.required.includes("command"));
+  assert.ok(!validationCommandObject.required.includes("result"));
+  assert.ok(validationCommandObject.properties.result.enum.includes("failed"));
+  assert.ok(validationCommandObject.properties.status.enum.includes("failed"));
+  const perCommand = schema.properties.postChange.properties.perCommand.items;
+  assert.ok(perCommand.required.includes("command"));
+  assert.ok(perCommand.required.includes("status"));
+  assert.ok(perCommand.properties.status.enum.includes("failed"));
 });
 
 test("自然语言路由文档覆盖 CLI 支持的模式、预算和 session 规则", () => {
@@ -1427,6 +1502,21 @@ test("dispatch dry-run 生成 Codex worker prompt 并更新 sub-agent state", ()
     "--yes",
   ]);
 
+  const beforeDispatch = readSession(projectDir, "dispatch-codex");
+  beforeDispatch.stateJson.validation.commands = [
+    {
+      command: "npm run old-history",
+      result: "passed",
+      iteration: 1,
+      summary: "old historical command must not be reused",
+    },
+    {
+      command: "npm run configured",
+      note: "configuration object should be reusable",
+    },
+  ];
+  fs.writeFileSync(beforeDispatch.paths.stateJson, `${JSON.stringify(beforeDispatch.stateJson, null, 2)}\n`, "utf8");
+
   const dispatchOutput = runAutoIterate(projectDir, [
     "--dispatch",
     "dispatch-codex",
@@ -1453,6 +1543,7 @@ test("dispatch dry-run 生成 Codex worker prompt 并更新 sub-agent state", ()
   assertIncludes(prompt, "禁止读取或写入 .agent-state/ 下任何文件", "worker prompt");
   assertIncludes(prompt, "允许修改文件：src/auth.js, test/auth.test.js", "worker prompt");
   assertIncludes(prompt, "验证命令：npm test", "worker prompt");
+  assertNotIncludes(prompt, "npm run old-history", "worker prompt");
   assertIncludes(prompt, "Sub-Agent Result Schema", "worker prompt");
 
   assertIncludes(state, "current_phase：implement", "state.md");
@@ -1473,6 +1564,74 @@ test("dispatch dry-run 生成 Codex worker prompt 并更新 sub-agent state", ()
     "dispatch-codex",
   ]);
   assertIncludes(validateOutput.stdout, "sub-agent state 校验通过", "validate-state stdout");
+});
+
+test("dispatch dry-run 保留并裁剪既有 sub-agent history 和计数", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 sub-agent history 有界保留",
+    "--session",
+    "dispatch-history-bounded",
+    "--yes",
+  ]);
+
+  const beforeDispatch = readSession(projectDir, "dispatch-history-bounded");
+  beforeDispatch.stateJson.subAgentDispatch = {
+    enabled: true,
+    currentPhase: "idle",
+    activeSubAgents: [],
+    subAgentHistory: Array.from({ length: 205 }, (_, index) => ({
+      id: `old-agent-${index + 1}`,
+      type: "coder",
+      task: `历史任务 ${index + 1}`,
+      filesAssigned: [`src/old-${index + 1}.js`],
+      status: "completed",
+      failureReason: "无",
+      mergeStatus: "merged",
+      round: index + 1,
+    })),
+    dispatchedCount: 205,
+    completedCount: 180,
+    failedCount: 25,
+    lastDispatchRound: 205,
+    lastMergeResult: "merged",
+    maxSubAgentRounds: 3,
+    subAgentTimeoutSeconds: 300,
+    maxFailedSubAgents: 2,
+    concurrencyLimit: 3,
+  };
+  fs.writeFileSync(beforeDispatch.paths.stateJson, `${JSON.stringify(beforeDispatch.stateJson, null, 2)}\n`, "utf8");
+
+  runAutoIterate(projectDir, [
+    "--dispatch",
+    "dispatch-history-bounded",
+    "--agent",
+    "codex",
+    "--task",
+    "处理新的子任务",
+    "--files",
+    "src/new.js",
+    "--verify-command",
+    "npm test",
+    "--dry-run",
+  ]);
+
+  const { state, stateJson } = readSession(projectDir, "dispatch-history-bounded");
+  assert.strictEqual(stateJson.subAgentDispatch.subAgentHistory.length, 200);
+  assert.strictEqual(stateJson.subAgentDispatch.subAgentHistory[0].id, "old-agent-6");
+  assert.strictEqual(stateJson.subAgentDispatch.subAgentHistory[199].id, "old-agent-205");
+  assert.strictEqual(stateJson.subAgentDispatch.dispatchedCount, 206);
+  assert.strictEqual(stateJson.subAgentDispatch.completedCount, 180);
+  assert.strictEqual(stateJson.subAgentDispatch.failedCount, 25);
+  assert.strictEqual(stateJson.subAgentDispatch.lastDispatchRound, 206);
+  assertIncludes(state, "sub_agent_history：", "state.md");
+  assertIncludes(state, "agent_id：old-agent-6", "state.md");
+  assertIncludes(state, "agent_id：old-agent-205", "state.md");
+  assert.ok(!state.split(/\r?\n/).some((line) => line.trim() === "agent_id：old-agent-1"), "state.md should not include exact old-agent-1 history item");
+  assertIncludes(state, "dispatched_count：206", "state.md");
 });
 
 test("dispatch dry-run 支持主流本地 agent adapter", () => {
@@ -1826,6 +1985,118 @@ test("validate-state strict 阻断未通过 post-agent gate 的 ready delivery",
   assertIncludes(output.stdout, "postAgentValidationGate.nextAction 必须为 deliver", "validate-state stdout");
 });
 
+test("validate-state strict 阻断 post-change 未通过的 ready delivery", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 post-change gate",
+    "--session",
+    "delivery-post-change",
+    "--yes",
+  ]);
+
+  const { paths, stateJson } = readSession(projectDir, "delivery-post-change");
+  markSessionReadyForSkillCapture(stateJson);
+  stateJson.postChange.status = "not_run";
+  stateJson.postChange.regressionDetected = true;
+  stateJson.deltaAssessment.decision = "stop";
+  stateJson.iterationPolicy.lastDecision = "stop";
+  fs.writeFileSync(paths.stateJson, `${JSON.stringify(stateJson, null, 2)}\n`, "utf8");
+
+  const output = runAutoIterateRaw(projectDir, [
+    "--validate-state",
+    "delivery-post-change",
+    "--strict-state",
+  ]);
+  assert.strictEqual(output.status, 1, "ready delivery must require passed post-change validation");
+  assertIncludes(output.stdout, "postChange.status 必须为 passed", "validate-state stdout");
+  assertIncludes(output.stdout, "postChange.regressionDetected 必须为 false", "validate-state stdout");
+});
+
+test("validate-state strict 阻断不可验证的 ready delivery", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证不可验证交付门禁",
+    "--session",
+    "delivery-not-verifiable",
+    "--yes",
+  ]);
+
+  const { paths, stateJson } = readSession(projectDir, "delivery-not-verifiable");
+  markSessionReadyForSkillCapture(stateJson);
+  stateJson.validation.finalVerifiability = "not_verifiable";
+  fs.writeFileSync(paths.stateJson, `${JSON.stringify(stateJson, null, 2)}\n`, "utf8");
+
+  const output = runAutoIterateRaw(projectDir, [
+    "--validate-state",
+    "delivery-not-verifiable",
+    "--strict-state",
+  ]);
+  assert.strictEqual(output.status, 1, "ready delivery must require verifiable validation");
+  assertIncludes(output.stdout, "validation.finalVerifiability 不得为 not_verifiable", "validate-state stdout");
+});
+
+test("validate-state strict 阻断 unknown requirement 的 ready delivery", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 unknown requirement 不能交付",
+    "--session",
+    "delivery-unknown-req",
+    "--yes",
+  ]);
+
+  const { paths, stateJson } = readSession(projectDir, "delivery-unknown-req");
+  markSessionReadyForSkillCapture(stateJson);
+  stateJson.requirements[0].status = "unknown";
+  fs.writeFileSync(paths.stateJson, `${JSON.stringify(stateJson, null, 2)}\n`, "utf8");
+
+  const output = runAutoIterateRaw(projectDir, [
+    "--validate-state",
+    "delivery-unknown-req",
+    "--strict-state",
+  ]);
+  assert.strictEqual(output.status, 1, "unknown requirement status should block ready delivery");
+  assertIncludes(output.stdout, "state.json.requirements[0].status=unknown", "validate-state stdout");
+  assertIncludes(output.stdout, "state.json.deliveryEvidence.status 为 ready/delivered 时 requirements 不得存在开放项", "validate-state stdout");
+});
+
+test("validate-state strict 阻断 blocked requirement 的 ready delivery", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 blocked requirement 不能交付",
+    "--session",
+    "delivery-blocked-req",
+    "--yes",
+  ]);
+
+  const { paths, stateJson } = readSession(projectDir, "delivery-blocked-req");
+  markSessionReadyForSkillCapture(stateJson);
+  stateJson.requirements[0].status = "blocked";
+  stateJson.requirements[0].blockedReason = "等待用户确认验收边界";
+  stateJson.watchdog.deliveryVerifiability = "verifiable";
+  fs.writeFileSync(paths.stateJson, `${JSON.stringify(stateJson, null, 2)}\n`, "utf8");
+
+  const output = runAutoIterateRaw(projectDir, [
+    "--validate-state",
+    "delivery-blocked-req",
+    "--strict-state",
+  ]);
+  assert.strictEqual(output.status, 1, "blocked requirement should block ready delivery");
+  assertIncludes(output.stdout, "state.json.deliveryEvidence.status 为 ready/delivered 时 requirements 不得存在开放项", "validate-state stdout");
+  assertIncludes(output.stdout, "state.json.requirements 仍有开放项", "validate-state stdout");
+});
+
 test("validate-state strict 阻断未做上下文清空复核的 ready delivery", () => {
   const projectDir = makeProject();
 
@@ -2120,6 +2391,60 @@ test("resume 前执行 strict state 门禁", () => {
   assertIncludes(output.stdout, "state.json.requirements[0].status=finished", "resume stdout");
 });
 
+test("resume --run 前同样执行 strict state 门禁且不启动 Worker", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 resume run 门禁",
+    "--session",
+    "resume-run-gate",
+    "--yes",
+  ]);
+
+  const { paths, stateJson } = readSession(projectDir, "resume-run-gate");
+  stateJson.requirements[0].status = "finished";
+  fs.writeFileSync(paths.stateJson, `${JSON.stringify(stateJson, null, 2)}\n`, "utf8");
+
+  const output = runAutoIterateRaw(projectDir, [
+    "--resume",
+    "resume-run-gate",
+    "--run",
+    "--once",
+    "--quick",
+    "--json-progress",
+  ], fixtureWorkerEnv({
+    PIPELINE_WORKER_STDOUT: "worker should not start",
+  }));
+  assert.strictEqual(output.status, 1, "resume --run should fail when strict state gate fails");
+  assertIncludes(output.stdout, "resume 已被 strict state 门禁阻止", "resume run stdout");
+  assertIncludes(output.stdout, "state.json.requirements[0].status=finished", "resume run stdout");
+  assertNotIncludes(output.stdout, "iteration_start", "resume run stdout");
+  assertNotIncludes(output.stdout, "worker should not start", "resume run stdout");
+});
+
+test("--run 非法组合在 json-progress 下输出 NDJSON error", () => {
+  const projectDir = makeProject();
+  const output = runAutoIterateRaw(projectDir, [
+    "--run",
+    "--validate-state",
+    "any-session",
+    "--json-progress",
+  ]);
+  assert.strictEqual(output.status, 1, "invalid --run combination should fail");
+  const events = output.stdout
+    .trim()
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  assert.strictEqual(events.length, 1);
+  assert.strictEqual(events[0].event, "error");
+  assert.strictEqual(events[0].reason, "invalid_run_flag_combination");
+  assertIncludes(events[0].detail, "--run 不能与 --validate-state", "json error detail");
+  assertNotIncludes(output.stdout, "❌", "json stdout");
+});
+
 test("resume 兼容旧 state.md-only session 并提示降级恢复", () => {
   const projectDir = makeProject();
 
@@ -2379,6 +2704,82 @@ test("finalize 自动执行技能沉淀并通过 strict state 门禁", () => {
   assertIncludes(architecture, "不记录私有思考链", "architecture.md");
 });
 
+test("finalize strict 门禁失败时不生成交付文档", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 finalize 失败不生成文档",
+    "--session",
+    "finalize-block-docs",
+    "--yes",
+  ]);
+
+  const { paths } = readSession(projectDir, "finalize-block-docs");
+  const stateJson = JSON.parse(fs.readFileSync(paths.stateJson, "utf8"));
+  markSessionReadyForSkillCapture(stateJson);
+  stateJson.contextResetReview.status = "failed";
+  stateJson.contextResetReview.decision = "reopen_requirements";
+  stateJson.contextResetReview.reopenedRequirements = ["REQ-001"];
+  stateJson.contextResetReview.specFindings = ["测试 fixture 显式模拟 context reset review 失败"];
+  stateJson.contextResetReview.lastRunSummary = "复核失败，必须阻断 finalize 文档生成";
+  fs.writeFileSync(paths.stateJson, `${JSON.stringify(stateJson, null, 2)}\n`, "utf8");
+
+  const output = runAutoIterateRaw(projectDir, [
+    "--finalize",
+    "finalize-block-docs",
+    "--yes",
+  ]);
+
+  assert.strictEqual(output.status, 1, "finalize should fail before generating docs when strict gate fails");
+  assertIncludes(output.stdout, "finalize 未通过：strict state 门禁失败", "finalize stdout");
+  assert.ok(!output.stdout.includes("已生成交付文档"), "finalize must not claim docs were generated");
+
+  const afterStateJson = JSON.parse(fs.readFileSync(paths.stateJson, "utf8"));
+  assert.notStrictEqual(afterStateJson.deliveryDocs.status, "generated");
+  assert.ok(!fs.existsSync(path.join(projectDir, ".agent-state", "auto-iterate", "finalize-block-docs", "docs", "api.md")));
+});
+
+test("validate-state strict 阻断缺失或串 session 的 generated 交付文档", () => {
+  const projectDir = makeProject();
+
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 deliveryDocs generated 真实文件门禁",
+    "--session",
+    "delivery-docs-strict",
+    "--yes",
+  ]);
+
+  const { paths } = readSession(projectDir, "delivery-docs-strict");
+  const stateJson = JSON.parse(fs.readFileSync(paths.stateJson, "utf8"));
+  markSessionReadyForSkillCapture(stateJson);
+  stateJson.skillCapture.status = "skipped_no_high_value";
+  stateJson.skillCapture.skippedReasons = ["测试 fixture 不需要沉淀技能"];
+  stateJson.skillCapture.lastRunSummary = "已跳过技能沉淀";
+  stateJson.deliveryDocs = {
+    status: "generated",
+    path: ".agent-state/auto-iterate/other-session/docs",
+    files: [
+      ".agent-state/auto-iterate/other-session/docs/api.md",
+    ],
+    generatedAt: new Date().toISOString(),
+  };
+  fs.writeFileSync(paths.stateJson, `${JSON.stringify(stateJson, null, 2)}\n`, "utf8");
+
+  const output = runAutoIterateRaw(projectDir, [
+    "--validate-state",
+    "delivery-docs-strict",
+    "--strict-state",
+  ]);
+
+  assert.strictEqual(output.status, 1, "strict validate-state should reject invalid generated docs metadata");
+  assertIncludes(output.stdout, "deliveryDocs.status=generated", "validate-state stdout");
+  assertIncludes(output.stdout, "delivery-docs-strict", "validate-state stdout");
+});
+
 test("capture-skills 脱敏敏感信息并过滤低价值日志", () => {
   const projectDir = makeProject();
 
@@ -2394,6 +2795,10 @@ test("capture-skills 脱敏敏感信息并过滤低价值日志", () => {
   const { paths } = readSession(projectDir, "skill-capture-sanitize");
   const stateJson = JSON.parse(fs.readFileSync(paths.stateJson, "utf8"));
   markSessionReadyForSkillCapture(stateJson);
+  stateJson.validation.commands = [
+    { command: "npm run configured-only", note: "not executed yet" },
+    { command: "npm test", result: "passed", iteration: 1, summary: "capture-skills regression passed" },
+  ];
   stateJson.requirements = [
     {
       id: "REQ-SECRET",
@@ -2434,6 +2839,8 @@ test("capture-skills 脱敏敏感信息并过滤低价值日志", () => {
 
   assertNotIncludes(generatedContent, "plain-token-value", "generated skill");
   assertNotIncludes(generatedContent, "abcdefghijklmnopqrstuvwxyz1234567890", "generated skill");
+  assertNotIncludes(generatedContent, "npm run configured-only", "generated skill");
+  assertIncludes(generatedContent, "npm test", "generated skill");
   assertNotIncludes(generatedContent, "customer@example.com", "generated skill");
   assertIncludes(generatedContent, "[REDACTED", "generated skill");
   assertNotIncludes(generatedContent, "- 测试通过", "generated skill");
@@ -2573,6 +2980,12 @@ test("CLI 驱动设计文档与当前 pipeline 硬接口保持一致", () => {
   assertIncludes(design, "`--focus <type:id>` 可强制覆盖本轮选择，但必须在当前 mode 允许的 focus 集合里", "auto-iterate-cli-driven.md");
   assertIncludes(design, "postChange.perCommand[]", "auto-iterate-cli-driven.md");
   assertIncludes(design, "mode-specific 行为没有拆成 `runPlanOnce` / `runReproduceFirst` / `runDefaultLoop`", "auto-iterate-cli-driven.md");
+  assertIncludes(design, "`--validation-timeout`", "auto-iterate-cli-driven.md");
+  assertIncludes(design, "`0` 表示关闭验证命令超时", "auto-iterate-cli-driven.md");
+  assert.ok(
+    !design.includes("`--validation-timeout` | ✅ | ✅ | CLI 验证命令超时，默认 600 秒；`0` 表示使用运行层默认值"),
+    "validation-timeout 的 0 语义应是关闭超时，不是使用默认值",
+  );
   assert.ok(
     !design.includes("该轮降级为 `no_progress` 或 `blocked`"),
     "缺失或非法 result.json 不应被文档描述为自动降级 no_progress/blocked",

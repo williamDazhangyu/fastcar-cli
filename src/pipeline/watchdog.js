@@ -1,3 +1,10 @@
+// @ts-check
+
+/**
+ * @param {import("./types").PipelineStateLike | null | undefined} state
+ * @param {import("./types").WatchdogContext} [ctx]
+ * @returns {import("./types").WatchdogResult}
+ */
 function evaluateWatchdog(state, ctx = {}) {
   const watchdog = (state && state.watchdog) || {};
   if (watchdog.requiredAction === "ask_user") {
@@ -23,7 +30,7 @@ function evaluateWatchdog(state, ctx = {}) {
   }
   if (Number.isInteger(watchdog.noProgressStreak) &&
     Number.isInteger(watchdog.maxNoProgressIterations) &&
-    watchdog.noProgressStreak >= watchdog.maxNoProgressIterations) {
+    Number(watchdog.noProgressStreak) >= Number(watchdog.maxNoProgressIterations)) {
     return {
       triggered: true,
       requiredAction: "stop",

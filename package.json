@@ -7,7 +7,8 @@
     "fastcar-cli": "./bin/cli.js"
   },
   "scripts": {
-    "test": "node test/auto-iterate-doc-reliability.test.js && node test/pipeline.test.js && node test/env-check.test.js && node test/adapters.test.js && node test/router-ux.test.js && node test/skill-consistency.test.js"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node test/auto-iterate-args.test.js && node test/auto-iterate-mode-rules.test.js && node test/auto-iterate-session-paths.test.js && node test/auto-iterate-state-io.test.js && node test/auto-iterate-state-validation-primitives.test.js && node test/auto-iterate-state-validation-helpers.test.js && node test/auto-iterate-state-schema-core-validators.test.js && node test/auto-iterate-state-markdown-parsers.test.js && node test/auto-iterate-sub-agent-dispatch-validation.test.js && node test/auto-iterate-dispatch.test.js && node test/auto-iterate-session-config.test.js && node test/auto-iterate-session-state-model.test.js && node test/auto-iterate-session-state-content.test.js && node test/auto-iterate-session-prompt-content.test.js && node test/auto-iterate-session-prompt-config.test.js && node test/auto-iterate-natural-language-examples.test.js && node test/auto-iterate-session-creation.test.js && node test/auto-iterate-session-finalize.test.js && node test/auto-iterate-session-help.test.js && node test/auto-iterate-session-runtime.test.js && node test/auto-iterate-session-state-validation.test.js && node test/auto-iterate-session-baseline-validation.test.js && node test/auto-iterate-state-validation-runner.test.js && node test/auto-iterate-session-manager.test.js && node test/auto-iterate-skill-capture.test.js && node test/auto-iterate-doc-reliability.test.js && node test/pipeline.test.js && node test/env-check.test.js && node test/adapters.test.js && node test/router-ux.test.js && node test/skill-consistency.test.js"
   },
   "files": [
     "bin",
@@ -35,5 +36,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/williamDazhangyu/fastcar-cli.git"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^6.0.3"
   }
 }

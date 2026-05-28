@@ -642,7 +642,7 @@ session 基线校验覆盖：
 - `state.json`、`state.md`、`start-prompt.md`、`auto-iterate-current.json` 是否存在且指向同一 session；旧 state.md-only session 恢复时应标记 degraded。
 - `auto-iterate-current.json.stateFile`、`promptFile`、`session` 是否与 `## Session / 会话` 一致。
 - `auto-iterate-current.json.promptFile` 是否真实存在，避免恢复时拿到失效启动提示。
-- `total_cycles` 是否等于 `implementation_iterations_used + optimization_iterations_used`。
+- `total_cycles` 是否等于 `implementation_iterations_used + optimization_iterations_used + non_implementation_iterations_used`。
 - `minimum_implementation_iterations` 是否小于等于 `max_iterations`，以及已用轮次是否达到下限。
 - `remaining_implementation_iterations = 0`、`Watchdog.triggered=true`、`state_drift=suspected/confirmed`、`delivery_verifiability=unknown/not_verifiable` 等恢复或交付风险。
 - RCM 仍有 `pending / implemented / not_verified / blocked` 时，DoD 是否错误标记为可完整交付。

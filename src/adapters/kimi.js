@@ -1,13 +1,25 @@
+// @ts-check
+
 const path = require("path");
 const fs = require("fs");
-const { runNativeCommand } = require("./commandResolver");
+const { runNativeCommandAsync } = require("./commandResolver");
+const { buildRunOptions } = require("./runOptions");
 
+/**
+ * @param {string} prompt
+ * @param {string} name
+ * @returns {string}
+ */
 function extractPromptField(prompt, name) {
   const pattern = new RegExp(`^${name}:\\s*(.+)$`, "m");
   const match = String(prompt || "").match(pattern);
   return match ? match[1].trim() : "";
 }
 
+/**
+ * @param {import("../pipeline/types").PipelineWorkerAdapterOptions & { promptPath: string; resultPath: string }} options
+ * @returns {string}
+ */
 function buildKimiPrompt(options) {
   const source = fs.readFileSync(options.promptPath, "utf8");
   const focus = extractPromptField(source, "Focus") || "implement_req";
@@ -50,6 +62,10 @@ function buildKimiPrompt(options) {
   ].join("\n");
 }
 
+/**
+ * @param {import("../pipeline/types").PipelineWorkerAdapterOptions & { promptPath: string; resultPath: string; cwd: string }} options
+ * @returns {Promise<import("../pipeline/types").PipelineWorkerBaseResult>}
+ */
 function runKimiAdapter(options) {
   const agentFile = options.agentFile || path.join(__dirname, "kimi-worker-agent.yaml");
   const kimiPromptPath = path.join(path.dirname(options.promptPath), "kimi-prompt.md");
@@ -69,14 +85,12 @@ function runKimiAdapter(options) {
     "-p",
     `@${kimiPromptPath}`,
   ];
-  return runNativeCommand("kimi", args, {
-    cwd: options.cwd,
+  return runNativeCommandAsync("kimi", args, buildRunOptions(options, {
     env: {
       PYTHONIOENCODING: "utf-8",
       PYTHONUTF8: "1",
     },
-    timeoutMs: options.timeoutMs,
-  });
+  }));
 }
 
 module.exports = {

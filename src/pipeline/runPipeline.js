@@ -1,10 +1,9 @@
 const fs = require("fs");
 const path = require("path");
-const { spawnSync } = require("child_process");
 const { getAdapter } = require("../adapters");
 const { emitProgress } = require("./progress");
 const { pickNextFocus } = require("./pickFocus");
-const { shouldStop, deliveryReady } = require("./shouldStop");
+const { shouldStop } = require("./shouldStop");
 const { mergeIterationIntoState } = require("./mergeState");
 const { parseAndValidateIterationResult } = require("./resultSchema");
 const { buildIterationPrompt } = require("./iterationPrompt");
@@ -13,434 +12,85 @@ const { evaluateWriteGuard } = require("./writeGuard");
 const { evaluateWatchdog } = require("./watchdog");
 const { checkPhaseGate } = require("./phaseGate");
 const { resolveLoopPolicy } = require("./loopPolicy");
-const { getLanguageText, inferLanguageFromState, localizedStatusLabel } = require("./language");
+const { getLanguageText, inferLanguageFromState } = require("./language");
+const {
+  parseValidationCommands,
+  runValidationCommands,
+  skipValidation,
+} = require("./pipelineValidationRunner");
+const {
+  diffStatusSnapshots,
+  getDirectorySignature,
+  getGitStatusSnapshot,
+  mergeActualFilesChanged,
+  normalizeActualFilesChanged,
+  runGit,
+} = require("./pipelineGitAudit");
+const {
+  buildProgressStats,
+  computeEffectiveTimeouts,
+  getBudgetLeft,
+  runWorkerWithProgress,
+  tail,
+  toRelative,
+} = require("./pipelineWorkerProgress");
+const {
+  buildPipelineSnapshot,
+  buildRequirementStatus,
+  readJson,
+  refreshStateMarkdownView,
+} = require("./pipelineStateIO");
+const {
+  applyIsolatedWorktreeDiff,
+  cleanupIsolatedWorktreeForExit,
+  ensureGitWorktree,
+  makeIsolatedWorktree,
+  rollbackAppliedIsolatedWorktreeDiff,
+} = require("./pipelineIsolateWorktree");
+const {
+  hasMergedIteration,
+  readReusableIterationResult,
+} = require("./pipelineReusableResult");
+const {
+  buildDeliveryGate,
+  finalizeDeliveryState,
+  needsValidationReconcile,
+  updateNoProgressState,
+} = require("./pipelineDeliveryGate");
+const { applyPostMergeValidationState } = require("./pipelinePostMergeValidation");
+const {
+  markIsolateCleanupFailed,
+  markIsolateMergeFailed,
+  persistPipelineFailureState,
+  writeValidatedState,
+} = require("./pipelineFailureState");
 
-function tail(value, max = 4096) {
-  const text = String(value || "");
-  return text.length > max ? text.slice(text.length - max) : text;
-}
-
-function toRelative(projectRoot, filePath) {
-  return path.relative(projectRoot, filePath).replace(/\\/g, "/");
-}
-
-function buildRequirementStatus(state) {
-  const requirements = Array.isArray(state && state.requirements) ? state.requirements : [];
-  return requirements.reduce((result, item) => {
-    if (item && item.id) {
-      result[item.id] = item.status || "unknown";
-    }
-    return result;
-  }, {});
-}
-
-function getBudgetLeft(state) {
-  const budgets = (state && state.budgets) || {};
-  return Number.isInteger(budgets.remainingImplementationIterations)
-    ? budgets.remainingImplementationIterations
-    : null;
-}
-
-function buildProgressStats(state, context = {}) {
-  const requirements = Array.isArray(state && state.requirements) ? state.requirements : [];
-  const counts = requirements.reduce((result, item) => {
-    const status = item && item.status ? item.status : "unknown";
-    result[status] = (result[status] || 0) + 1;
-    return result;
-  }, {});
-  const budgets = (state && state.budgets) || {};
-  return {
-    iter: context.iteration,
-    elapsed_ms: context.startedAt ? Date.now() - context.startedAt : 0,
-    total_cycles: Number.isInteger(budgets.totalCycles) ? budgets.totalCycles : 0,
-    budget_left: getBudgetLeft(state),
-    total_reqs: requirements.length,
-    req_counts: counts,
-    focus: context.focus || null,
-    phase: state && state.phaseGate ? state.phaseGate.currentPhase : undefined,
-    watchdog_action: state && state.watchdog ? state.watchdog.requiredAction : undefined,
-  };
-}
-
-async function runWorkerWithProgress(adapter, adapterOptions, progressOptions) {
-  const heartbeatMs = progressOptions.heartbeatMs || 15000;
-  let heartbeatCount = 0;
-  const startedAt = Date.now();
-  const timer = setInterval(() => {
-    heartbeatCount += 1;
-    emitProgress({
-      event: "pipeline_progress",
-      session: progressOptions.session,
-      stage: "worker_running",
-      heartbeat: heartbeatCount,
-      ...buildProgressStats(progressOptions.state, {
-        iteration: progressOptions.iteration,
-        focus: progressOptions.focus,
-        startedAt,
-      }),
-    }, progressOptions.options);
-  }, heartbeatMs);
-  if (timer.unref) {
-    timer.unref();
-  }
-  try {
-    const worker = await adapter.run(adapterOptions);
-    return {
-      ...worker,
-      progressDurationMs: Date.now() - startedAt,
-      progressHeartbeats: heartbeatCount,
-    };
-  } finally {
-    clearInterval(timer);
-  }
-}
-
-function buildPipelineSnapshot(state, stateJsonPath) {
-  const language = inferLanguageFromState(state);
-  const text = getLanguageText(language);
-  const reqStatus = buildRequirementStatus(state);
-  const reqLines = Object.keys(reqStatus).length > 0
-    ? Object.entries(reqStatus)
-      .map(([id, status]) => `- ${id}: ${status} (${localizedStatusLabel(status, language)})`)
-      .join("\n")
-    : text.noRequirements;
-  const budgets = (state && state.budgets) || {};
-  const postChange = (state && state.postChange) || {};
-  const validation = (state && state.validation) || {};
-  return [
-    "<!-- pipeline-runtime-snapshot:start -->",
-    text.stateSnapshotTitle,
-    "",
-    text.stateSnapshotNotice(path.basename(stateJsonPath)),
-    "",
-    `updated_at：${state.updatedAt || "unknown"}`,
-    `language：${language.code}`,
-    `mode：${state.mode && state.mode.mode ? state.mode.mode : "unknown"}`,
-    `runtime_autopilot：${state.mode && state.mode.runtimeAutopilot === true ? "true" : "false"}`,
-    `loop_shape：${state.mode && state.mode.loopShape ? state.mode.loopShape : "unknown"}`,
-    `total_cycles：${Number.isInteger(budgets.totalCycles) ? budgets.totalCycles : 0}`,
-    `budget_left：${getBudgetLeft(state) === null ? "unknown" : getBudgetLeft(state)}`,
-    `post_change_status：${postChange.status || "unknown"}`,
-    `post_change_command：${postChange.command || "not_run"}`,
-    `validation_verifiability：${validation.finalVerifiability || "unknown"}`,
-    "",
-    "requirements：",
-    reqLines,
-    "<!-- pipeline-runtime-snapshot:end -->",
-  ].join("\n");
-}
-
-async function refreshStateMarkdownView(stateJsonPath, state) {
-  const stateMdPath = stateJsonPath.replace(/state\.json$/, "state.md");
-  if (stateMdPath === stateJsonPath || !fs.existsSync(stateMdPath)) {
-    return;
-  }
-  const snapshot = buildPipelineSnapshot(state, stateJsonPath);
-  const content = await fs.promises.readFile(stateMdPath, "utf8");
-  const pattern = /<!-- pipeline-runtime-snapshot:start -->[\s\S]*?<!-- pipeline-runtime-snapshot:end -->/;
-  const nextContent = pattern.test(content)
-    ? content.replace(pattern, snapshot)
-    : `${content.trimEnd()}\n\n${snapshot}\n`;
-  await fs.promises.writeFile(stateMdPath, nextContent, "utf8");
-}
-
-async function writeJsonAtomic(filePath, data) {
-  const tmpPath = `${filePath}.tmp`;
-  await fs.promises.writeFile(tmpPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
-  await fs.promises.rename(tmpPath, filePath);
-}
-
-function parseValidationCommands(state, explicit) {
-  if (explicit) {
-    return [explicit];
-  }
-  const commands = state && state.validation && Array.isArray(state.validation.commands)
-    ? state.validation.commands
-    : [];
-  return commands
-    .map((item) => typeof item === "string" ? item : item && item.command)
-    .filter(Boolean)
-    .filter((item) => !/由 Agent|缺失|not_run|未指定|一个原型运行命令/i.test(item));
-}
-
-async function readJson(filePath) {
-  return JSON.parse(await fs.promises.readFile(filePath, "utf8"));
-}
-
-function runGit(args, cwd) {
-  const safeDirectory = path.resolve(cwd).replace(/\\/g, "/");
-  return spawnSync("git", ["-c", `safe.directory=${safeDirectory}`, ...args], {
-    cwd,
-    encoding: "utf8",
-    shell: false,
-  });
-}
-
-function ensureGitWorktree(projectRoot) {
-  const result = runGit(["rev-parse", "--is-inside-work-tree"], projectRoot);
-  return result.status === 0 && String(result.stdout).trim() === "true";
-}
-
-function makeIsolatedWorktree(projectRoot, session, iteration) {
-  const tmpRoot = path.join(path.dirname(projectRoot), ".auto-iterate-worktrees");
-  const worktreePath = path.join(tmpRoot, `${session}-${iteration}-${Date.now()}`);
-  fs.mkdirSync(tmpRoot, { recursive: true });
-  const result = runGit(["worktree", "add", "--detach", worktreePath, "HEAD"], projectRoot);
-  if (result.status !== 0) {
-    return {
-      ok: false,
-      worktreePath,
-      error: result.stderr || result.stdout || "git worktree add failed",
-    };
-  }
-  return {
-    ok: true,
-    worktreePath,
-  };
-}
-
-function cleanupIsolatedWorktree(projectRoot, worktreePath) {
-  const remove = runGit(["worktree", "remove", "--force", worktreePath], projectRoot);
-  if (remove.status !== 0) {
-    return {
-      ok: false,
-      error: remove.stderr || remove.stdout || "git worktree remove failed",
-    };
-  }
-  return { ok: true };
-}
-
-function applyIsolatedWorktreeDiff(projectRoot, worktreePath) {
-  const diff = runGit(["diff", "--binary", "HEAD"], worktreePath);
-  if (diff.status !== 0) {
-    return {
-      ok: false,
-      skipped: false,
-      error: diff.stderr || diff.stdout || "git diff failed",
-    };
-  }
-  if (!String(diff.stdout || "").trim()) {
-    return {
-      ok: true,
-      skipped: true,
-    };
-  }
-  const apply = spawnSync("git", ["apply", "--binary", "--whitespace=nowarn"], {
-    cwd: projectRoot,
-    input: diff.stdout,
-    encoding: "utf8",
-    shell: false,
-  });
-  if (apply.status !== 0) {
-    return {
-      ok: false,
-      skipped: false,
-      error: apply.stderr || apply.stdout || "git apply failed",
-    };
-  }
-  return {
-    ok: true,
-    skipped: false,
-  };
-}
-
-async function runValidationCommands(commands, projectRoot, iterationDir, language) {
-  if (commands.length === 0) {
-    return {
-      status: "not_run",
-      command: null,
-      exitCode: null,
-      summary: getLanguageText(language).validationNotConfigured,
-    };
-  }
-
-  const results = [];
-  for (const command of commands) {
-    const startedAt = Date.now();
-    const result = spawnSync(command, {
-      cwd: projectRoot,
-      encoding: "utf8",
-      shell: true,
-      timeout: 10 * 60 * 1000,
-    });
-    results.push({
-      command,
-      status: result.status === 0 ? "passed" : "failed",
-      exitCode: result.status === null ? 1 : result.status,
-      signal: result.signal || "none",
-      error: result.error ? result.error.message : "none",
-      durationMs: Date.now() - startedAt,
-      stdout: result.stdout || "",
-      stderr: result.stderr || "",
-    });
-    if (result.status !== 0) {
-      break;
-    }
-  }
-  const log = results.map((item) => [
-    `command: ${item.command}`,
-    `exit_code: ${item.exitCode}`,
-    `signal: ${item.signal}`,
-    `error: ${item.error}`,
-    `duration_ms: ${item.durationMs}`,
-    "stdout:",
-    item.stdout,
-    "stderr:",
-    item.stderr,
-  ].join("\n")).join("\n\n---\n\n");
-  await fs.promises.writeFile(path.join(iterationDir, "validation.log"), log, "utf8");
-  const failed = results.find((item) => item.status === "failed");
-  const last = failed || results[results.length - 1];
-  return {
-    status: failed ? "failed" : "passed",
-    command: commands.join(" && "),
-    exitCode: last.exitCode,
-    durationMs: results.reduce((total, item) => total + item.durationMs, 0),
-    summary: tail(`${last.stdout || ""}\n${last.stderr || ""}`.trim()),
-    results: results.map(({ stdout, stderr, ...item }) => ({
-      ...item,
-      stdoutTail: tail(stdout),
-      stderrTail: tail(stderr),
-    })),
-  };
-}
-
-async function skipValidation(iterationDir, reason) {
-  await fs.promises.writeFile(
-    path.join(iterationDir, "validation.log"),
-    `validation skipped: ${reason}\n`,
-    "utf8",
-  );
-  return {
-    status: "skipped",
-    command: null,
-    exitCode: null,
-    summary: reason,
-  };
-}
-
-async function readReusableIterationResult(resultPath) {
-  if (!fs.existsSync(resultPath)) {
-    return null;
-  }
-  let parsed;
-  try {
-    parsed = parseAndValidateIterationResult(await fs.promises.readFile(resultPath, "utf8"));
-  } catch {
-    return null;
-  }
-  return parsed.valid ? parsed : null;
-}
-
-function hasMergedIteration(state, iteration) {
-  const iterations = state && state.traceability && Array.isArray(state.traceability.iterations)
-    ? state.traceability.iterations
-    : [];
-  return iterations.some((item) => item && item.iteration === iteration);
-}
-
-function updateNoProgressState(state, hasProgress, maxNoProgressIterations = 3) {
-  const current = Number.isInteger(state.watchdog && state.watchdog.noProgressStreak)
-    ? state.watchdog.noProgressStreak
-    : 0;
-  const nextCount = hasProgress ? 0 : current + 1;
-  return {
-    ...state,
-    watchdog: {
-      ...(state.watchdog || {}),
-      noProgressStreak: nextCount,
-      maxNoProgressIterations,
-      triggered: nextCount >= maxNoProgressIterations ? true : (state.watchdog || {}).triggered,
-      requiredAction: nextCount >= maxNoProgressIterations ? "stop" : ((state.watchdog || {}).requiredAction || "continue"),
-    },
-  };
-}
-
-function needsValidationReconcile(report, cliValidation) {
-  const requirements = Array.isArray(report && report.requirements) ? report.requirements : [];
-  return cliValidation && cliValidation.status === "failed" &&
-    requirements.some((item) => item && item.status === "passed");
-}
-
-function buildDeliveryGate(state) {
-  const requirements = Array.isArray(state && state.requirements) ? state.requirements : [];
-  const openRequirements = requirements
-    .filter((item) => item && !["passed", "blocked"].includes(item.status))
-    .map((item) => item.id);
-  const blockedRequirements = requirements
-    .filter((item) => item && item.status === "blocked")
-    .map((item) => item.id);
-  const validation = (state && state.validation) || {};
-  const watchdog = (state && state.watchdog) || {};
-  const evidence = (state && state.deliveryEvidence) || {};
-  const postAgentGate = (state && state.postAgentValidationGate) || {};
-  const blockingReasons = [];
-  if (openRequirements.length > 0) {
-    blockingReasons.push("open_requirements");
-  }
-  if (blockedRequirements.length > 0) {
-    blockingReasons.push("blocked_requirements");
-  }
-  if (validation.finalVerifiability === "unknown" || watchdog.deliveryVerifiability === "unknown") {
-    blockingReasons.push("unknown_verifiability");
-  }
-  if (watchdog.deliveryVerifiability === "not_verifiable") {
-    blockingReasons.push("not_verifiable");
-  }
-  if (evidence.status !== "ready" && evidence.status !== "delivered") {
-    blockingReasons.push("delivery_evidence_not_ready");
-  }
-  if (postAgentGate.enabled === true &&
-    postAgentGate.lastResult !== "passed" &&
-    postAgentGate.lastResult !== "not_run") {
-    blockingReasons.push("post_agent_gate_not_passed");
-  }
-  return {
-    ready: deliveryReady(state),
-    open_requirements: openRequirements,
-    blocked_requirements: blockedRequirements,
-    validation_verifiability: validation.finalVerifiability || "unknown",
-    watchdog_verifiability: watchdog.deliveryVerifiability || "unknown",
-    delivery_evidence_status: evidence.status || "unknown",
-    post_agent_gate: postAgentGate.lastResult || "not_run",
-    blocking_reasons: blockingReasons,
-  };
-}
-
-async function writeValidatedState(stateJsonPath, state, options = {}) {
-  if (typeof options.validateStateModel !== "function") {
-    await writeJsonAtomic(stateJsonPath, state);
-    await refreshStateMarkdownView(stateJsonPath, state);
-    return [];
-  }
-  const issues = options.validateStateModel(state, {
-    session: state.session && state.session.session,
-  });
-  const errors = issues.filter((issue) => issue.severity === "error");
-  if (errors.length > 0) {
-    return errors;
-  }
-  await writeJsonAtomic(stateJsonPath, state);
-  await refreshStateMarkdownView(stateJsonPath, state);
-  return issues;
-}
-
+/**
+ * @param {import("./types").PipelineRunOptions} options
+ * @returns {Promise<import("./types").PipelineRunResult>}
+ */
 async function runPipeline(options) {
   const projectRoot = options.projectRoot || process.cwd();
   const session = options.session;
   const stateJsonPath = options.stateJsonPath;
-  let state = await readJson(stateJsonPath);
+  let state = /** @type {import("./types").PipelineStateLike} */ (await readJson(stateJsonPath));
   const loopPolicy = resolveLoopPolicy(options, state);
   const { mode, runtimeAutopilot, maxSteps } = loopPolicy;
   const adapter = options.adapter || getAdapter(options.agent || "codex");
   const effectiveScope = options.scope || (mode === "prototype" ? "prototype/**" : null);
+  const projectIsGitWorktree = ensureGitWorktree(projectRoot);
   state.mode = {
     ...(state.mode || {}),
     runtimeAutopilot,
     loopShape: loopPolicy.loopShape,
   };
   state.updatedAt = new Date().toISOString();
-  await writeValidatedState(stateJsonPath, state, options);
+  const startupSchemaIssues = await writeValidatedState(stateJsonPath, state, options);
+  if (startupSchemaIssues.some((issue) => issue.severity === "error")) {
+    emitProgress({ event: "error", reason: "state_schema_failed", errors: startupSchemaIssues }, options);
+    process.exitCode = 1;
+    return { state, reason: "state_schema_failed" };
+  }
 
   emitProgress({
     event: "session_started",
@@ -463,8 +113,32 @@ async function runPipeline(options) {
   }, options);
 
   let lastValidation = null;
+  let runCyclesCompleted = 0;
+  /**
+   * @param {string} reason
+   * @returns {Promise<{ finalized: boolean; stopped: boolean; reason?: string }>}
+   */
+  async function maybeFinalizeAndStop(reason) {
+    if (!runtimeAutopilot || options.once || !["strict", "quick", "diagnose", "prototype"].includes(String(mode))) {
+      return { finalized: false, stopped: false };
+    }
+    const finalized = finalizeDeliveryState(state, { session, mode, reason });
+    if (!finalized.changed) {
+      return { finalized: false, stopped: false };
+    }
+    state = finalized.state;
+    const schemaIssues = await writeValidatedState(stateJsonPath, state, options);
+    if (schemaIssues.some((issue) => issue.severity === "error")) {
+      emitProgress({ event: "error", reason: "state_schema_failed", errors: schemaIssues }, options);
+      process.exitCode = 1;
+      return { finalized: true, stopped: true, reason: "state_schema_failed" };
+    }
+    emitProgress({ event: "delivery_gate", session, reason: "delivery_ready", finalized_from: reason, ...buildDeliveryGate(state) }, options);
+    emitProgress({ event: "pipeline_stopped", reason: "delivery_ready", session }, options);
+    return { finalized: true, stopped: true, reason: "delivery_ready" };
+  }
   for (let index = 0; index < maxSteps; index += 1) {
-    const stopBefore = shouldStop(state, lastValidation, { once: options.once }, mode);
+    const stopBefore = shouldStop(state, lastValidation, { once: options.once, runCyclesCompleted }, mode);
     if (stopBefore.stop) {
       if (stopBefore.reason === "delivery_ready" || stopBefore.reason === "requirements_blocked") {
         emitProgress({ event: "delivery_gate", session, reason: stopBefore.reason, ...buildDeliveryGate(state) }, options);
@@ -476,6 +150,10 @@ async function runPipeline(options) {
     const iteration = ((state.budgets && state.budgets.totalCycles) || 0) + 1;
     const focus = pickNextFocus(state, options.focus, mode);
     if (!focus) {
+      const finalizedStop = await maybeFinalizeAndStop("no_focus");
+      if (finalizedStop.stopped) {
+        return { state, reason: finalizedStop.reason || "delivery_ready" };
+      }
       emitProgress({ event: "pipeline_stopped", reason: "no_focus", session }, options);
       return { state, reason: "no_focus" };
     }
@@ -487,20 +165,22 @@ async function runPipeline(options) {
       workerLogPath,
     } = buildIterationPaths(stateJsonPath, iteration);
     await fs.promises.mkdir(iterationDir, { recursive: true });
-    const reusableResult = hasMergedIteration(state, iteration) ? null : await readReusableIterationResult(resultPath);
-    await fs.promises.writeFile(promptPath, buildIterationPrompt({
-      session,
-      iteration,
-      mode,
-      focus,
-      resultPath: toRelative(projectRoot, resultPath),
-      lastValidation,
-      writeScope: effectiveScope,
-      scope: effectiveScope,
-      allowModify: options.allowModify,
-      autopilotRun: runtimeAutopilot,
-      language: inferLanguageFromState(state),
-    }), "utf8");
+    const reusableResult = hasMergedIteration(state, iteration) ? null : await readReusableIterationResult(resultPath, promptPath, focus);
+    if (!reusableResult) {
+      await fs.promises.writeFile(promptPath, buildIterationPrompt({
+        session,
+        iteration,
+        mode,
+        focus,
+        resultPath: toRelative(projectRoot, resultPath),
+        lastValidation,
+        writeScope: effectiveScope,
+        scope: effectiveScope,
+        allowModify: options.allowModify,
+        autopilotRun: runtimeAutopilot,
+        language: inferLanguageFromState(state),
+      }), "utf8");
+    }
 
     emitProgress({
       event: "iteration_start",
@@ -508,12 +188,15 @@ async function runPipeline(options) {
       focus,
       prompt: toRelative(projectRoot, promptPath),
       reused_result: Boolean(reusableResult),
+      prompt_preserved: Boolean(reusableResult),
       progress: buildProgressStats(state, { iteration, focus }),
     }, options);
     let workerCwd = projectRoot;
     let isolatedWorktree = null;
+    let writeGuardBefore = null;
+    let mainWriteGuardBefore = null;
     if (options.isolate && !reusableResult) {
-      if (!ensureGitWorktree(projectRoot)) {
+      if (!projectIsGitWorktree) {
         emitProgress({ event: "error", iter: iteration, reason: "worktree_create_failed", detail: "当前目录不是 git worktree" }, options);
         process.exitCode = 1;
         return { state, reason: "worktree_create_failed" };
@@ -528,6 +211,14 @@ async function runPipeline(options) {
       workerCwd = isolatedWorktree;
       emitProgress({ event: "worktree_created", iter: iteration, path: toRelative(projectRoot, isolatedWorktree) }, options);
     }
+    if (!reusableResult && projectIsGitWorktree) {
+      writeGuardBefore = getGitStatusSnapshot(workerCwd);
+      if (isolatedWorktree) {
+        mainWriteGuardBefore = getGitStatusSnapshot(projectRoot);
+      }
+    }
+    /** @type {import("./types").ParsedIterationResult | null} */
+    let parsed = reusableResult;
     if (reusableResult) {
       await fs.promises.writeFile(workerLogPath, [
         "command: reused existing result.json",
@@ -546,19 +237,26 @@ async function runPipeline(options) {
         log: toRelative(projectRoot, workerLogPath),
       }, options);
     } else {
+      const timeoutPolicy = computeEffectiveTimeouts(state, options, focus);
       const worker = await runWorkerWithProgress(adapter, {
         cwd: workerCwd,
         promptPath,
         resultPath,
         session,
         iteration,
-        timeoutMs: (options.stepTimeoutSeconds || 300) * 1000,
+        timeoutMs: timeoutPolicy.timeoutMs,
+        inactivityTimeoutMs: timeoutPolicy.inactivityTimeoutMs,
+        warnBeforeMs: timeoutPolicy.warnBeforeMs,
+        graceKillMs: timeoutPolicy.graceKillMs,
+        timeoutWarningPath: path.join(iterationDir, "timeout-warning.json"),
       }, {
+        projectRoot,
         session,
         iteration,
         focus,
         state,
         options,
+        timeoutPolicy,
         heartbeatMs: options.progressIntervalSeconds ? options.progressIntervalSeconds * 1000 : 15000,
       });
       await fs.promises.writeFile(workerLogPath, [
@@ -568,6 +266,9 @@ async function runPipeline(options) {
         `error: ${worker.error || "none"}`,
         `duration_ms: ${worker.durationMs || worker.progressDurationMs || 0}`,
         `progress_heartbeats: ${worker.progressHeartbeats || 0}`,
+        `stdout_bytes: ${worker.stdoutBytes || Buffer.byteLength(worker.stdout || "", "utf8")}`,
+        `stderr_bytes: ${worker.stderrBytes || Buffer.byteLength(worker.stderr || "", "utf8")}`,
+        `last_activity_ms: ${worker.lastActivityMs === undefined ? 0 : worker.lastActivityMs}`,
         "stdout:",
         worker.stdout || "",
         "stderr:",
@@ -580,6 +281,9 @@ async function runPipeline(options) {
         timed_out: Boolean(worker.timedOut),
         duration_ms: worker.durationMs || worker.progressDurationMs || 0,
         progress_heartbeats: worker.progressHeartbeats || 0,
+        stdout_bytes: worker.stdoutBytes || Buffer.byteLength(worker.stdout || "", "utf8"),
+        stderr_bytes: worker.stderrBytes || Buffer.byteLength(worker.stderr || "", "utf8"),
+        last_activity_ms: worker.lastActivityMs === undefined ? 0 : worker.lastActivityMs,
         result: toRelative(projectRoot, resultPath),
         log: toRelative(projectRoot, workerLogPath),
       }, options);
@@ -589,55 +293,132 @@ async function runPipeline(options) {
           emitProgress({
             event: "agent_timeout",
             iter: iteration,
-            timeout_ms: (options.stepTimeoutSeconds || 300) * 1000,
+            timeout_ms: timeoutPolicy.timeoutMs,
+            inactivity_timeout_ms: timeoutPolicy.inactivityTimeoutMs,
+            timeout_reason: worker.timeoutReason || null,
             detail: worker.error || "worker timed out",
           }, options);
         }
-        emitProgress({ event: "error", iter: iteration, reason: "worker_failed", detail: worker.error || tail(worker.stderr) }, options);
-        if (isolatedWorktree) {
-          const cleanup = cleanupIsolatedWorktree(projectRoot, isolatedWorktree);
-          if (!cleanup.ok) {
-            emitProgress({ event: "error", iter: iteration, reason: "worktree_cleanup_failed", detail: cleanup.error }, options);
+        const recoveredResult = await readReusableIterationResult(resultPath, promptPath, focus);
+        if (recoveredResult) {
+          parsed = recoveredResult;
+          emitProgress({
+            event: "agent_result_recovered",
+            iter: iteration,
+            result: toRelative(projectRoot, resultPath),
+            log: toRelative(projectRoot, workerLogPath),
+            exit_code: worker.status,
+            timed_out: Boolean(worker.timedOut),
+            detail: worker.error || tail(worker.stderr) || `worker exited with ${worker.status}`,
+          }, options);
+        } else {
+          const detail = worker.error || tail(worker.stderr) || `worker exited with ${worker.status}`;
+          const failureWrite = await persistPipelineFailureState(stateJsonPath, state, {
+            reason: worker.timedOut ? "worker_timeout" : "worker_failed",
+            detail,
+            command: worker.command || "worker",
+            exitCode: worker.status || 1,
+          }, options);
+          state = failureWrite.state;
+          if (!failureWrite.ok) {
+            emitProgress({ event: "error", iter: iteration, reason: "state_schema_failed", errors: failureWrite.issues }, options);
+            cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
+            process.exitCode = 1;
+            return { state, reason: "state_schema_failed" };
           }
+          emitProgress({ event: "error", iter: iteration, reason: "worker_failed", detail }, options);
+          cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
+          process.exitCode = worker.status || 1;
+          return { state, reason: "worker_failed" };
         }
-        process.exitCode = worker.status || 1;
-        return { state, reason: "worker_failed" };
       }
     }
 
-    let parsed = reusableResult;
     if (!parsed) {
       try {
-        parsed = parseAndValidateIterationResult(await fs.promises.readFile(resultPath, "utf8"));
+        const parsedCandidate = parseAndValidateIterationResult(await fs.promises.readFile(resultPath, "utf8"));
+        parsed = parsedCandidate;
       } catch (error) {
-        emitProgress({ event: "error", iter: iteration, reason: "missing_result_json", detail: error.message }, options);
-        if (isolatedWorktree) {
-          const cleanup = cleanupIsolatedWorktree(projectRoot, isolatedWorktree);
-          if (!cleanup.ok) {
-            emitProgress({ event: "error", iter: iteration, reason: "worktree_cleanup_failed", detail: cleanup.error }, options);
-          }
+        const message = error instanceof Error ? error.message : String(error);
+        const failureWrite = await persistPipelineFailureState(stateJsonPath, state, {
+          reason: "missing_result_json",
+          detail: message,
+          command: "read result.json",
+          exitCode: 1,
+        }, options);
+        state = failureWrite.state;
+        if (!failureWrite.ok) {
+          emitProgress({ event: "error", iter: iteration, reason: "state_schema_failed", errors: failureWrite.issues }, options);
+          cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
+          process.exitCode = 1;
+          return { state, reason: "state_schema_failed" };
         }
+        emitProgress({ event: "error", iter: iteration, reason: "missing_result_json", detail: message }, options);
+        cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
         process.exitCode = 1;
         return { state, reason: "missing_result_json" };
       }
-      if (!parsed.valid) {
-        emitProgress({ event: "error", iter: iteration, reason: "invalid_result_json", errors: parsed.errors }, options);
-        if (isolatedWorktree) {
-          const cleanup = cleanupIsolatedWorktree(projectRoot, isolatedWorktree);
-          if (!cleanup.ok) {
-            emitProgress({ event: "error", iter: iteration, reason: "worktree_cleanup_failed", detail: cleanup.error }, options);
-          }
+      if (!parsed || !parsed.valid) {
+        const failureWrite = await persistPipelineFailureState(stateJsonPath, state, {
+          reason: "invalid_result_json",
+          detail: parsed ? parsed.errors.join("; ") : "invalid result",
+          command: "validate result.json",
+          exitCode: 1,
+        }, options);
+        state = failureWrite.state;
+        if (!failureWrite.ok) {
+          emitProgress({ event: "error", iter: iteration, reason: "state_schema_failed", errors: failureWrite.issues }, options);
+          cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
+          process.exitCode = 1;
+          return { state, reason: "state_schema_failed" };
         }
+        emitProgress({ event: "error", iter: iteration, reason: "invalid_result_json", errors: parsed ? parsed.errors : ["invalid result"] }, options);
+        cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
         process.exitCode = 1;
         return { state, reason: "invalid_result_json" };
       }
     }
+    if (!parsed || !parsed.valid) {
+      emitProgress({ event: "error", iter: iteration, reason: "invalid_result_json", errors: ["invalid result"] }, options);
+      cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
+      process.exitCode = 1;
+      return { state, reason: "invalid_result_json" };
+    }
+    const report = parsed.result;
 
-    const writeGuard = evaluateWriteGuard(parsed.result, {
+    const writeGuardAfter = writeGuardBefore
+      ? getGitStatusSnapshot(workerCwd, writeGuardBefore.files)
+      : null;
+    const mainWriteGuardAfter = mainWriteGuardBefore
+      ? getGitStatusSnapshot(projectRoot, mainWriteGuardBefore.files)
+      : null;
+    const allowedInternalWrites = new Set([
+      toRelative(projectRoot, resultPath),
+      toRelative(projectRoot, workerLogPath),
+      toRelative(projectRoot, path.join(iterationDir, "codex-prompt.md")),
+      toRelative(projectRoot, path.join(iterationDir, "codex-last-message.txt")),
+      toRelative(projectRoot, path.join(iterationDir, "timeout-warning.json")),
+    ]);
+    const actualFilesSource = [
+      ...diffStatusSnapshots(writeGuardBefore, writeGuardAfter),
+      ...diffStatusSnapshots(mainWriteGuardBefore, mainWriteGuardAfter),
+    ];
+    const actualFilesChanged = normalizeActualFilesChanged(actualFilesSource, allowedInternalWrites);
+    const guardedResult = mergeActualFilesChanged(report, actualFilesChanged);
+    if (actualFilesChanged.length > 0) {
+      emitProgress({
+        event: "write_audit",
+        iter: iteration,
+        reported_files: Array.isArray(report.files_changed) ? report.files_changed : [],
+        actual_files: actualFilesChanged,
+      }, options);
+    }
+
+    const writeGuard = evaluateWriteGuard(guardedResult, {
       mode,
       scope: effectiveScope,
       allowModify: options.allowModify,
-      allowedInternalWrites: [toRelative(projectRoot, resultPath)],
+      allowedInternalWrites: Array.from(allowedInternalWrites),
     });
     if (!writeGuard.ok) {
       emitProgress({ event: "write_violation", iter: iteration, issues: writeGuard.issues }, options);
@@ -650,19 +431,17 @@ async function runPipeline(options) {
       const schemaIssues = await writeValidatedState(stateJsonPath, state, options);
       if (schemaIssues.some((issue) => issue.severity === "error")) {
         emitProgress({ event: "error", iter: iteration, reason: "state_schema_failed", errors: schemaIssues }, options);
+        cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
+        process.exitCode = 1;
+        return { state, reason: "state_schema_failed" };
       }
-      if (isolatedWorktree) {
-        const cleanup = cleanupIsolatedWorktree(projectRoot, isolatedWorktree);
-        if (!cleanup.ok) {
-          emitProgress({ event: "error", iter: iteration, reason: "worktree_cleanup_failed", detail: cleanup.error }, options);
-        }
-      }
+      cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
       process.exitCode = 1;
       return { state, reason: "write_violation" };
     }
 
-    if (parsed.result.status === "need_decision") {
-      const merged = mergeIterationIntoState(state, parsed.result, { status: "not_run", command: null }, {
+    if (report.status === "need_decision") {
+      const merged = mergeIterationIntoState(state, report, { status: "not_run", command: null }, {
         focus,
         iteration,
         promptPath: toRelative(projectRoot, promptPath),
@@ -673,15 +452,17 @@ async function runPipeline(options) {
       const schemaIssues = await writeValidatedState(stateJsonPath, state, options);
       if (schemaIssues.some((issue) => issue.severity === "error")) {
         emitProgress({ event: "error", iter: iteration, reason: "state_schema_failed", errors: schemaIssues }, options);
+        cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
         process.exitCode = 1;
         return { state, reason: "state_schema_failed" };
       }
-      const request = parsed.result.decision_request;
+      const request = report.decision_request;
+      cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
       emitProgress({
         event: "need_decision",
         iter: iteration,
-        question: request.question,
-        options: request.options || [],
+        question: request ? request.question : "",
+        options: request && Array.isArray(request.options) ? request.options : [],
         resume_hint: `fastcar-cli auto-iterate --resume ${session} --run --autopilot --answer <id> --json-progress`,
       }, options);
       process.exitCode = 42;
@@ -695,6 +476,11 @@ async function runPipeline(options) {
         workerCwd,
         iterationDir,
         inferLanguageFromState(state),
+        {
+          timeoutMs: typeof options.validationTimeoutSeconds === "number" && Number.isFinite(options.validationTimeoutSeconds)
+            ? options.validationTimeoutSeconds * 1000
+            : undefined,
+        },
       );
     emitProgress({
       event: "validation_done",
@@ -707,22 +493,22 @@ async function runPipeline(options) {
       progress: buildProgressStats(state, { iteration, focus }),
     }, options);
 
-    const merged = mergeIterationIntoState(state, parsed.result, lastValidation, {
+    const merged = mergeIterationIntoState(state, report, lastValidation, {
       focus,
       iteration,
       promptPath: toRelative(projectRoot, promptPath),
       resultPath: toRelative(projectRoot, resultPath),
       logPath: toRelative(projectRoot, workerLogPath),
     });
-    if (needsValidationReconcile(parsed.result, lastValidation)) {
+    if (needsValidationReconcile(report, lastValidation)) {
       emitProgress({
         event: "reconcile",
         iter: iteration,
         reason: "worker_claimed_passed_but_cli_validation_failed",
       }, options);
     }
-    const hasProgress = parsed.result.status !== "no_progress" &&
-      parsed.result.status === "completed" &&
+    const hasProgress = report.status !== "no_progress" &&
+      report.status === "completed" &&
       lastValidation.status !== "failed";
     state = updateNoProgressState(merged.state, hasProgress);
     const phaseGate = checkPhaseGate(state, { mode });
@@ -744,6 +530,7 @@ async function runPipeline(options) {
     const schemaIssues = await writeValidatedState(stateJsonPath, state, options);
     if (schemaIssues.some((issue) => issue.severity === "error")) {
       emitProgress({ event: "error", iter: iteration, reason: "state_schema_failed", errors: schemaIssues }, options);
+      cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
       process.exitCode = 1;
       return { state, reason: "state_schema_failed" };
     }
@@ -759,17 +546,13 @@ async function runPipeline(options) {
     if (isolatedWorktree) {
       const applied = applyIsolatedWorktreeDiff(projectRoot, isolatedWorktree);
       if (!applied.ok) {
-        state.watchdog = {
-          ...(state.watchdog || {}),
-          triggered: true,
-          requiredAction: "stop",
-        };
-        state.isolate = {
-          ...(state.isolate || {}),
-          conflictWorktree: isolatedWorktree,
-          conflictReason: applied.error,
-        };
-        await writeValidatedState(stateJsonPath, state, options);
+        state = markIsolateMergeFailed(state, report, applied, isolatedWorktree);
+        const schemaIssues = await writeValidatedState(stateJsonPath, state, options);
+        if (schemaIssues.some((issue) => issue.severity === "error")) {
+          emitProgress({ event: "error", iter: iteration, reason: "state_schema_failed", errors: schemaIssues }, options);
+          process.exitCode = 1;
+          return { state, reason: "state_schema_failed" };
+        }
         emitProgress({
           event: "error",
           iter: iteration,
@@ -781,16 +564,97 @@ async function runPipeline(options) {
         return { state, reason: "worktree_merge_failed" };
       }
       emitProgress({ event: "worktree_merged", iter: iteration, skipped: applied.skipped }, options);
-      const cleanup = cleanupIsolatedWorktree(projectRoot, isolatedWorktree);
+      const postMergeValidation = mode === "plan"
+        ? await skipValidation(iterationDir, `${getLanguageText(inferLanguageFromState(state)).planModeSkipped}(post_merge)`, {
+          logFileName: "post-merge-validation.log",
+        })
+        : await runValidationCommands(
+          options.noValidate ? [] : parseValidationCommands(state, options.validateCommand),
+          projectRoot,
+          iterationDir,
+          inferLanguageFromState(state),
+          {
+            timeoutMs: typeof options.validationTimeoutSeconds === "number" && Number.isFinite(options.validationTimeoutSeconds)
+              ? options.validationTimeoutSeconds * 1000
+              : undefined,
+            logFileName: "post-merge-validation.log",
+          },
+        );
+      lastValidation = postMergeValidation;
+      emitProgress({
+        event: "post_merge_validation_done",
+        iter: iteration,
+        status: postMergeValidation.status,
+        command: postMergeValidation.command,
+        exit_code: postMergeValidation.exitCode,
+        duration_ms: postMergeValidation.durationMs || 0,
+        summary: postMergeValidation.summary,
+        progress: buildProgressStats(state, { iteration, focus }),
+      }, options);
+      state = applyPostMergeValidationState(state, postMergeValidation, iteration);
+      const postMergeSchemaIssues = await writeValidatedState(stateJsonPath, state, options);
+      if (postMergeSchemaIssues.some((issue) => issue.severity === "error")) {
+        emitProgress({ event: "error", iter: iteration, reason: "state_schema_failed", errors: postMergeSchemaIssues }, options);
+        cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
+        process.exitCode = 1;
+        return { state, reason: "state_schema_failed" };
+      }
+      if (postMergeValidation.status === "failed") {
+        const rollback = rollbackAppliedIsolatedWorktreeDiff(projectRoot, applied);
+        if (!rollback.ok) {
+          emitProgress({
+            event: "error",
+            iter: iteration,
+            reason: "worktree_rollback_failed",
+            detail: rollback.error,
+          }, options);
+          state.watchdog = {
+            ...(state.watchdog || {}),
+            triggered: true,
+            requiredAction: "stop",
+          };
+          const rollbackSchemaIssues = await writeValidatedState(stateJsonPath, state, options);
+          if (rollbackSchemaIssues.some((issue) => issue.severity === "error")) {
+            emitProgress({ event: "error", iter: iteration, reason: "state_schema_failed", errors: rollbackSchemaIssues }, options);
+            cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
+            process.exitCode = 1;
+            return { state, reason: "state_schema_failed" };
+          }
+          cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
+          process.exitCode = 1;
+          return { state, reason: "worktree_rollback_failed" };
+        }
+        emitProgress({ event: "worktree_rolled_back", iter: iteration, reason: "post_merge_validation_failed" }, options);
+        emitProgress({
+          event: "reconcile",
+          iter: iteration,
+          reason: "post_merge_validation_failed",
+        }, options);
+        process.exitCode = 1;
+      }
+      const cleanup = cleanupIsolatedWorktreeForExit(projectRoot, isolatedWorktree, iteration, options);
       if (!cleanup.ok) {
-        emitProgress({ event: "error", iter: iteration, reason: "worktree_cleanup_failed", detail: cleanup.error }, options);
+        state = markIsolateCleanupFailed(state, cleanup);
+        const cleanupSchemaIssues = await writeValidatedState(stateJsonPath, state, options);
+        if (cleanupSchemaIssues.some((issue) => issue.severity === "error")) {
+          emitProgress({ event: "error", iter: iteration, reason: "state_schema_failed", errors: cleanupSchemaIssues }, options);
+          process.exitCode = 1;
+          return { state, reason: "state_schema_failed" };
+        }
         process.exitCode = 1;
         return { state, reason: "worktree_cleanup_failed" };
       }
-      emitProgress({ event: "worktree_cleaned", iter: iteration }, options);
+      if (postMergeValidation.status === "failed") {
+        return { state, reason: "post_merge_validation_failed" };
+      }
     }
 
-    const stopAfter = shouldStop(state, lastValidation, { once: options.once }, mode);
+    runCyclesCompleted += 1;
+    const finalizedStop = await maybeFinalizeAndStop("iteration_completed");
+    if (finalizedStop.stopped) {
+      return { state, reason: finalizedStop.reason || "delivery_ready" };
+    }
+    const stopAfter = shouldStop(state, lastValidation, { once: options.once, runCyclesCompleted }, mode);
     if (stopAfter.stop) {
       if (stopAfter.reason === "delivery_ready" || stopAfter.reason === "requirements_blocked") {
         emitProgress({ event: "delivery_gate", session, reason: stopAfter.reason, ...buildDeliveryGate(state) }, options);
@@ -815,4 +679,7 @@ module.exports = {
   buildDeliveryGate,
   buildRequirementStatus,
   buildPipelineSnapshot,
+  computeEffectiveTimeouts,
+  normalizeActualFilesChanged,
+  getDirectorySignature,
 };
