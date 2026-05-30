@@ -6,6 +6,7 @@ import {
   inferLanguageFromState,
   localizedStatusLabel,
 } from "./language";
+import { asArray, asRecord, stringValue } from "./valueUtils";
 import type {
   PipelineMarkdownIssue,
   PipelineStateLike,
@@ -123,33 +124,6 @@ function replaceMarkdownSection(content: string, heading: string, body: string):
     return `${content.trimEnd()}\n\n${heading}\n${body.trim()}\n`;
   }
   return content.replace(pattern, `$1${body.trim()}\n\n`);
-}
-
-/**
- * @param {unknown} value
- * @returns {Record<string, unknown>}
- */
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
-/**
- * @param {unknown} value
- * @returns {unknown[]}
- */
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-/**
- * @param {unknown} value
- * @param {string} [fallback]
- * @returns {string}
- */
-function stringValue(value: unknown, fallback = "无"): string {
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
 /**

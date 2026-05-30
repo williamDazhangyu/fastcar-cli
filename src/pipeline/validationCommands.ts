@@ -2,13 +2,7 @@ import type {
   ValidationCommandConfig,
   ValidationHistoryEntry,
 } from "./types";
-
-function normalizeArray(value: unknown): unknown[] {
-  if (!value) {
-    return [];
-  }
-  return Array.isArray(value) ? value : [value];
-}
+import { asArray } from "./valueUtils";
 
 export function isValidationHistoryEntry(item: unknown): item is ValidationHistoryEntry {
   if (!item || typeof item !== "object" || Array.isArray(item)) {
@@ -48,12 +42,12 @@ function isNonEmptyString(item: unknown): item is string {
 }
 
 export function validationConfigCommands(commands: unknown): string[] {
-  return normalizeArray(commands)
+  return asArray(commands)
     .map(validationCommandText)
     .filter(isNonEmptyString);
 }
 
 export function validationHistoryEntries(commands: unknown): ValidationHistoryEntry[] {
-  return normalizeArray(commands)
+  return asArray(commands)
     .filter(isValidationHistoryEntry);
 }

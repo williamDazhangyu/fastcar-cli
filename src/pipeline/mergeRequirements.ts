@@ -2,6 +2,7 @@ import {
   getLanguageText,
   inferLanguageFromState,
 } from "./language";
+import { asRecord } from "./valueUtils";
 import type {
   PipelineStateLike,
   ValidationResult,
@@ -12,12 +13,6 @@ export function isSuccessfulWorkerStatus(status: unknown): boolean {
   return status === "completed";
 }
 
-function toRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
 export function mergeRequirement(
   existing: unknown,
   incoming: unknown,
@@ -26,8 +21,8 @@ export function mergeRequirement(
   workerStatus: unknown,
 ): Record<string, unknown> {
   const text = getLanguageText(language);
-  const next = { ...toRecord(existing) };
-  const patch = toRecord(incoming);
+  const next = { ...asRecord(existing) };
+  const patch = asRecord(incoming);
   if (patch.summary) {
     next.summary = patch.summary;
   }
@@ -79,11 +74,11 @@ export function mergeRequirements(
   }
 
   const byId = new Map<unknown, Record<string, unknown>>(current.map((item) => {
-    const record = toRecord(item);
+    const record = asRecord(item);
     return [record.id, record];
   }));
   for (const item of incoming) {
-    const patch = toRecord(item);
+    const patch = asRecord(item);
     if (!patch.id) {
       continue;
     }

@@ -4,6 +4,7 @@ import type {
   LanguageInfo,
   PipelineStateLike,
 } from "./types";
+import { asRecord } from "./valueUtils";
 
 const CJK_PATTERN = /[\u3400-\u9fff]/g;
 const LATIN_WORD_PATTERN = /\b[A-Za-z][A-Za-z0-9_-]*\b/g;
@@ -67,14 +68,8 @@ export function inferLanguageFromAnswers(answers: LanguageAnswersLike = {}): Lan
   ], "zh");
 }
 
-function toRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
 export function inferLanguageFromState(state: PipelineStateLike = {}): LanguageInfo {
-  const language = toRecord(state.language);
+  const language = asRecord(state.language);
   const normalizedCode = normalizeLanguageCode(language.code);
   if (normalizedCode) {
     return {
@@ -83,8 +78,8 @@ export function inferLanguageFromState(state: PipelineStateLike = {}): LanguageI
       confidence: String(language.confidence || "high"),
     };
   }
-  const task = toRecord(state.task);
-  const sourceChecklist = toRecord(state.sourceChecklist);
+  const task = asRecord(state.task);
+  const sourceChecklist = asRecord(state.sourceChecklist);
   return inferLanguageFromText([
     task.goal,
     sourceChecklist.content,

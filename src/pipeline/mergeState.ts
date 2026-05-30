@@ -14,6 +14,7 @@ import {
   normalizeEffectiveValidation,
 } from "./mergeIterationProjection";
 import { mergeValidationCommandHistory } from "./mergeValidationHistory";
+import { asRecord, normalizeArray } from "./valueUtils";
 import type {
   EffectiveValidationResult,
   MergeIterationContext,
@@ -27,28 +28,6 @@ const MAX_TRACEABILITY_ITERATIONS = 200;
 const MAX_DOCUMENTATION_ITEMS = 200;
 const MAX_NOTES_ITEMS = 200;
 const MAX_DIAGNOSE_ITEMS = 200;
-
-/**
- * @param {unknown} value
- * @returns {unknown[]}
- */
-function normalizeArray(value: unknown): unknown[] {
-  if (!value) {
-    return [];
-  }
-  return (Array.isArray(value) ? value : [value])
-    .filter((item) => item !== undefined && item !== null && item !== false && item !== "");
-}
-
-/**
- * @param {unknown} value
- * @returns {Record<string, unknown>}
- */
-function toRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
 
 /**
  * @param {Record<string, unknown>} value
@@ -89,8 +68,8 @@ function appendDocumentation(
   existing: unknown,
   incoming: unknown,
 ): WorkerIterationResult["documentation"] {
-  const current = toRecord(existing);
-  const report = toRecord(incoming);
+  const current = asRecord(existing);
+  const report = asRecord(incoming);
   return {
     apiChanges: takeLast([
       ...normalizeArray(current.apiChanges),
@@ -193,7 +172,7 @@ function closeVerifiedBootstrapRequirement(
   return {
     ...state,
     requirements: state.requirements.map((item) => {
-      const record = toRecord(item);
+      const record = asRecord(item);
       if (record.id !== "REQ-BOOTSTRAP") {
         return item;
       }
@@ -233,7 +212,7 @@ export function mergeIterationIntoState(
   next = boundWorkerPatchHistory(next);
 
   next.requirements = mergeRequirements(next, report, effectiveValidation);
-  const traceability = toRecord(next.traceability);
+  const traceability = asRecord(next.traceability);
   next.traceability = {
     ...traceability,
     policy: traceability.policy || "Record public audit summaries only; never record private chain-of-thought.",

@@ -416,12 +416,12 @@ export function parseArgs(args: string[] = []): AutoIterateArgs {
     }
 
     if (arg === "--max-steps" && args[index + 1]) {
-      options.maxSteps = formatNumber(args[index + 1], null);
+      options.maxSteps = formatNonNegativeNumber(args[index + 1], 0);
       return;
     }
 
     if (arg.startsWith("--max-steps=")) {
-      options.maxSteps = formatNumber(arg.slice("--max-steps=".length), null);
+      options.maxSteps = formatNonNegativeNumber(arg.slice("--max-steps=".length), 0);
       return;
     }
 
@@ -558,22 +558,22 @@ export function parseArgs(args: string[] = []): AutoIterateArgs {
       (arg === "--autopilot-max-iterations" || arg === "--autopilot-max") &&
       args[index + 1]
     ) {
-      options.autopilotMaxIterations = formatNumber(args[index + 1], null);
+      options.autopilotMaxIterations = formatNonNegativeNumber(args[index + 1], 0);
       return;
     }
 
     if (arg.startsWith("--autopilot-max-iterations=")) {
-      options.autopilotMaxIterations = formatNumber(
+      options.autopilotMaxIterations = formatNonNegativeNumber(
         arg.slice("--autopilot-max-iterations=".length),
-        null,
+        0,
       );
       return;
     }
 
     if (arg.startsWith("--autopilot-max=")) {
-      options.autopilotMaxIterations = formatNumber(
+      options.autopilotMaxIterations = formatNonNegativeNumber(
         arg.slice("--autopilot-max=".length),
-        null,
+        0,
       );
       return;
     }

@@ -3,6 +3,7 @@ import {
   refreshStateMarkdownView,
   writeJsonAtomic,
 } from "./pipelineStateIO";
+import { asRecord } from "./valueUtils";
 import type {
   IsolatedWorktreeApplyResult,
   IsolatedWorktreeOperationResult,
@@ -14,16 +15,6 @@ import type {
   WorkerIterationResult,
 } from "./types";
 
-
-/**
- * @param {unknown} value
- * @returns {Record<string, unknown>}
- */
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
 
 /**
  * @param {import("./types").PipelineStateLike} state

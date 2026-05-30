@@ -5,29 +5,12 @@ import type {
   RouterPlanOptions,
   RouterRunOptions,
 } from "./types";
+import { asArray, asRecord } from "./valueUtils";
 
 interface NeedDecisionResume {
   question: unknown;
   options: unknown[];
   command: string[];
-}
-
-/**
- * @param {unknown} value
- * @returns {Record<string, unknown>}
- */
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
-/**
- * @param {unknown} value
- * @returns {unknown[]}
- */
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
 }
 
 /**

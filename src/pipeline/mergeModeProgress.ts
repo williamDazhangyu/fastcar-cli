@@ -1,22 +1,12 @@
-﻿import { compareMetrics, normalizeMetrics } from "./mergeMetrics";
+import { compareMetrics, normalizeMetrics } from "./mergeMetrics";
 import { normalizeHypothesisQueue } from "./mergeHypotheses";
+import { asRecord } from "./valueUtils";
 import type {
   MergeIterationContext,
   PipelineStateLike,
   ValidationResult,
   WorkerIterationResult,
 } from "./types";
-
-
-/**
- * @param {unknown} value
- * @returns {Record<string, unknown>}
- */
-function toRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
 
 /**
  * @param {import("./types").PipelineStateLike} state
@@ -35,7 +25,7 @@ export function mergeBaseline(
     return state;
   }
   const baseline = {
-    ...toRecord(state.baseline),
+    ...asRecord(state.baseline),
     status: cliValidation.status === "passed" ? "passed" :
       cliValidation.status === "failed" ? "failed" :
         cliValidation.status === "skipped" ? "skipped_with_reason" : "not_available",
@@ -52,14 +42,14 @@ export function mergeBaseline(
   const metrics = normalizeMetrics(report.state_patch && (report.state_patch.optimizationMetrics || report.state_patch.metrics));
   if (metrics.length > 0) {
     next.optimization = {
-      ...toRecord(next.optimization),
+      ...asRecord(next.optimization),
       baselineMetrics: metrics,
       pendingMetrics: [],
     };
   }
   if (ctx.focus.type === "reproduce") {
     next.diagnose = {
-      ...toRecord(next.diagnose),
+      ...asRecord(next.diagnose),
       reproduceBaseline: {
         status: baseline.status,
         command: baseline.command,
@@ -88,7 +78,7 @@ export function mergeModeProgress(
   }
   if (ctx.focus.type === "optimize") {
     const pendingMetrics = normalizeMetrics(report.state_patch && (report.state_patch.optimizationMetrics || report.state_patch.metrics));
-    const optimization = toRecord(state.optimization);
+    const optimization = asRecord(state.optimization);
     return {
       ...state,
       optimization: {
@@ -100,7 +90,7 @@ export function mergeModeProgress(
     };
   }
   if (ctx.focus.type === "verify_optimization") {
-    const optimization = toRecord(state.optimization);
+    const optimization = asRecord(state.optimization);
     const postMetrics = normalizeMetrics(report.state_patch && (report.state_patch.optimizationMetrics || report.state_patch.metrics));
     const effectivePostMetrics = postMetrics.length > 0 ? postMetrics : (optimization.pendingMetrics || []);
     const comparison = compareMetrics(optimization.baselineMetrics || [], effectivePostMetrics);
@@ -131,14 +121,14 @@ export function mergeModeProgress(
     return {
       ...state,
       diagnose: {
-        ...toRecord(state.diagnose),
+        ...asRecord(state.diagnose),
         regressionCheckStatus: cliValidation.status === "passed" ? "passed" : "not_verified",
         regressionCheckSummary: cliValidation.summary || report.summary || "",
       },
     };
   }
   if (ctx.focus.type === "harden_validation") {
-    const watchdog = toRecord(state.watchdog);
+    const watchdog = asRecord(state.watchdog);
     return {
       ...state,
       watchdog: {
@@ -152,16 +142,16 @@ export function mergeModeProgress(
     };
   }
   if (ctx.focus.type === "hypothesis_test") {
-    const diagnose = toRecord(state.diagnose);
+    const diagnose = asRecord(state.diagnose);
     const queue = normalizeHypothesisQueue(diagnose);
     const focusId = ctx.focus.req_id ? String(ctx.focus.req_id) : "";
     const focusedPendingIndex = focusId
       ? queue.findIndex((candidate) => {
-        const item = toRecord(candidate);
+        const item = asRecord(candidate);
         return item.status === "pending" && String(item.id) === focusId;
       })
       : -1;
-    const firstPendingIndex = queue.findIndex((candidate) => toRecord(candidate).status === "pending");
+    const firstPendingIndex = queue.findIndex((candidate) => asRecord(candidate).status === "pending");
     const targetIndex = focusedPendingIndex >= 0 ? focusedPendingIndex : firstPendingIndex;
     const nextQueue = queue.length > 0
       ? queue.map((item, index) => {
@@ -169,7 +159,7 @@ export function mergeModeProgress(
             return item;
           }
           return {
-            ...toRecord(item),
+            ...asRecord(item),
             status: cliValidation.status === "passed" ? "supported" : "rejected",
             evidence: report.summary || cliValidation.summary || "",
           };

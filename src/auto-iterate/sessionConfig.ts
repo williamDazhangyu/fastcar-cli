@@ -154,12 +154,29 @@ export function formatNumber(value: unknown, fallback: number | null): number | 
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+export function formatNonNegativeNumber(value: unknown, fallback: number | null): number | null {
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
 export function validatePositiveInteger(value: unknown): true | string {
   const parsed = Number.parseInt(String(value), 10);
   if (Number.isFinite(parsed) && parsed > 0) {
     return true;
   }
   return "请输入大于 0 的整数";
+}
+
+export function validateNonNegativeInteger(value: unknown): true | string {
+  const parsed = Number.parseInt(String(value), 10);
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return true;
+  }
+  return "请输入大于等于 0 的整数";
+}
+
+export function valueOrDefault(value: unknown, fallback: number): unknown {
+  return value === undefined || value === null || value === "" ? fallback : value;
 }
 
 export function buildModeInstructions(answers: StateObject): string {
@@ -218,7 +235,7 @@ export function withModeDefaults(answers: StateObject): StateObject {
     answers.maxIterations,
     config.defaultMaxIterations,
   );
-  const autopilotMaxIterations = formatNumber(
+  const autopilotMaxIterations = formatNonNegativeNumber(
     answers.autopilotMaxIterations,
     config.defaultAutopilotMaxIterations,
   );
@@ -249,9 +266,11 @@ export function buildNonInteractiveConfig(
 ): StateObject {
   const config = getModeConfig(mode);
   const goal = options.goal || (source ? "见原始清单文档" : "未指定目标");
-  const maxIterations = options.maxIterations || config.defaultMaxIterations;
-  const autopilotMaxIterations =
-    options.autopilotMaxIterations || config.defaultAutopilotMaxIterations;
+  const maxIterations = valueOrDefault(options.maxIterations, config.defaultMaxIterations);
+  const autopilotMaxIterations = valueOrDefault(
+    options.autopilotMaxIterations,
+    config.defaultAutopilotMaxIterations,
+  );
   const sourceDefaults = source
     ? {
         sourceChecklist: source.content,

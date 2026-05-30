@@ -1,3 +1,4 @@
+import { asRecord, normalizeArray } from "./valueUtils";
 import type {
   DiagnoseStateLike,
   HypothesisItem,
@@ -5,24 +6,10 @@ import type {
 
 const MAX_DIAGNOSE_ITEMS = 200;
 
-function normalizeArray(value: unknown): unknown[] {
-  if (!value) {
-    return [];
-  }
-  return (Array.isArray(value) ? value : [value])
-    .filter((item) => item !== undefined && item !== null && item !== false && item !== "");
-}
-
-function toRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
 export function collectHypothesisIds(items: unknown): Set<string> {
   const ids = new Set<string>();
   for (const item of normalizeArray(items)) {
-    const record = toRecord(item);
+    const record = asRecord(item);
     if (record.id) {
       ids.add(String(record.id));
     }
@@ -54,7 +41,7 @@ export function normalizeHypothesisItem(
   usedIds?: Set<string>,
 ): HypothesisItem {
   const ids = usedIds || new Set<string>();
-  const record = toRecord(value);
+  const record = asRecord(value);
   const proposedId = record.id ? String(record.id) : "";
   const id = proposedId && !ids.has(proposedId) ? proposedId : nextHypothesisId(ids);
   ids.add(id);
@@ -94,7 +81,7 @@ export function appendHypothesesPatch(
   currentDiagnose: unknown,
   value: unknown,
 ): DiagnoseStateLike {
-  const diagnose = toRecord(currentDiagnose);
+  const diagnose = asRecord(currentDiagnose);
   const incoming = normalizeArray(value);
   const existingQueue = normalizeArray(diagnose.hypothesisQueue);
   const usedIds = collectHypothesisIds(existingQueue);
@@ -104,7 +91,7 @@ export function appendHypothesesPatch(
     hypotheses: normalizeArray([
       ...normalizeArray(diagnose.hypotheses),
       ...incoming.map((item) => {
-        const record = toRecord(item);
+        const record = asRecord(item);
         return typeof item === "string" ? item : String(record.summary || record.text || record.id || "");
       }),
     ].filter(Boolean)).slice(-MAX_DIAGNOSE_ITEMS),

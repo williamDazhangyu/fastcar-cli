@@ -1,18 +1,11 @@
 import { isValidationHistoryEntry } from "./validationCommands";
+import { normalizeArray } from "./valueUtils";
 import type {
   ValidationHistoryEntry,
   ValidationResult,
 } from "./types";
 
 const MAX_VALIDATION_HISTORY_ITEMS = 200;
-
-function normalizeArray(value: unknown): unknown[] {
-  if (!value) {
-    return [];
-  }
-  return (Array.isArray(value) ? value : [value])
-    .filter((item) => item !== undefined && item !== null && item !== false && item !== "");
-}
 
 function hasCommand(item: unknown): item is { command?: unknown } {
   return Boolean(item && typeof item === "object" && !Array.isArray(item));

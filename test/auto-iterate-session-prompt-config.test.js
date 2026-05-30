@@ -63,6 +63,27 @@ test("promptAutoIterateConfig builds quick defaults from prompted answers", asyn
   });
 });
 
+test("promptAutoIterateConfig preserves zero autopilot default option", async () => {
+  await withPromptStub(async (questions) => {
+    const autopilotQuestion = questions.find((item) => item.name === "autopilotMaxIterations");
+    assert.strictEqual(autopilotQuestion.default, "0");
+    assert.strictEqual(autopilotQuestion.validate("0"), true);
+    assert.strictEqual(autopilotQuestion.filter("0"), 0);
+    return {
+      goal: "禁用自动轮次",
+      allowAgentInference: true,
+      constraints: "不要新增依赖",
+      maxIterations: 9,
+      autopilotMaxIterations: 0,
+    };
+  }, async () => {
+    const config = await promptAutoIterateConfig("quick", {
+      autopilotMaxIterations: 0,
+    });
+    assert.strictEqual(config.autopilotMaxIterations, 0);
+  });
+});
+
 test("promptAutoIterateConfig falls back unknown modes to strict", async () => {
   await withPromptStub(async (questions) => {
     assert(questions.some((item) => item.name === "successCriteria"));

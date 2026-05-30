@@ -7,9 +7,11 @@ const {
   buildModeInstructions,
   buildNonInteractiveConfig,
   formatList,
+  formatNonNegativeNumber,
   formatNumber,
   getModeConfig,
   normalizeLines,
+  validateNonNegativeInteger,
   validatePositiveInteger,
   withModeDefaults,
 } = require("../dist/src/auto-iterate/sessionConfig");
@@ -34,8 +36,11 @@ test("line and number helpers preserve legacy coercion", () => {
   assert.strictEqual(formatList("", "fallback"), "fallback");
   assert.strictEqual(formatNumber("12", 3), 12);
   assert.strictEqual(formatNumber("0", 3), 3);
+  assert.strictEqual(formatNonNegativeNumber("0", 3), 0);
   assert.strictEqual(validatePositiveInteger("5"), true);
   assert.strictEqual(validatePositiveInteger("0"), "请输入大于 0 的整数");
+  assert.strictEqual(validateNonNegativeInteger("0"), true);
+  assert.strictEqual(validateNonNegativeInteger("-1"), "请输入大于等于 0 的整数");
 });
 
 test("withModeDefaults applies mode defaults, language inference, and budgets", () => {
@@ -52,6 +57,21 @@ test("withModeDefaults applies mode defaults, language inference, and budgets", 
   assert.strictEqual(answers.deliveryFormat, DEFAULT_DELIVERY_FORMAT);
   assert.strictEqual(answers.language.code, "zh");
   assert(answers.modeInstructions.includes("Optimization-only 模式"));
+});
+
+test("withModeDefaults and non-interactive config preserve explicit zero autopilot budget", () => {
+  const answers = withModeDefaults({
+    mode: "quick",
+    goal: "只准备 session",
+    autopilotMaxIterations: 0,
+  });
+  assert.strictEqual(answers.autopilotMaxIterations, 0);
+
+  const config = buildNonInteractiveConfig("strict", {
+    goal: "禁用自动轮次",
+    autopilotMaxIterations: 0,
+  });
+  assert.strictEqual(config.autopilotMaxIterations, 0);
 });
 
 test("buildModeInstructions covers every mode with mode-specific rules", () => {

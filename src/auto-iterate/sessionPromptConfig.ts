@@ -4,10 +4,13 @@ import {
   DEFAULT_CONSTRAINTS,
   DEFAULT_DELIVERY_FORMAT,
   MODE_CHOICES,
+  formatNonNegativeNumber,
   formatNumber,
   getModeConfig,
   normalizeLines,
+  validateNonNegativeInteger,
   validatePositiveInteger,
+  valueOrDefault,
   withModeDefaults,
 } from "./sessionConfig";
 
@@ -105,11 +108,11 @@ export async function promptStrictConfig(options: StateObject = {}) {
       name: "autopilotMaxIterations",
       message: "autopilot_max_iterations:",
       default: String(
-        options.autopilotMaxIterations || config.defaultAutopilotMaxIterations,
+        valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
-      validate: validatePositiveInteger,
+      validate: validateNonNegativeInteger,
       filter: (value) =>
-        formatNumber(value, config.defaultAutopilotMaxIterations),
+        formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   ]);
 
@@ -151,11 +154,11 @@ export async function promptQuickConfig(options: StateObject = {}) {
       name: "autopilotMaxIterations",
       message: "autopilot_max_iterations:",
       default: String(
-        options.autopilotMaxIterations || config.defaultAutopilotMaxIterations,
+        valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
-      validate: validatePositiveInteger,
+      validate: validateNonNegativeInteger,
       filter: (value) =>
-        formatNumber(value, config.defaultAutopilotMaxIterations),
+        formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   ]);
 
@@ -222,11 +225,11 @@ export async function promptVerifyConfig(options: StateObject = {}) {
       name: "autopilotMaxIterations",
       message: "autopilot_max_iterations:",
       default: String(
-        options.autopilotMaxIterations || config.defaultAutopilotMaxIterations,
+        valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
-      validate: validatePositiveInteger,
+      validate: validateNonNegativeInteger,
       filter: (value) =>
-        formatNumber(value, config.defaultAutopilotMaxIterations),
+        formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   ]);
 
@@ -288,11 +291,11 @@ export async function promptDiagnoseConfig(options: StateObject = {}) {
       name: "autopilotMaxIterations",
       message: "autopilot_max_iterations:",
       default: String(
-        options.autopilotMaxIterations || config.defaultAutopilotMaxIterations,
+        valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
-      validate: validatePositiveInteger,
+      validate: validateNonNegativeInteger,
       filter: (value) =>
-        formatNumber(value, config.defaultAutopilotMaxIterations),
+        formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   ]);
 
@@ -345,11 +348,11 @@ export async function promptPlanConfig(options: StateObject = {}) {
       name: "autopilotMaxIterations",
       message: "autopilot_max_iterations:",
       default: String(
-        options.autopilotMaxIterations || config.defaultAutopilotMaxIterations,
+        valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
-      validate: validatePositiveInteger,
+      validate: validateNonNegativeInteger,
       filter: (value) =>
-        formatNumber(value, config.defaultAutopilotMaxIterations),
+        formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   ]);
 
@@ -415,11 +418,11 @@ export async function promptPrototypeConfig(options: StateObject = {}) {
       name: "autopilotMaxIterations",
       message: "autopilot_max_iterations:",
       default: String(
-        options.autopilotMaxIterations || config.defaultAutopilotMaxIterations,
+        valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
-      validate: validatePositiveInteger,
+      validate: validateNonNegativeInteger,
       filter: (value) =>
-        formatNumber(value, config.defaultAutopilotMaxIterations),
+        formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   ]);
 
@@ -481,11 +484,11 @@ export async function promptOptimizeConfig(options: StateObject = {}) {
       name: "autopilotMaxIterations",
       message: "autopilot_max_iterations:",
       default: String(
-        options.autopilotMaxIterations || config.defaultAutopilotMaxIterations,
+        valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
-      validate: validatePositiveInteger,
+      validate: validateNonNegativeInteger,
       filter: (value) =>
-        formatNumber(value, config.defaultAutopilotMaxIterations),
+        formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   ]);
 
@@ -606,11 +609,11 @@ export async function promptAutoIterateConfigFromFile(source: SourceChecklist, m
       name: "autopilotMaxIterations",
       message: "autopilot_max_iterations:",
       default: String(
-        options.autopilotMaxIterations || config.defaultAutopilotMaxIterations,
+        valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
-      validate: validatePositiveInteger,
+      validate: validateNonNegativeInteger,
       filter: (value: any) =>
-        formatNumber(value, config.defaultAutopilotMaxIterations),
+        formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   );
 

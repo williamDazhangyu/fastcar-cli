@@ -1,4 +1,5 @@
 import type { BudgetProgressContext } from "./types";
+import { asRecord } from "./valueUtils";
 
 function hasFocusType(focus: unknown): focus is { type?: string } {
   return Boolean(focus && typeof focus === "object" && !Array.isArray(focus));
@@ -12,12 +13,6 @@ export function isOptimizationFocus(focus: unknown, mode: unknown): boolean {
   return mode === "optimize" && hasFocusType(focus) && focus.type === "optimize";
 }
 
-function toRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
 function countValue(value: unknown): number {
   return Number(value || 0);
 }
@@ -26,7 +21,7 @@ export function mergeBudgetProgress(
   budgets: unknown,
   ctx: BudgetProgressContext,
 ): Record<string, unknown> {
-  const current = toRecord(budgets);
+  const current = asRecord(budgets);
   const next: Record<string, unknown> = {
     ...current,
     totalCycles: countValue(current.totalCycles) + 1,

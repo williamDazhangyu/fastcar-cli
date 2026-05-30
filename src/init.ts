@@ -6,6 +6,7 @@ import inquirer from "inquirer";
 import * as utils from "./utils";
 import templates from "./templates.json";
 import { getLocalPath, getTargetNames } from "./skill-targets";
+import { asRecord } from "./valueUtils";
 
 interface OptionComponent {
   name: string;
@@ -95,12 +96,6 @@ function asPackageInfo(value: unknown): PackageInfo {
 
 function readJsonObject(filePath: string): PackageInfo {
   return asPackageInfo(JSON.parse(fs.readFileSync(filePath, "utf8")));
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
 }
 
 // 可选组件配置

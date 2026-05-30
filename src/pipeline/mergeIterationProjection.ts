@@ -3,6 +3,7 @@ import {
   mergeValidationCommandHistory,
   validationHistoryEntries,
 } from "./mergeValidationHistory";
+import { asRecord } from "./valueUtils";
 import type {
   ApplyIterationProjectionInput,
   EffectiveValidationResult,
@@ -12,16 +13,6 @@ import type {
   ValidationStatus,
 } from "./types";
 
-
-/**
- * @param {unknown} value
- * @returns {Record<string, unknown>}
- */
-function toRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
 
 function textValue(text: Record<string, unknown>, key: string): string {
   const value = text[key];
@@ -78,7 +69,7 @@ export function normalizeEffectiveValidation(
 export function applyIterationProjection(input: ApplyIterationProjectionInput): PipelineStateLike {
   const { state, report, effectiveValidation, status, ctx, text } = input;
   const next = { ...state };
-  const currentState = toRecord(next.currentState);
+  const currentState = asRecord(next.currentState);
   next.currentState = {
     ...currentState,
     currentPhase: status === "completed" ? "pipeline_iteration_completed" : "pipeline_iteration_attention",
@@ -91,7 +82,7 @@ export function applyIterationProjection(input: ApplyIterationProjectionInput): 
     lastValidationResult: effectiveValidation.status || "not_run",
   };
 
-  const validation = toRecord(next.validation);
+  const validation = asRecord(next.validation);
   next.validation = {
     ...validation,
     commands: mergeValidationCommandHistory(validation.commands, validationHistoryEntries(effectiveValidation, ctx.iteration)),
@@ -101,7 +92,7 @@ export function applyIterationProjection(input: ApplyIterationProjectionInput): 
   };
 
   next.postChange = {
-    ...toRecord(next.postChange),
+    ...asRecord(next.postChange),
     status: normalizePostChangeStatus(effectiveValidation.status),
     command: effectiveValidation.command || "not_run",
     result: effectiveValidation.exitCode === null || effectiveValidation.exitCode === undefined ? null : String(effectiveValidation.exitCode),
@@ -123,7 +114,7 @@ export function applyIterationProjection(input: ApplyIterationProjectionInput): 
   };
 
   if (effectiveValidation.status === "failed") {
-    const deltaAssessment = toRecord(next.deltaAssessment);
+    const deltaAssessment = asRecord(next.deltaAssessment);
     next.deltaAssessment = {
       ...deltaAssessment,
       status: "regression",
@@ -133,12 +124,12 @@ export function applyIterationProjection(input: ApplyIterationProjectionInput): 
       decision: "retry_new_direction",
     };
     next.iterationPolicy = {
-      ...toRecord(next.iterationPolicy),
+      ...asRecord(next.iterationPolicy),
       lastDecision: "replan",
     };
   }
 
-  const watchdog = toRecord(next.watchdog);
+  const watchdog = asRecord(next.watchdog);
   next.watchdog = {
     ...watchdog,
     enabled: true,

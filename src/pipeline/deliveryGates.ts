@@ -1,4 +1,5 @@
 import { isImplementationMode } from "../auto-iterate/modeRules";
+import { addReason, asRecord, statusOf, stringValue } from "./valueUtils";
 import type {
   DeliveryGateResult,
   PipelineStateLike,
@@ -11,27 +12,6 @@ interface RequirementSummary {
 
 const ALLOWED_VERIFIABILITY = new Set(["verifiable", "partially_verifiable"]);
 const KNOWN_VERIFIABILITY = new Set(["verifiable", "partially_verifiable", "not_verifiable"]);
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
-function stringValue(value: unknown, fallback = "unknown"): string {
-  return typeof value === "string" && value ? value : fallback;
-}
-
-function statusOf(value: unknown): string {
-  const record = asRecord(value);
-  return typeof record.status === "string" ? record.status : "";
-}
-
-function addReason(reasons: string[], reason: string): void {
-  if (!reasons.includes(reason)) {
-    reasons.push(reason);
-  }
-}
 
 function collectRequirementSummary(state: PipelineStateLike | null | undefined): RequirementSummary {
   const rawRequirements = state ? state.requirements : undefined;

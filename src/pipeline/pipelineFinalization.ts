@@ -3,6 +3,7 @@ import type {
   PipelineBudgets,
   PipelineStateLike,
 } from "./types";
+import { asArray, asRecord, nonEmptyString } from "./valueUtils";
 
 interface RequirementClosure {
   open: string[];
@@ -21,32 +22,6 @@ interface FinalizeDeliveryResult {
   changed: boolean;
   ready: boolean;
   skippedReason?: string;
-}
-
-/**
- * @param {unknown} value
- * @returns {Record<string, unknown>}
- */
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
-/**
- * @param {unknown} value
- * @returns {unknown[]}
- */
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-/**
- * @param {unknown} value
- * @returns {string}
- */
-function nonEmptyString(value: unknown): string {
-  return typeof value === "string" && value.trim() ? value.trim() : "";
 }
 
 /**

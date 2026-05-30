@@ -5,6 +5,7 @@ import {
   languageCode,
 } from "./language";
 import { isValidationHistoryEntry } from "./validationCommands";
+import { asRecord } from "./valueUtils";
 import type {
   DeliveryDocsOptions,
   DeliveryDocsResult,
@@ -57,12 +58,6 @@ function stringifyItem(item: unknown): string {
  * @param {import("./types").PipelineStateLike} state
  * @returns {unknown[]}
  */
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
 function traceabilityIterations(state: PipelineStateLike): unknown[] {
   const traceability = state.traceability && typeof state.traceability === "object"
     ? state.traceability as { iterations?: unknown }

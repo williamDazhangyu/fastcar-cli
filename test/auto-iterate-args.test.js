@@ -56,6 +56,18 @@ test("parseArgs preserves pipeline run flags and repeated validate commands", ()
   assert.strictEqual(options.autopilotMaxIterations, 3);
 });
 
+test("parseArgs preserves explicit zero run budget flags", () => {
+  const options = parseArgs([
+    "--run",
+    "--max-steps=0",
+    "--autopilot-max-iterations",
+    "0",
+  ]);
+
+  assert.strictEqual(options.maxSteps, 0);
+  assert.strictEqual(options.autopilotMaxIterations, 0);
+});
+
 let passed = 0;
 for (const item of cases) {
   item.fn();

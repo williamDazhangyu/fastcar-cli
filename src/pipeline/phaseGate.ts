@@ -1,5 +1,6 @@
 ﻿import { ENGINE_PHASES } from "../auto-iterate/stateValidationHelpers";
 import { evaluateDeliveryGates } from "./deliveryGates";
+import { addReason, asRecord } from "./valueUtils";
 import type {
   PhaseGateContext,
   PhaseGateResult,
@@ -14,27 +15,6 @@ type PhaseGateStatus = "pending" | "passed" | "blocked" | "skipped_with_reason";
  */
 function hasStatus(item: unknown): item is { status?: string } {
   return Boolean(item && typeof item === "object" && !Array.isArray(item));
-}
-
-/**
- * @param {unknown} value
- * @returns {Record<string, unknown>}
- */
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
-/**
- * @param {string[]} reasons
- * @param {string} reason
- * @returns {void}
- */
-function addReason(reasons: string[], reason: string): void {
-  if (!reasons.includes(reason)) {
-    reasons.push(reason);
-  }
 }
 
 /**
