@@ -6,7 +6,7 @@
 
 本项目正在从 Agent 自治 auto-iterate 迁移到 CLI 驱动流水线。若当前 `fastcar-cli auto-iterate --run` 可用，并且 `fastcar-cli auto-iterate --check` 发现可用 Worker CLI，Router LLM 必须优先调用 `fastcar-cli auto-iterate --run --json-progress ...`，只负责自然语言路由、读取 NDJSON 进度、转述状态和在 `need_decision` 时询问用户；不要在同一聊天会话里内联执行整套自动迭代协议。
 
-不带 `--run` 的旧路径仍是兼容 fallback：当 Worker CLI 不可用、用户显式要求 `--no-run`，或当前 CLI 不支持目标 flag 时，才回退到生成 `state.json`、`state.md`、`start-prompt.md` 后由 Agent 自治执行。
+不带 `--run` 的流程只作为兼容 fallback：当 Worker CLI 不可用、用户显式要求 `--no-run`，或当前 CLI 不支持目标 flag 时，才回退到生成 `state.json`、`state.md`、`start-prompt.md` 后由 Agent 自治执行；自动路由生成 fallback 启动命令时必须显式追加 `--yes --no-run`。
 
 ### Router / Worker 硬边界
 

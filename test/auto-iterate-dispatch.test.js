@@ -1,4 +1,4 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const {
   buildDispatchCounters,
   buildWorkerPrompt,
@@ -10,7 +10,7 @@ const {
   updateDecisionsMarkdownForDispatch,
   updateStateJsonForDispatch,
   updateStateMarkdownForDispatch,
-} = require("../src/auto-iterate/dispatch");
+} = require("../dist/src/auto-iterate/dispatch");
 
 const cases = [];
 
@@ -67,6 +67,11 @@ test("normalizeDispatchAgent resolves aliases and rejects unknown agents", () =>
   assert.strictEqual(normalizeDispatchAgent("CLAUDE_CODE"), "claude");
   assert.strictEqual(normalizeDispatchAgent("open-hands"), "openhands");
   assert.strictEqual(normalizeDispatchAgent("unknown"), null);
+});
+
+test("normalizeDispatchAgent defaults blank input to codex", () => {
+  assert.strictEqual(normalizeDispatchAgent(undefined), "codex");
+  assert.strictEqual(normalizeDispatchAgent(""), "codex");
 });
 
 test("buildWorkerPrompt preserves worker guardrails and explicit files", () => {

@@ -2,6 +2,20 @@
 
 本文件会被 `fastcar-cli skill install` 同步到目标 Agent 或项目根目录，用于指导 Codex、Claude Code、Cursor、Kimi Code、Gemini CLI 等主流 AI Agent 编写 FastCar 相关代码。
 
+## CLI 驱动迁移公告
+
+本项目正在从 Agent 自治 auto-iterate 迁移到 CLI 驱动流水线。若当前 `fastcar-cli auto-iterate --run` 可用，并且 `fastcar-cli auto-iterate --check` 发现可用 Worker CLI，Router LLM 必须优先调用 `fastcar-cli auto-iterate --run --json-progress ...`，只负责自然语言路由、读取 NDJSON 进度、转述状态和在 `need_decision` 时询问用户；不要在同一聊天会话里内联执行整套自动迭代协议。
+
+不带 `--run` 的流程只作为兼容 fallback：当 Worker CLI 不可用、用户显式要求 `--no-run`，或当前 CLI 不支持目标 flag 时，才回退到生成 `state.json`、`state.md`、`start-prompt.md` 后由 Agent 自治执行；自动路由生成 fallback 启动命令时必须显式追加 `--yes --no-run`。
+
+### Router / Worker 硬边界
+
+- Router LLM 只负责自然语言路由、执行 `--check` / `--run --json-progress`、读取 NDJSON、转述进度和在 `need_decision` 时询问用户。
+- Router LLM 不得要求用户复制 prompt、不得要求用户手动运行 `fastcar-cli auto-iterate --run`、不得在同一聊天会话里自行维护整套 auto-iterate 状态机。
+- Worker Agent 只执行 CLI 生成的单轮 prompt，必须把结果写到指定 `result.json` 后停止。
+- Worker Agent 不得修改 `.agent-state/auto-iterate/**` 中除本轮指定 `result.json` 以外的文件，不得替 CLI 跑最终验证，不得直接询问用户。
+- CLI 是 state merge、预算推进、验证命令、write guard、delivery gate 和 `need_decision` resume 的唯一权威执行者。
+
 ## 适用范围
 
 - FastCar 框架项目开发。

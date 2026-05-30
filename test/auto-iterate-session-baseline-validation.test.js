@@ -1,11 +1,11 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const {
   REQUIRED_STATE_SECTIONS,
   validateSessionStateBaseline,
-} = require("../src/auto-iterate/sessionBaselineValidation");
+} = require("../dist/src/auto-iterate/sessionBaselineValidation");
 
 const cases = [];
 

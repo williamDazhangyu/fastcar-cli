@@ -1,5 +1,5 @@
-const assert = require("assert");
-const { buildPromptContent } = require("../src/auto-iterate/sessionPromptContent");
+﻿const assert = require("assert");
+const { buildPromptContent } = require("../dist/src/auto-iterate/sessionPromptContent");
 
 const cases = [];
 

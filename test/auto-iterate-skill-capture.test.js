@@ -1,4 +1,4 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -7,7 +7,7 @@ const {
   extractSkillCandidates,
   sanitizeSkillCaptureText,
   updateSkillsIndexFile,
-} = require("../src/auto-iterate/skillCapture");
+} = require("../dist/src/auto-iterate/skillCapture");
 
 const cases = [];
 

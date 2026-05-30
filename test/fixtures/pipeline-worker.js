@@ -72,7 +72,12 @@ if (process.env.PIPELINE_WORKER_SYMLINK_FILE) {
   const linkPath = path.resolve(process.env.PIPELINE_WORKER_SYMLINK_FILE);
   const targetPath = path.resolve(process.env.PIPELINE_WORKER_SYMLINK_TARGET || "README.md");
   fs.mkdirSync(path.dirname(linkPath), { recursive: true });
-  fs.symlinkSync(targetPath, linkPath, "file");
+  try {
+    fs.symlinkSync(targetPath, linkPath, "file");
+  } catch (error) {
+    console.error(`fixture_symlink_unavailable: ${error && error.message ? error.message : String(error)}`);
+    process.exit(77);
+  }
 }
 
 if (process.env.PIPELINE_WORKER_ABSOLUTE_WRITE_FILE) {

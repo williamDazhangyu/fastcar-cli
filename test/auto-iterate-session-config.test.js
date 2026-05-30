@@ -1,4 +1,4 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const path = require("path");
 const {
   DEFAULT_DELIVERY_FORMAT,
@@ -12,7 +12,7 @@ const {
   normalizeLines,
   validatePositiveInteger,
   withModeDefaults,
-} = require("../src/auto-iterate/sessionConfig");
+} = require("../dist/src/auto-iterate/sessionConfig");
 
 const cases = [];
 

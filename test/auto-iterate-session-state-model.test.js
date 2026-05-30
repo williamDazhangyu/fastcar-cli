@@ -1,8 +1,8 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const {
   STATE_SCHEMA_VERSION,
   buildStateModel,
-} = require("../src/auto-iterate/sessionStateModel");
+} = require("../dist/src/auto-iterate/sessionStateModel");
 
 const cases = [];
 

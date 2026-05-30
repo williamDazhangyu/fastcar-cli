@@ -65,6 +65,12 @@ interface DispatchState {
   dryRun: boolean | undefined;
 }
 
+interface DispatchCommand {
+  command: string;
+  args: string[];
+  label: string;
+}
+
 export const DISPATCH_AGENT_CONFIGS: Record<string, DispatchAgentConfig> = {
   codex: {
     label: "Codex",
@@ -170,6 +176,66 @@ export function selectVerifyCommand(stateJson: StateObject | null | undefined, f
 
 export function getDispatchDir(sessionPaths: SessionPaths): string {
   return path.join(sessionPaths.sessionDir, "dispatch");
+}
+
+function parseCommandTemplate(commandTemplate: string): string[] {
+  const tokens: string[] = [];
+  let current = "";
+  let quote: "\"" | "'" | null = null;
+
+  for (let index = 0; index < commandTemplate.length; index += 1) {
+    const char = commandTemplate[index];
+    const next = commandTemplate[index + 1];
+    if (quote) {
+      if (char === "\\" && next === quote) {
+        current += next;
+        index += 1;
+        continue;
+      }
+      if (char === quote) {
+        quote = null;
+        continue;
+      }
+      current += char;
+      continue;
+    }
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (current) {
+        tokens.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+
+  if (quote) {
+    throw new Error("dispatch command template has an unterminated quote");
+  }
+  if (current) {
+    tokens.push(current);
+  }
+  return tokens;
+}
+
+function buildDispatchCommand(
+  commandTemplate: string,
+  replacements: Record<string, string>,
+): DispatchCommand {
+  const parts = parseCommandTemplate(commandTemplate)
+    .map((part) => part.replace(/\{prompt\}|\{result\}|\{session\}|\{agentId\}/g, (match) => replacements[match] || match));
+  if (parts.length === 0) {
+    throw new Error("dispatch command template is empty");
+  }
+  return {
+    command: parts[0],
+    args: parts.slice(1),
+    label: parts.join(" "),
+  };
 }
 
 export function getDispatchWorktreeDir(sessionPaths: SessionPaths, agentId: string): string {
@@ -596,16 +662,25 @@ export async function initDispatch(options: DispatchOptions): Promise<void> {
     return;
   }
 
-  const command = String(commandTemplate)
-    .replace(/\{prompt\}/g, promptPath)
-    .replace(/\{result\}/g, resultPath)
-    .replace(/\{session\}/g, session)
-    .replace(/\{agentId\}/g, agentId);
-  const result = spawnSync(command, [], {
+  let dispatchCommand: DispatchCommand;
+  try {
+    dispatchCommand = buildDispatchCommand(String(commandTemplate), {
+      "{prompt}": promptPath,
+      "{result}": resultPath,
+      "{session}": session,
+      "{agentId}": agentId,
+    });
+  } catch (error) {
+    console.log(`❌ dispatch 命令模板无效: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+    return;
+  }
+  const result = spawnSync(dispatchCommand.command, dispatchCommand.args, {
     cwd: worktreeDir || undefined,
     encoding: "utf8",
-    shell: true,
+    shell: false,
     timeout: timeoutSeconds * 1000,
+    windowsHide: true,
   });
   let existingAgentResult = "";
   if (await pathExists(resultPath)) {
@@ -617,7 +692,7 @@ export async function initDispatch(options: DispatchOptions): Promise<void> {
       existingAgentResult ? "agent_result：" : "",
       existingAgentResult || "",
       existingAgentResult ? "command_audit：" : "",
-      `command：${command}`,
+      `command：${dispatchCommand.label}`,
       `exit_code：${result.status}`,
       `signal：${result.signal || "none"}`,
       `error：${result.error ? result.error.message : "none"}`,

@@ -463,9 +463,15 @@ export interface PhaseGateContext {
 }
 
 export interface PhaseGateResult {
-  phase: "contract" | "coding" | "blocked" | "delivery";
+  phase: "requirement" | "contract" | "baseline" | "coding" | "validation" | "cleanup" | "delivery";
   canProceed: boolean;
-  reason: "plan_once" | "open_requirements" | "blocked_requirements" | "requirements_closed";
+  reason:
+    | "plan_once"
+    | "open_requirements"
+    | "blocked_requirements"
+    | "delivery_blocked"
+    | "requirements_closed";
+  blockingReasons: string[];
 }
 
 export interface LoopPolicyOptions {
@@ -580,6 +586,9 @@ export interface PipelineWorkerBaseResult {
   status?: number | null;
   signal?: string | null;
   error?: string | null;
+  errorReason?: string | null;
+  errorPath?: string | null;
+  errorCode?: string | null;
   stdout?: string;
   stderr?: string;
   timedOut?: boolean;
@@ -752,6 +761,7 @@ export interface RouterRunOptions {
   goal?: string;
   validateCmd?: string;
   scope?: string;
+  noRun?: boolean;
 }
 
 export interface RouterPlanOptions extends RouterRunOptions {

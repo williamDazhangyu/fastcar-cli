@@ -1,4 +1,4 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -9,7 +9,7 @@ const {
   makeUniqueSessionName,
   slugifySessionName,
   toRelative,
-} = require("../src/auto-iterate/sessionPaths");
+} = require("../dist/src/auto-iterate/sessionPaths");
 
 const cases = [];
 

@@ -36,5 +36,5 @@
 
 ## 兼容说明
 
-- 旧文件 `反馈.md` 和 `优化.md` 保留为历史参考，不是当前主索引。
-- 旧路径仍可作为兼容入口，但新内容以 `index.md`、`contracts/` 和 `compatibility/` 为准。
+- 旧版反馈与优化说明已收敛到 `references/`、`compatibility/` 和 `changelog.md`，不再依赖根级历史文件。
+- 兼容 fallback 入口仍保留，但新内容以 `index.md`、`contracts/` 和 `compatibility/` 为准。

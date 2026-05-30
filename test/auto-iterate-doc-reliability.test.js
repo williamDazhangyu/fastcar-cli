@@ -1,4 +1,4 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -188,7 +188,7 @@ function markSessionReadyForSkillCapture(stateJson) {
       summary: "FastCar Koa Controller 必须避免敏感信息沉淀",
       type: "验证",
       status: "passed",
-      relatedFiles: ["src/auto-iterate.js"],
+      relatedFiles: ["src/auto-iterate.ts"],
       evidence: "使用最小 fixture 验证 capture-skills 会脱敏 token=password 等敏感字段",
       blockedReason: "无",
       nextStep: "无",
@@ -226,7 +226,7 @@ function markSessionReadyForSkillCapture(stateJson) {
   stateJson.styleConsolidation.localSkillsReviewed = [".agents/skills/index.md"];
   stateJson.styleConsolidation.globalSkillsReviewed = ["typescript-coding-style"];
   stateJson.styleConsolidation.appliedRules = ["按本地和全局 skills 整理本次修改范围内代码"];
-  stateJson.styleConsolidation.changedFiles = ["src/auto-iterate.js"];
+  stateJson.styleConsolidation.changedFiles = ["src/auto-iterate.ts"];
   stateJson.styleConsolidation.summary = "已按技巧风格整理测试 fixture";
   stateJson.styleConsolidation.verificationSummary = "真实验证通过: npm test";
   stateJson.styleConsolidation.lastRunSummary = "已执行技巧风格整理";
@@ -1002,6 +1002,7 @@ test("自然语言路由文档覆盖 CLI 支持的模式、预算和 session 规
   assertIncludes(routing, "state 校验：validate-state", "natural-language-routing.md");
   assertIncludes(routing, "检查 login-bugfix 的 sub-agent 协议一致性", "natural-language-routing.md");
   assertIncludes(routing, "`--validate-state` 不追加 `--yes`", "natural-language-routing.md");
+  assertIncludes(routing, "`--yes --no-run`", "natural-language-routing.md");
   assertIncludes(routing, "`--validate-state` 复用已有 session 或 state 文件，不创建新 session", "natural-language-routing.md");
   assertIncludes(routing, "检查当前自动迭代 state 是否一致", "natural-language-routing.md");
   assertIncludes(routing, "校验 login-bugfix 整个自动迭代 session 是否一致", "natural-language-routing.md");
@@ -1038,6 +1039,11 @@ test("自然语言路由文档覆盖 CLI 支持的模式、预算和 session 规
   assertIncludes(routing, "兼容旧口语“让 Codex goal 处理”", "natural-language-routing.md");
   assertIncludes(routing, "必须先判断是当前会话 goal 还是 worker dispatch", "natural-language-routing.md");
   assertIncludes(routing, "真实执行句式：确认 prompt 后用本地 Codex/Kimi 执行", "natural-language-routing.md");
+  assertIncludes(routing, "Few-shot 路由优化", "natural-language-routing.md");
+  assertIncludes(routing, "few-shot 样本做贴近表达的类比", "natural-language-routing.md");
+  assertIncludes(routing, "只遵从协议规范执行", "natural-language-routing.md");
+  assertIncludes(routing, "fastcar-cli auto-iterate --examples protocol-only", "natural-language-routing.md");
+  assertIncludes(routing, "样本冲突时按“意图判断顺序”裁决", "natural-language-routing.md");
 });
 
 test("examples 命令输出 auto-iterate goal 父任务启动示例", () => {
@@ -1106,12 +1112,26 @@ test("skills README 同步 auto-iterate goal 边界和 session 示例", () => {
   assertIncludes(skillsReadme, "`codex features list`", "skills/README.md");
   assertIncludes(skillsReadme, "`goals stable true`", "skills/README.md");
   assertIncludes(skillsReadme, "不是 `codex goal` 子命令", "skills/README.md");
-  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --autopilot-max-iterations 5 --yes', "skills/README.md");
-  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --plan-only --goal "订单模块重构" --session order-plan --yes', "skills/README.md");
-  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --plan-only --goal "设计支付模块" --session payment-plan', "skills/README.md");
-  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --optimize --goal "优化查询性能" --session query-optimize', "skills/README.md");
-  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --prototype --goal "验证订单状态机" --session order-prototype', "skills/README.md");
+  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --check --json-progress', "skills/README.md");
+  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --run --autopilot --quick --goal "修复登录失败" --session login-bugfix --autopilot-max-iterations 5 --json-progress', "skills/README.md");
+  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --run --once --plan-only --goal "订单模块重构" --session order-plan --json-progress', "skills/README.md");
+  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --plan-only --goal "设计支付模块" --session payment-plan --yes --no-run', "skills/README.md");
+  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --run --autopilot --optimize --goal "优化查询性能" --session query-optimize --json-progress', "skills/README.md");
+  assertIncludes(skillsReadme, 'fastcar-cli auto-iterate --run --autopilot --prototype --goal "验证订单状态机" --session order-prototype --json-progress', "skills/README.md");
+  assertNotIncludes(skillsReadme, 'fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --autopilot-max-iterations 5 --yes', "skills/README.md");
   assertNotIncludes(skillsReadme, '--mode plan --goal "设计支付模块"', "skills/README.md");
+});
+
+test("runtime bug analysis is marked as historical status matrix, not current P0 report", () => {
+  const analysis = readRepoFile("runtime-bugs-and-timeout-analysis.md");
+
+  assertIncludes(analysis, "历史报告只能作为回归检查清单", "runtime-bugs-and-timeout-analysis.md");
+  assertIncludes(analysis, "当前状态", "runtime-bugs-and-timeout-analysis.md");
+  assertIncludes(analysis, "`--isolate` 新建 untracked 文件永久丢失 | 已修复", "runtime-bugs-and-timeout-analysis.md");
+  assertIncludes(analysis, "Kimi Adapter 同步阻塞心跳 | 已修复", "runtime-bugs-and-timeout-analysis.md");
+  assertIncludes(analysis, "没有这些证据时", "runtime-bugs-and-timeout-analysis.md");
+  assertNotIncludes(analysis, "运行时 Bug 汇总（按严重程度排序）", "runtime-bugs-and-timeout-analysis.md");
+  assertNotIncludes(analysis, "现有 125 个测试全部通过，以下问题均未被现有测试覆盖", "runtime-bugs-and-timeout-analysis.md");
 });
 
 test("skill 文档不再引用 legacy 状态文件并保留无 CLI fallback", () => {
@@ -1800,6 +1820,70 @@ test("dispatch 非 dry-run 保留 agent 写入的 result 并追加命令审计",
   assertIncludes(secondDispatch.stdout, "存在未合并的 active_sub_agents", "dispatch stdout");
 });
 
+test("dispatch 命令模板占位符不会经 shell 执行注入片段", () => {
+  const projectDir = makeGitProject();
+  const injectedPath = path.join(projectDir, "dispatch-injected.txt");
+  runAutoIterate(projectDir, [
+    "--quick",
+    "--goal",
+    "验证 dispatch shell 注入防护",
+    "--session",
+    "dispatch-shell-guard",
+    "--yes",
+  ]);
+
+  const workerScript = [
+    "const fs=require('fs');",
+    "fs.writeFileSync(process.argv[2], 'agent says completed\\n', 'utf8');",
+  ].join("");
+  const injectedScript = `require('fs').writeFileSync(${JSON.stringify(injectedPath)}, 'injected', 'utf8')`;
+  const command = [
+    JSON.stringify(process.execPath),
+    "-e",
+    JSON.stringify(workerScript),
+    "placeholder",
+    "{result}",
+    "&&",
+    JSON.stringify(process.execPath),
+    "-e",
+    JSON.stringify(injectedScript),
+  ].join(" ");
+  const output = spawnSync(
+    process.execPath,
+    [
+      cliPath,
+      "auto-iterate",
+      "--dispatch",
+      "dispatch-shell-guard",
+      "--agent",
+      "codex",
+      "--task",
+      "处理 REQ-001",
+      "--files",
+      "README.md",
+      "--timeout",
+      "20",
+    ],
+    {
+      cwd: projectDir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CI: "1",
+        FORCE_COLOR: "0",
+        AUTO_ITERATE_CODEX_CMD: command,
+      },
+    },
+  );
+
+  assert.strictEqual(
+    output.status,
+    0,
+    `dispatch should pass\nSTDOUT:\n${output.stdout}\nSTDERR:\n${output.stderr}`,
+  );
+  assert.ok(!fs.existsSync(injectedPath), "shell injection tail command must not run");
+});
+
 test("validate-state 校验完整 auto-iterate session 基线一致性", () => {
   const projectDir = makeProject();
 
@@ -1961,7 +2045,7 @@ test("validate-state strict 阻断未通过 post-agent gate 的 ready delivery",
       summary: "已完成需求",
       type: "验证",
       status: "passed",
-      relatedFiles: ["src/auto-iterate.js"],
+      relatedFiles: ["src/auto-iterate.ts"],
       evidence: "测试通过",
       blockedReason: "无",
       nextStep: "无",
@@ -2245,7 +2329,7 @@ test("validate-state strict 阻断实现模式未做技巧风格整理的 ready 
   stateJson.styleConsolidation.localSkillsReviewed = [".agents/skills/index.md"];
   stateJson.styleConsolidation.globalSkillsReviewed = ["typescript-coding-style"];
   stateJson.styleConsolidation.appliedRules = ["按本地和全局 skills 整理命名、import 和状态字段"];
-  stateJson.styleConsolidation.changedFiles = ["src/auto-iterate.js"];
+  stateJson.styleConsolidation.changedFiles = ["src/auto-iterate.ts"];
   stateJson.styleConsolidation.summary = "已完成技巧风格整理";
   stateJson.styleConsolidation.verificationSummary = "真实验证通过: npm test";
   stateJson.styleConsolidation.lastRunSummary = "整理后验证通过";
@@ -2278,7 +2362,7 @@ test("validate-state strict 阻断证据不完整的 ready delivery", () => {
       summary: "已完成需求",
       type: "验证",
       status: "passed",
-      relatedFiles: ["src/auto-iterate.js"],
+      relatedFiles: ["src/auto-iterate.ts"],
       evidence: "测试通过",
       blockedReason: "无",
       nextStep: "无",
@@ -2359,7 +2443,7 @@ test("validate-state strict 执行 Engine v1 一票否决门禁", () => {
 
   expectStrictFailure((candidate) => {
     candidate.diffBudget.outOfScopeFiles = ["outside.txt"];
-    candidate.diffBudget.highRiskFiles = ["src/auto-iterate.js"];
+    candidate.diffBudget.highRiskFiles = ["src/auto-iterate.ts"];
     candidate.iterationPolicy.lastDecision = "continue";
   }, "存在 outOfScopeFiles/highRiskFiles 时 iterationPolicy.lastDecision 不得为 continue");
 
@@ -2665,7 +2749,7 @@ test("finalize 自动执行技能沉淀并通过 strict state 门禁", () => {
       summary: "FastCar finalize 应在迭代结束后自动沉淀技能",
       type: "验证",
       status: "passed",
-      relatedFiles: ["src/auto-iterate.js"],
+      relatedFiles: ["src/auto-iterate.ts"],
       evidence: "finalize 先执行 capture-skills --yes，再执行 validate-state --strict-state",
       blockedReason: "无",
       nextStep: "无",
@@ -2805,7 +2889,7 @@ test("capture-skills 脱敏敏感信息并过滤低价值日志", () => {
       summary: "FastCar Controller capture 不得泄露凭据",
       type: "验证",
       status: "passed",
-      relatedFiles: ["src/auto-iterate.js"],
+      relatedFiles: ["src/auto-iterate.ts"],
       evidence: "authorization: Bearer abcdefghijklmnopqrstuvwxyz123456 password=plain-token-value token=abcdefghijklmnopqrstuvwxyz1234567890 customer@example.com",
       blockedReason: "无",
       nextStep: "无",
@@ -2881,7 +2965,7 @@ test("capture-skills 向无尾空行的现有 index 表追加入口", () => {
       summary: "TypeScript capture-skills 需要维护索引入口",
       type: "验证",
       status: "passed",
-      relatedFiles: ["src/auto-iterate.js"],
+      relatedFiles: ["src/auto-iterate.ts"],
       evidence: "无尾空行 index 表格应追加新捕获技能入口",
       blockedReason: "无",
       nextStep: "无",
@@ -2934,7 +3018,7 @@ test("英文 session 的 capture-skills 生成英文技能文档和索引", () =
       summary: "TypeScript validation should keep enum status values stable",
       type: "validation",
       status: "passed",
-      relatedFiles: ["src/pipeline/language.js"],
+      relatedFiles: ["src/pipeline/language.ts"],
       evidence: "Added tests proving human-readable text follows English while enum status stays unchanged",
       blockedReason: "none",
       nextStep: "none",
@@ -2965,8 +3049,8 @@ test("英文 session 的 capture-skills 生成英文技能文档和索引", () =
 
 test("CLI 驱动设计文档与当前 pipeline 硬接口保持一致", () => {
   const design = readRepoFile("docs/auto-iterate-cli-driven.md");
-  const runPipeline = readRepoFile("src/pipeline/runPipeline.js");
-  const iterationPaths = readRepoFile("src/pipeline/iterationPaths.js");
+  const runPipeline = readRepoFile("src/pipeline/runPipeline.ts");
+  const iterationPaths = readRepoFile("src/pipeline/iterationPaths.ts");
 
   assertIncludes(design, "ensurePipelineSession", "auto-iterate-cli-driven.md");
   assertIncludes(design, "buildIterationPaths", "auto-iterate-cli-driven.md");

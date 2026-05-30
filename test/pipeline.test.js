@@ -1,18 +1,19 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { isFocusAllowedForMode, pickNextFocus } = require("../src/pipeline/pickFocus");
-const { shouldStop, deliveryReady } = require("../src/pipeline/shouldStop");
-const { canFinalizeDelivery, finalizeDeliveryState } = require("../src/pipeline/pipelineFinalization");
-const { mergeIterationIntoState } = require("../src/pipeline/mergeState");
-const { normalizeRelativePath, parseAndValidateIterationResult } = require("../src/pipeline/resultSchema");
-const { buildIterationPrompt } = require("../src/pipeline/iterationPrompt");
-const { buildDocs } = require("../src/pipeline/deliveryDocs");
-const { runPipeline, runValidationCommands, updateNoProgressState, needsValidationReconcile, buildDeliveryGate, buildPipelineSnapshot, parseValidationCommands, computeEffectiveTimeouts, normalizeActualFilesChanged, getDirectorySignature } = require("../src/pipeline/runPipeline");
-const { resolveLoopPolicy } = require("../src/pipeline/loopPolicy");
-const { evaluateWriteGuard, isInsideScope } = require("../src/pipeline/writeGuard");
+const { isFocusAllowedForMode, pickNextFocus } = require("../dist/src/pipeline/pickFocus");
+const { shouldStop, deliveryReady } = require("../dist/src/pipeline/shouldStop");
+const { canFinalizeDelivery, finalizeDeliveryState } = require("../dist/src/pipeline/pipelineFinalization");
+const { applyPhaseGateToState, checkPhaseGate } = require("../dist/src/pipeline/phaseGate");
+const { mergeIterationIntoState } = require("../dist/src/pipeline/mergeState");
+const { normalizeRelativePath, parseAndValidateIterationResult } = require("../dist/src/pipeline/resultSchema");
+const { buildIterationPrompt } = require("../dist/src/pipeline/iterationPrompt");
+const { buildDocs } = require("../dist/src/pipeline/deliveryDocs");
+const { runPipeline, runValidationCommands, updateNoProgressState, needsValidationReconcile, buildDeliveryGate, buildPipelineSnapshot, parseValidationCommands, computeEffectiveTimeouts, normalizeActualFilesChanged, getDirectorySignature } = require("../dist/src/pipeline/runPipeline");
+const { resolveLoopPolicy } = require("../dist/src/pipeline/loopPolicy");
+const { evaluateWriteGuard, isInsideScope } = require("../dist/src/pipeline/writeGuard");
 
 const repoRoot = path.resolve(__dirname, "..");
 const cliPath = path.join(repoRoot, "bin", "cli.js");
@@ -428,8 +429,9 @@ test("delivery gate 阻止仅因 requirements passed 就提前完成", () => {
     ...ready,
     postAgentValidationGate: undefined,
   };
-  assert.strictEqual(shouldStop(gateMissing, null, {}, "quick").stop, false);
-  assert.ok(buildDeliveryGate(gateMissing).blocking_reasons.includes("post_agent_gate_not_passed"));
+  assert.strictEqual(shouldStop(gateMissing, null, {}, "quick").reason, "delivery_ready");
+  assert.strictEqual(buildDeliveryGate(gateMissing).ready, true);
+  assert.ok(!buildDeliveryGate(gateMissing).blocking_reasons.includes("post_agent_gate_not_passed"));
 
   const gateWrongAction = {
     ...ready,
@@ -481,6 +483,24 @@ test("delivery gate 阻止仅因 requirements passed 就提前完成", () => {
   assert.deepStrictEqual(blockedGate.blocked_requirements, ["REQ-BLOCKED"]);
   assert.ok(blockedGate.blocking_reasons.includes("blocked_requirements"));
 
+  const mixedRequirements = {
+    ...ready,
+    implementationContract: { status: "approved" },
+    baseline: { status: "passed", allowsCoding: true },
+    requirements: [
+      { id: "REQ-BLOCKED", summary: "needs decision", status: "blocked" },
+      { id: "REQ-OPEN", summary: "still open", status: "implemented" },
+    ],
+  };
+  const mixedGate = buildDeliveryGate(mixedRequirements);
+  assert.strictEqual(mixedGate.ready, false);
+  assert.deepStrictEqual(mixedGate.blocked_requirements, ["REQ-BLOCKED"]);
+  assert.deepStrictEqual(mixedGate.open_requirements, ["REQ-OPEN"]);
+  assert.ok(mixedGate.blocking_reasons.includes("blocked_requirements"));
+  assert.ok(mixedGate.blocking_reasons.includes("open_requirements"));
+  assert.strictEqual(checkPhaseGate(mixedRequirements, { mode: "strict" }).reason, "blocked_requirements");
+  assert.strictEqual(shouldStop(mixedRequirements, null, {}, "strict").reason, "requirements_blocked");
+
   const incompletePostAgentGates = {
     cleanupMissing: [{ ...ready, cleanup: { status: "pending" } }, "cleanup_not_completed"],
     styleMissing: [{ ...ready, styleConsolidation: { status: "pending" } }, "style_consolidation_pending"],
@@ -492,6 +512,18 @@ test("delivery gate 阻止仅因 requirements passed 就提前完成", () => {
     assert.strictEqual(shouldStop(state, null, {}, "quick").stop, false);
     assert.ok(buildDeliveryGate(state).blocking_reasons.includes(reason));
   }
+
+  const optionalGatesMissing = {
+    ...ready,
+    postAgentValidationGate: undefined,
+    cleanup: undefined,
+    styleConsolidation: undefined,
+    contextResetReview: undefined,
+    skillCapture: undefined,
+  };
+  assert.strictEqual(deliveryReady(optionalGatesMissing), true);
+  assert.strictEqual(shouldStop(optionalGatesMissing, null, {}, "quick").reason, "delivery_ready");
+  assert.deepStrictEqual(buildDeliveryGate(optionalGatesMissing).blocking_reasons, []);
 });
 
 test("finalizeDeliveryState 不伪造未完成的交付门禁", () => {
@@ -726,6 +758,146 @@ test("mergeState 白名单合并并禁止 worker 覆盖预算", () => {
   assert.strictEqual(merged.state.traceability.iterations[0].iteration, 1);
   assert.strictEqual(merged.state.traceability.iterations[0].resultPath, undefined);
   assert.ok(merged.issues.some((item) => item.includes("budgets")));
+});
+
+test("phaseGate 输出协议级交付阻断原因", () => {
+  const state = {
+    mode: { mode: "quick" },
+    implementationContract: { status: "approved" },
+    baseline: { status: "passed", allowsCoding: true },
+    requirements: [{ id: "REQ-1", status: "passed" }],
+    budgets: { minimumValidationHardeningIterations: 1, validationHardeningIterationsUsed: 0 },
+    watchdog: { validationHardeningStatus: "pending", deliveryVerifiability: "unknown" },
+    validation: { finalVerifiability: "unknown" },
+    postChange: { status: "not_run" },
+    cleanup: { status: "pending" },
+    styleConsolidation: { status: "pending" },
+    contextResetReview: { status: "pending" },
+    skillCapture: { status: "pending" },
+    deliveryEvidence: { status: "pending" },
+    postAgentValidationGate: { enabled: true, lastResult: "not_run", nextAction: "stop" },
+  };
+  const gate = checkPhaseGate(state, { mode: "quick" });
+
+  assert.strictEqual(gate.phase, "validation");
+  assert.strictEqual(gate.canProceed, false);
+  assert.strictEqual(gate.reason, "delivery_blocked");
+  for (const reason of [
+    "validation_hardening_not_passed",
+    "delivery_not_verifiable",
+    "post_change_not_passed",
+    "cleanup_not_completed",
+    "style_consolidation_pending",
+    "context_reset_review_not_passed",
+    "skill_capture_pending",
+    "delivery_evidence_not_ready",
+    "post_agent_gate_not_passed",
+  ]) {
+    assert.ok(gate.blockingReasons.includes(reason), reason);
+  }
+});
+
+test("phaseGate 同步更新结构化 gates 状态", () => {
+  const state = {
+    phaseGate: {
+      currentPhase: "requirement",
+      canProceed: false,
+      blockingReasons: ["old"],
+      gates: [
+        { phase: "requirement", entryCriteria: ["r"], exitCriteria: ["r"], blockingRules: ["r"], status: "pending" },
+        { phase: "contract", entryCriteria: ["c"], exitCriteria: ["c"], blockingRules: ["c"], status: "blocked" },
+        { phase: "baseline", entryCriteria: [], exitCriteria: [], blockingRules: [], status: "blocked" },
+        { phase: "coding", entryCriteria: [], exitCriteria: [], blockingRules: [], status: "blocked" },
+        { phase: "validation", entryCriteria: [], exitCriteria: [], blockingRules: [], status: "blocked" },
+        { phase: "cleanup", entryCriteria: [], exitCriteria: [], blockingRules: [], status: "blocked" },
+        { phase: "delivery", entryCriteria: [], exitCriteria: [], blockingRules: [], status: "blocked" },
+      ],
+    },
+  };
+  const updated = applyPhaseGateToState(state, {
+    phase: "validation",
+    canProceed: false,
+    reason: "delivery_blocked",
+    blockingReasons: ["cleanup_not_completed"],
+  });
+  const byPhase = new Map(updated.phaseGate.gates.map((gate) => [gate.phase, gate.status]));
+
+  assert.strictEqual(updated.phaseGate.currentPhase, "validation");
+  assert.strictEqual(updated.phaseGate.canProceed, false);
+  assert.deepStrictEqual(updated.phaseGate.blockingReasons, ["cleanup_not_completed"]);
+  assert.strictEqual(byPhase.get("requirement"), "passed");
+  assert.strictEqual(byPhase.get("contract"), "passed");
+  assert.strictEqual(byPhase.get("baseline"), "passed");
+  assert.strictEqual(byPhase.get("coding"), "passed");
+  assert.strictEqual(byPhase.get("validation"), "pending");
+  assert.strictEqual(byPhase.get("cleanup"), "blocked");
+  assert.strictEqual(byPhase.get("delivery"), "blocked");
+  assert.deepStrictEqual(updated.phaseGate.gates[1].entryCriteria, ["c"]);
+});
+
+test("phaseGate 全部通过时清空 blockingReasons 并标记 gates passed", () => {
+  const updated = applyPhaseGateToState({ phaseGate: { gates: [] } }, {
+    phase: "delivery",
+    canProceed: true,
+    reason: "requirements_closed",
+    blockingReasons: [],
+  });
+
+  assert.strictEqual(updated.phaseGate.currentPhase, "delivery");
+  assert.strictEqual(updated.phaseGate.canProceed, true);
+  assert.deepStrictEqual(updated.phaseGate.blockingReasons, []);
+  assert.ok(updated.phaseGate.gates.every((gate) => gate.status === "passed"));
+});
+
+test("phaseGate 阻断未批准 contract 或未建立 baseline 的编码推进", () => {
+  const gate = checkPhaseGate({
+    implementationContract: { status: "pending" },
+    baseline: { status: "pending", allowsCoding: false },
+    requirements: [{ id: "REQ-1", status: "pending" }],
+  }, { mode: "quick" });
+
+  assert.strictEqual(gate.phase, "contract");
+  assert.strictEqual(gate.canProceed, false);
+  assert.deepStrictEqual(gate.blockingReasons, [
+    "implementation_contract_not_approved",
+    "baseline_not_ready",
+  ]);
+});
+
+test("phaseGate 在需求关闭后仍阻断缺失 contract 或 baseline", () => {
+  const missingContract = checkPhaseGate({
+    implementationContract: { status: "pending" },
+    baseline: { status: "passed", allowsCoding: true },
+    requirements: [{ id: "REQ-1", status: "passed" }],
+  }, { mode: "quick" });
+  const missingBaseline = checkPhaseGate({
+    implementationContract: { status: "approved" },
+    baseline: { status: "pending", allowsCoding: false },
+    requirements: [{ id: "REQ-1", status: "passed" }],
+  }, { mode: "quick" });
+
+  assert.strictEqual(missingContract.phase, "contract");
+  assert.strictEqual(missingContract.canProceed, false);
+  assert.ok(missingContract.blockingReasons.includes("implementation_contract_not_approved"));
+  assert.strictEqual(missingBaseline.phase, "baseline");
+  assert.strictEqual(missingBaseline.canProceed, false);
+  assert.ok(missingBaseline.blockingReasons.includes("baseline_not_ready"));
+});
+
+test("phaseGate 将 blocked requirements 映射为合法 delivery 阶段阻断", () => {
+  const gate = checkPhaseGate({
+    implementationContract: { status: "approved" },
+    baseline: { status: "passed", allowsCoding: true },
+    requirements: [{ id: "REQ-1", status: "blocked" }],
+  }, { mode: "quick" });
+  const updated = applyPhaseGateToState({ phaseGate: { gates: [] } }, gate);
+
+  assert.strictEqual(gate.phase, "delivery");
+  assert.strictEqual(gate.canProceed, false);
+  assert.strictEqual(gate.reason, "blocked_requirements");
+  assert.deepStrictEqual(gate.blockingReasons, ["blocked_requirements"]);
+  assert.strictEqual(updated.phaseGate.currentPhase, "delivery");
+  assert.strictEqual(updated.phaseGate.gates.find((item) => item.phase === "delivery").status, "pending");
 });
 
 test("mergeState 保留验证历史对象并区分实现预算", () => {
@@ -1518,6 +1690,19 @@ test("runValidationCommands 支持自定义超时", async () => {
   assert.strictEqual(result.exitCode, 1);
 });
 
+test("runValidationCommands 异步启动验证命令，不阻塞事件循环", async () => {
+  const projectDir = makeProject();
+  const startedAt = Date.now();
+  const pending = runValidationCommands([
+    `"${process.execPath}" -e "setTimeout(()=>process.exit(0), 300)"`,
+  ], projectDir, projectDir, { code: "zh" }, { timeoutMs: 1000 });
+  const returnedAfterMs = Date.now() - startedAt;
+
+  assert.ok(returnedAfterMs < 150, `runValidationCommands returned after ${returnedAfterMs}ms`);
+  const result = await pending;
+  assert.strictEqual(result.status, "passed");
+});
+
 test("runValidationCommands 超时无输出时返回可诊断摘要", async () => {
   const projectDir = makeProject();
   const result = await runValidationCommands([
@@ -2014,6 +2199,105 @@ test("--run --autopilot 不会自动伪造未完成的交付门禁", () => {
   assert.ok(validation.stdout.includes("交付前不得声称完整完成"));
 });
 
+test("runPipeline 在启动即 delivery_ready 时会先执行 finalize 收口", async () => {
+  const projectDir = makeProject();
+  const stateDir = path.join(projectDir, ".agent-state", "auto-iterate", "startup-delivery-ready");
+  fs.mkdirSync(stateDir, { recursive: true });
+  const statePath = path.join(stateDir, "state.json");
+  fs.writeFileSync(statePath, JSON.stringify({
+    mode: { mode: "quick", runtimeAutopilot: true, loopShape: "autopilot" },
+    session: { session: "startup-delivery-ready" },
+    budgets: { totalCycles: 0, remainingImplementationIterations: 1, remainingValidationHardeningIterations: 1, minimumValidationHardeningIterations: 1, validationHardeningIterationsUsed: 1 },
+    currentState: {},
+    watchdog: {
+      requiredAction: "continue",
+      deliveryVerifiability: "verifiable",
+      validationHardeningStatus: "passed",
+      validationHardeningDimensionsDone: ["boundary", "negative", "regression"],
+    },
+    validation: { finalVerifiability: "verifiable", commands: [] },
+    requirements: [{ id: "REQ-BOOTSTRAP", summary: "done", status: "passed" }],
+    deliveryEvidence: {
+      status: "ready",
+      goal: "startup delivery ready",
+      changes: "ready",
+      validationSummary: "passed",
+      baselineComparison: "baseline",
+      cleanupSummary: "cleanup",
+      risks: "有限风险：外部验证不在本轮范围内",
+      unfinishedItems: "无",
+      userConfirmation: "无需额外确认",
+    },
+    postChange: { status: "passed", regressionDetected: false, command: "validate", reason: "ok" },
+    postAgentValidationGate: { enabled: true, lastResult: "passed", nextAction: "deliver" },
+    cleanup: { status: "completed" },
+    styleConsolidation: { status: "completed" },
+    contextResetReview: { status: "passed" },
+    skillCapture: { status: "captured" },
+  }, null, 2), "utf8");
+  fs.writeFileSync(path.join(stateDir, "state.md"), "# state\n", "utf8");
+  const events = [];
+  const originalWrite = process.stdout.write;
+  process.stdout.write = (chunk) => {
+    const text = String(chunk).trim();
+    if (text) {
+      events.push(JSON.parse(text));
+    }
+    return true;
+  };
+  try {
+    const { runPipeline } = require("../dist/src/pipeline/runPipeline");
+    const result = await runPipeline({
+      projectRoot: projectDir,
+      session: "startup-delivery-ready",
+      stateJsonPath: statePath,
+      mode: "quick",
+      once: false,
+      jsonProgress: true,
+      autopilotRun: true,
+      adapter: {
+        id: "inline",
+        async run() {
+          throw new Error("worker should not run when delivery is already ready");
+        },
+      },
+      validateStateModel() {
+        return [];
+      },
+    });
+
+    assert.strictEqual(result.reason, "delivery_ready");
+    assert.ok(events.some((event) => event.event === "delivery_gate" && event.reason === "delivery_ready"));
+    assert.ok(events.some((event) => event.event === "pipeline_stopped" && event.reason === "delivery_ready"));
+    const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+    assert.strictEqual(state.phaseGate.currentPhase, "delivery");
+    assert.strictEqual(state.phaseGate.canProceed, true);
+    assert.deepStrictEqual(state.phaseGate.blockingReasons, []);
+    assert.strictEqual(state.currentState.currentPhase, "delivery_ready");
+  } finally {
+    process.stdout.write = originalWrite;
+    process.exitCode = 0;
+  }
+});
+
+test("resolveLoopPolicy 保留显式 0 上限", () => {
+  const { resolveLoopPolicy } = require("../dist/src/pipeline/loopPolicy");
+  const disabledAutopilot = resolveLoopPolicy({
+    mode: "quick",
+    autopilotRun: true,
+    autopilotMaxIterations: 0,
+    maxSteps: 0,
+  }, {});
+  assert.strictEqual(disabledAutopilot.maxSteps, 0);
+
+  const explicitMaxSteps = resolveLoopPolicy({
+    mode: "strict",
+    once: false,
+    maxSteps: 0,
+  }, {});
+  assert.strictEqual(explicitMaxSteps.maxSteps, 0);
+});
+
 test("deliveryDocs 根据 state 生成四类可追溯文档内容", () => {
   const docs = buildDocs({
     language: { code: "zh", source: "test", confidence: "high" },
@@ -2418,7 +2702,7 @@ test("Worker 集成矩阵：adapter 内部异常转为 worker_failed", async () 
     phaseGate: { currentPhase: "coding" },
     validation: { commands: [] },
   }), "utf8");
-  const { runPipeline } = require("../src/pipeline/runPipeline");
+  const { runPipeline } = require("../dist/src/pipeline/runPipeline");
   const events = [];
   const originalWrite = process.stdout.write;
   process.stdout.write = (chunk) => {
@@ -2445,6 +2729,52 @@ test("Worker 集成矩阵：adapter 内部异常转为 worker_failed", async () 
     process.exitCode = 0;
   }
   assert.ok(events.some((event) => event.event === "error" && event.reason === "worker_failed" && event.detail === "adapter exploded"));
+});
+
+test("Worker 集成矩阵：adapter 缺失 prompt 文件输出结构化 prompt_file_missing", async () => {
+  const projectDir = makeProject();
+  const statePath = path.join(projectDir, ".agent-state", "auto-iterate", "adapter-missing-prompt", "state.json");
+  fs.mkdirSync(path.dirname(statePath), { recursive: true });
+  fs.writeFileSync(statePath, JSON.stringify({
+    mode: { mode: "quick" },
+    budgets: { totalCycles: 0, remainingImplementationIterations: 1 },
+    requirements: [{ id: "REQ-BOOTSTRAP", summary: "missing prompt", status: "pending" }],
+    watchdog: { requiredAction: "continue" },
+    phaseGate: { currentPhase: "coding" },
+    validation: { commands: [] },
+  }), "utf8");
+  const { runPipeline } = require("../dist/src/pipeline/runPipeline");
+  const { runCodexAdapter } = require("../dist/src/adapters/codex");
+  const events = [];
+  const originalWrite = process.stdout.write;
+  process.stdout.write = (chunk) => {
+    events.push(JSON.parse(String(chunk).trim()));
+    return true;
+  };
+  try {
+    const result = await runPipeline({
+      projectRoot: projectDir,
+      session: "adapter-missing-prompt",
+      stateJsonPath: statePath,
+      once: true,
+      jsonProgress: true,
+      adapter: {
+        id: "codex",
+        run(options) {
+          fs.rmSync(options.promptPath, { force: true });
+          return runCodexAdapter(options);
+        },
+      },
+    });
+    assert.strictEqual(result.reason, "worker_failed");
+  } finally {
+    process.stdout.write = originalWrite;
+    process.exitCode = 0;
+  }
+  assert.ok(events.some((event) => event.event === "error"
+    && event.reason === "prompt_file_missing"
+    && String(event.detail || "").includes("prompt_file_missing")
+    && String(event.path || "").endsWith("prompt.md")));
 });
 
 test("长时间 Worker 运行时输出 pipeline_progress 统计", () => {
@@ -4180,6 +4510,10 @@ test("--isolate 拒绝合并 Worker 新建的 untracked symlink", () => {
     PIPELINE_WORKER_SYMLINK_FILE: "src/link.txt",
     PIPELINE_WORKER_SYMLINK_TARGET: "README.md",
   });
+  if (result.status === 77 && result.stdout.includes("fixture_symlink_unavailable")) {
+    console.log("↷ --isolate symlink rejection skipped: platform cannot create symlink fixture");
+    return;
+  }
   assert.strictEqual(result.status, 1, `STDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`);
   const events = ndjson(result.stdout);
   assert.ok(events.some((event) => event.event === "error" &&

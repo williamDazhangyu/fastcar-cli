@@ -1,4 +1,4 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const {
   ENGINE_PHASES,
   countJsonRequirementStates,
@@ -8,7 +8,7 @@ const {
   hasValidatedBaseline,
   isEnginePhase,
   validateBudgetRelationships,
-} = require("../src/auto-iterate/stateValidationHelpers");
+} = require("../dist/src/auto-iterate/stateValidationHelpers");
 
 const cases = [];
 

@@ -1,4 +1,4 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -8,8 +8,8 @@ const {
   ensurePipelineSession,
   readChecklistFile,
   withSessionDefaults,
-} = require("../src/auto-iterate/sessionCreation");
-const { getSessionPaths } = require("../src/auto-iterate/sessionPaths");
+} = require("../dist/src/auto-iterate/sessionCreation");
+const { getSessionPaths } = require("../dist/src/auto-iterate/sessionPaths");
 
 const cases = [];
 

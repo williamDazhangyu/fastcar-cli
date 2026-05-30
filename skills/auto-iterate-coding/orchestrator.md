@@ -20,22 +20,22 @@
 
 ## 代码化出口
 
-- `src/pipeline/runPipeline.js`：主循环，负责 spawn Worker、解析结果、运行验证、合并状态和输出事件。
-- `src/pipeline/loopPolicy.js`：集中解析 `once`、`plan`、`autopilot`、`maxSteps` 的 loop shape 与运行轮数。
-- `src/pipeline/flags.js`：集中维护 pipeline flag 稳定性，Router 默认路由只能使用 `routable` 及以上 flag。
-- `src/pipeline/iterationPrompt.js`：构造单步 Worker prompt。
-- `src/pipeline/iterationPaths.js`：集中管理每轮 prompt、result、worker.log、validation.log 路径。
-- `src/pipeline/pickFocus.js`：选择 `extract_requirements`、`implement_req`、`fix_bug`、`harden_validation`、`optimize`、`verify_optimization`、`reproduce`、`hypothesis_test`、`regression_check`、`verify_req`、`plan_once`、`establish_baseline` 等 focus。
-- `src/pipeline/mergeState.js`：白名单合并 Worker 建议，禁止 Worker 覆盖预算、watchdog、验证和 session 元数据。
-- `src/pipeline/shouldStop.js`：预算耗尽、`--once`、watchdog stop、need_decision 和需求关闭时停止。
-- `src/pipeline/resultSchema.js`：校验 `result.json`。
-- `src/pipeline/deliveryDocs.js`：在 finalize 阶段根据 state 生成 `.agent-state/auto-iterate/<session>/docs/` 下的可追溯交付文档。
-- `src/pipeline/envCheck.js`：实现 `--check`，输出 `env_check` 事件。
-- `src/pipeline/progress.js`：`--json-progress` 下 stdout 只输出 NDJSON。
-- `src/pipeline/watchdog.js`：集中判断 `ask_user`、`stop`、验证失败和 no-progress 触发。
-- `src/pipeline/phaseGate.js`：根据 mode 与需求状态派生当前阶段和是否可继续。
-- `src/pipeline/writeGuard.js`：执行 verify/plan 写保护、`--scope` 范围检查和 `.agent-state/` 禁写。
-- `src/pipeline/routerUx.js`：把 Router UX 验收规则代码化，覆盖先 `--check` 再 `--run --autopilot --json-progress`、exit 42 后 `--resume --answer`、中断恢复、无 Worker fallback 和禁止手动复制/运行句式。
+- `src/pipeline/runPipeline.ts`：主循环，负责 spawn Worker、解析结果、运行验证、合并状态和输出事件。
+- `src/pipeline/loopPolicy.ts`：集中解析 `once`、`plan`、`autopilot`、`maxSteps` 的 loop shape 与运行轮数。
+- `src/pipeline/flags.ts`：集中维护 pipeline flag 稳定性，Router 默认路由只能使用 `routable` 及以上 flag。
+- `src/pipeline/iterationPrompt.ts`：构造单步 Worker prompt。
+- `src/pipeline/iterationPaths.ts`：集中管理每轮 prompt、result、worker.log、validation.log 路径。
+- `src/pipeline/pickFocus.ts`：选择 `extract_requirements`、`implement_req`、`fix_bug`、`harden_validation`、`optimize`、`verify_optimization`、`reproduce`、`hypothesis_test`、`regression_check`、`verify_req`、`plan_once`、`establish_baseline` 等 focus。
+- `src/pipeline/mergeState.ts`：白名单合并 Worker 建议，禁止 Worker 覆盖预算、watchdog、验证和 session 元数据。
+- `src/pipeline/shouldStop.ts`：预算耗尽、`--once`、watchdog stop、need_decision 和需求关闭时停止。
+- `src/pipeline/resultSchema.ts`：校验 `result.json`。
+- `src/pipeline/deliveryDocs.ts`：在 finalize 阶段根据 state 生成 `.agent-state/auto-iterate/<session>/docs/` 下的可追溯交付文档。
+- `src/pipeline/envCheck.ts`：实现 `--check`，输出 `env_check` 事件。
+- `src/pipeline/progress.ts`：`--json-progress` 下 stdout 只输出 NDJSON。
+- `src/pipeline/watchdog.ts`：集中判断 `ask_user`、`stop`、验证失败和 no-progress 触发。
+- `src/pipeline/phaseGate.ts`：根据 mode 与需求状态派生当前阶段和是否可继续。
+- `src/pipeline/writeGuard.ts`：执行 verify/plan 写保护、`--scope` 范围检查和 `.agent-state/` 禁写。
+- `src/pipeline/routerUx.ts`：把 Router UX 验收规则代码化，覆盖先 `--check` 再 `--run --autopilot --json-progress`、exit 42 后 `--resume --answer`、中断恢复、无 Worker fallback 和禁止手动复制/运行句式。
 - `src/adapters/*`：Worker CLI 适配器；环境变量命令模板使用 `{prompt}`、`{result}`、`{session}`、`{iteration}`。
 
 ## 事件契约

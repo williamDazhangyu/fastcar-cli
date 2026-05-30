@@ -1,10 +1,10 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { initAutoIterate } = require("../src/auto-iterate/sessionRuntime");
-const autoIterateEntry = require("../src/auto-iterate");
-const { buildAutoIterateHelp } = require("../src/auto-iterate/sessionHelp");
+const { initAutoIterate } = require("../dist/src/auto-iterate/sessionRuntime");
+const autoIterateEntry = require("../dist/src/auto-iterate");
+const { buildAutoIterateHelp } = require("../dist/src/auto-iterate/sessionHelp");
 
 const cases = [];
 
@@ -79,6 +79,25 @@ test("initAutoIterate routes --examples without creating session files", async (
 
     assert(lines.join("\n").includes("Codex /goal 与 worker dispatch"));
     assert(!fs.existsSync(".agent-state"));
+  });
+});
+
+test("interactive auto-iterate guidance prefers CLI run and marks fallback explicitly", async () => {
+  await withTempCwd(async () => {
+    const { lines } = await captureConsole(() => initAutoIterate([
+      "--quick",
+      "--goal",
+      "启动提示验证",
+      "--session",
+      "guidance-check",
+      "--yes",
+      "--no-run",
+    ]));
+    const output = lines.join("\n");
+
+    assert(output.includes("CLI 驱动默认路径: fastcar-cli auto-iterate --check --json-progress 后接 --run --json-progress"));
+    assert(output.includes("手动/fallback 路径示例: fastcar-cli auto-iterate --strict --from <清单文档路径> --session <session> --yes --no-run"));
+    assert(!output.includes("也可以使用: fastcar-cli auto-iterate --from <清单文档路径>"));
   });
 });
 

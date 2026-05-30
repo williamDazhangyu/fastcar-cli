@@ -130,7 +130,9 @@ export async function initAutoIterate(args: string[] = []): Promise<void> {
         maxSteps: options.maxSteps,
         autopilotRun: options.autopilotRun,
         autopilotMaxIterations: options.autopilotMaxIterations,
-        validateCommand: options.validateCommand.length > 0 ? options.validateCommand : options.verifyCommand,
+        validateCommand: options.validateCommand.length > 0
+          ? options.validateCommand
+          : (options.verifyCommand ? [options.verifyCommand] : []),
         noValidate: options.noValidate,
         focus: options.focus as any,
         validateStateModel: validateStateJsonModel,
@@ -174,7 +176,8 @@ export async function initAutoIterate(args: string[] = []): Promise<void> {
 
   console.log("🚀 初始化 auto-iterate-coding 启动文件");
   console.log("可选择严格启动、快速启动、Diagnose、Verify-only、Plan-only、Optimization-only 或 Prototype-only。");
-  console.log("也可以使用: fastcar-cli auto-iterate --from <清单文档路径>\n");
+  console.log("CLI 驱动默认路径: fastcar-cli auto-iterate --check --json-progress 后接 --run --json-progress");
+  console.log("手动/fallback 路径示例: fastcar-cli auto-iterate --strict --from <清单文档路径> --session <session> --yes --no-run\n");
 
   const mode = await resolveMode(options);
   if (!mode || !MODE_CONFIGS[mode]) {

@@ -1,9 +1,9 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { finalizeAutoIterateSession } = require("../src/auto-iterate/sessionFinalize");
-const { createAutoIterateSession } = require("../src/auto-iterate/sessionCreation");
+const { finalizeAutoIterateSession } = require("../dist/src/auto-iterate/sessionFinalize");
+const { createAutoIterateSession } = require("../dist/src/auto-iterate/sessionCreation");
 
 const cases = [];
 
@@ -65,7 +65,7 @@ async function createReadySession(session) {
       summary: "FastCar finalize 自动生成交付文档",
       type: "验证",
       status: "passed",
-      relatedFiles: ["src/auto-iterate.js"],
+      relatedFiles: ["src/auto-iterate.ts"],
       evidence: "finalize 先执行 skill capture，再执行 strict state 门禁和交付文档生成",
       blockedReason: "无",
       nextStep: "无",

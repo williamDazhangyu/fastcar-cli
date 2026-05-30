@@ -1,13 +1,13 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { fillTemplate, runTemplateAdapter } = require("../src/adapters/template");
-const { getAdapter } = require("../src/adapters");
-const { resolveCommand, runNativeCommand, runNativeCommandAsync } = require("../src/adapters/commandResolver");
-const { buildCodexWorkerPrompt, extractJsonObject, resolveWindowsNativeCodex } = require("../src/adapters/codex");
-const { resolveCursorCommand } = require("../src/adapters/cursor");
-const { buildKimiPrompt } = require("../src/adapters/kimi");
+const { fillTemplate, runTemplateAdapter } = require("../dist/src/adapters/template");
+const { getAdapter } = require("../dist/src/adapters");
+const { resolveCommand, runNativeCommand, runNativeCommandAsync } = require("../dist/src/adapters/commandResolver");
+const { buildCodexWorkerPrompt, extractJsonObject, resolveWindowsNativeCodex } = require("../dist/src/adapters/codex");
+const { resolveCursorCommand, runCursorAdapter } = require("../dist/src/adapters/cursor");
+const { buildKimiPrompt } = require("../dist/src/adapters/kimi");
 
 const tests = [];
 
@@ -53,6 +53,25 @@ test("Codex adapter 生成受限 Worker prompt，避免触发 Router/skill 全�
   assert.ok(!prompt.includes("Use the auto-iterate-coding skill"));
 });
 
+test("native prompt adapters 对缺失 prompt 文件返回结构化诊断", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fastcar-missing-prompt-"));
+  const promptPath = path.join(dir, "missing-prompt.md");
+  const resultPath = path.join(dir, "result.json");
+
+  for (const build of [
+    () => buildCodexWorkerPrompt({ promptPath, resultPath }),
+    () => buildKimiPrompt({ promptPath, resultPath }),
+    () => runCursorAdapter({ promptPath, cwd: dir, resultPath }),
+  ]) {
+    assert.throws(build, (error) => {
+      assert.strictEqual(error.reason, "prompt_file_missing");
+      assert.strictEqual(error.path, promptPath);
+      assert.ok(String(error.message).includes("prompt_file_missing"));
+      return true;
+    });
+  }
+});
+
 test("Codex adapter 可从最终消息中提取 JSON 兜底写 result", () => {
   const json = extractJsonObject([
     "worker result:",
@@ -71,13 +90,13 @@ test("Kimi 专用适配器在无 env 时使用 native command", () => {
 });
 
 test("Kimi adapter 配置 UTF-8 Python 环境以避免 Windows GBK 输出失败", () => {
-  const source = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", "kimi.js"), "utf8");
+  const source = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", "kimi.ts"), "utf8");
   assert.ok(source.includes("PYTHONIOENCODING"));
   assert.ok(source.includes("PYTHONUTF8"));
 });
 
 test("Kimi adapter 限制 headless 单轮步数并关闭 thinking 以便 Worker 写完即退", () => {
-  const source = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", "kimi.js"), "utf8");
+  const source = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", "kimi.ts"), "utf8");
   assert.ok(source.includes("--no-thinking"));
   assert.ok(source.includes("--max-steps-per-turn"));
   assert.ok(source.includes("--max-ralph-iterations"));
@@ -120,7 +139,7 @@ test("Claude/Gemini/Cursor 专用适配器在无 env 时使用 native command", 
 });
 
 test("Cursor adapter 支持官方 Cursor Agent 的 agent/cursor-agent 二进制", () => {
-  const source = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", "cursor.js"), "utf8");
+  const source = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", "cursor.ts"), "utf8");
   assert.ok(source.includes('"agent"'));
   assert.ok(source.includes('"cursor-agent"'));
   assert.ok(source.includes("--print"));
@@ -160,7 +179,7 @@ test("commandResolver 通过 cross-spawn 运行 Windows 带空格路径的 cmd s
 });
 
 test("commandResolver 对所有 spawn 路径启用 windowsHide", () => {
-  const source = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", "commandResolver.js"), "utf8");
+  const source = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", "commandResolver.ts"), "utf8");
   const matches = source.match(/windowsHide:\s*true/g) || [];
   assert.ok(matches.length >= 3);
 });
@@ -178,7 +197,7 @@ test("Codex adapter 在 Windows 可解析 native exe 或安全降级", () => {
 });
 
 test("native Worker adapters 避免 detached console 并透传输出进度回调", () => {
-  const files = ["codex.js", "kimi.js", "claude.js", "gemini.js", "cursor.js"];
+  const files = ["codex.ts", "kimi.ts", "claude.ts", "gemini.ts", "cursor.ts"];
   for (const file of files) {
     const source = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", file), "utf8");
     assert.ok(!source.includes("detached: true"), `${file} must not detach worker process`);
@@ -187,7 +206,7 @@ test("native Worker adapters 避免 detached console 并透传输出进度回调
 });
 
 test("native Worker adapters 统一透传 timeout policy 选项", () => {
-  const helper = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", "runOptions.js"), "utf8");
+  const helper = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", "runOptions.ts"), "utf8");
   for (const expected of [
     "timeoutMs",
     "inactivityTimeoutMs",
@@ -199,7 +218,7 @@ test("native Worker adapters 统一透传 timeout policy 选项", () => {
     assert.ok(helper.includes(`${expected}: options.${expected}`), `runOptions must forward ${expected}`);
   }
 
-  const files = ["template.js", "codex.js", "kimi.js", "claude.js", "gemini.js", "cursor.js"];
+  const files = ["template.ts", "codex.ts", "kimi.ts", "claude.ts", "gemini.ts", "cursor.ts"];
   for (const file of files) {
     const source = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", file), "utf8");
     assert.ok(source.includes("./runOptions"), `${file} must import shared run options`);
@@ -284,6 +303,28 @@ test("runNativeCommandAsync 同时触发 wall 与 inactivity timeout 时只终�
   const warning = JSON.parse(fs.readFileSync(warningPath, "utf8"));
   assert.strictEqual(warning.event, "timeout_kill");
   assert.match(warning.reason, /timed out/);
+});
+
+test("runNativeCommandAsync 在 result 已就绪后不会被超时竞态误杀", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fastcar-result-ready-"));
+  const promptPath = path.join(dir, "prompt.md");
+  const resultPath = path.join(dir, "result.json");
+  const ready = await runNativeCommandAsync(process.execPath, [
+    "-e",
+    `const fs=require("fs");const path=${JSON.stringify(resultPath)};setTimeout(()=>fs.writeFileSync(path, JSON.stringify({status:"completed",summary:"ok",files_changed:[],requirements:[]}), "utf8"), 50);setTimeout(()=>{}, 5000);`,
+  ], {
+    cwd: dir,
+    timeoutMs: 400,
+    inactivityTimeoutMs: 400,
+    warnBeforeMs: 0,
+    graceKillMs: 10,
+    resultPath,
+    stopWhenResultValid(candidatePath) {
+      return Boolean(candidatePath && fs.existsSync(candidatePath));
+    },
+  });
+  assert.strictEqual(ready.status, 0, ready.stderr || ready.error);
+  assert.strictEqual(ready.timedOut, false);
 });
 
 test("Worker 集成矩阵：TemplateAdapter 覆盖命令成功、非零退出和超时", () => {

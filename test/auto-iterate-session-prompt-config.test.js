@@ -1,10 +1,10 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const inquirer = require("inquirer");
 const {
   promptAutoIterateConfig,
   promptAutoIterateConfigFromFile,
   promptMode,
-} = require("../src/auto-iterate/sessionPromptConfig");
+} = require("../dist/src/auto-iterate/sessionPromptConfig");
 
 const cases = [];
 

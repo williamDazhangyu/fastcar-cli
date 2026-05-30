@@ -1,11 +1,11 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const {
   compareCurrentPointerToExpected,
   resolveStateFileForValidation,
-} = require("../src/auto-iterate/sessionStateValidation");
+} = require("../dist/src/auto-iterate/sessionStateValidation");
 
 const cases = [];
 

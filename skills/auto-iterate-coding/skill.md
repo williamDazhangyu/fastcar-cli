@@ -265,16 +265,35 @@ sub-agent 是 Agent 工具执行自动迭代时的协议增强，不是 fastcar-
 | “优化这段代码” | `Optimization-only` | 先建立 baseline，只有验证通过且收益明确时保留优化。 |
 | “根据 PRD 全部实现” | `Autopilot` + Requirement Coverage Matrix | 从原文逐条提取需求，直到关键需求全部 passed 或提前停止。 |
 
-配套 CLI 可以生成启动文件，例如：
+配套 CLI 有两种启动形态：
+
+- 自动模式（路径 A，默认）：Router 先执行 `fastcar-cli auto-iterate --check --json-progress`，Worker 可用后再执行 `--run --json-progress`。Router 只转述 NDJSON 进度和处理 `need_decision`，不直接改代码、不写 state、不跑验证。
+- 手动 / fallback 模式（路径 B）：仅在 Worker 不可用、CLI flag 不支持、环境不能 spawn Worker，或用户显式要求 `--no-run` / 手动模式时使用。此时不带 `--run`，由当前 Agent 按后续协议维护 state、RCM、DoD、验证和停止条件。
+
+自动模式示例：
 
 ```bash
-fastcar-cli auto-iterate --strict
-fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix
-fastcar-cli auto-iterate --diagnose --goal "诊断登录偶发失败" --session login-diagnose
-fastcar-cli auto-iterate --verify --from docs/prd.md --session login-verify
-fastcar-cli auto-iterate --plan-only --goal "规划订单模块重构" --session order-refactor-plan
-fastcar-cli auto-iterate --optimize --goal "优化查询性能" --session query-optimize
-fastcar-cli auto-iterate --prototype --goal "验证订单状态机" --session order-prototype
+fastcar-cli auto-iterate --check --json-progress
+fastcar-cli auto-iterate --run --autopilot --strict --from docs/prd.md --session prd-impl --json-progress
+fastcar-cli auto-iterate --run --autopilot --quick --goal "修复登录失败问题" --session login-bugfix --json-progress
+fastcar-cli auto-iterate --run --autopilot --diagnose --goal "诊断登录偶发失败" --session login-diagnose --json-progress
+fastcar-cli auto-iterate --run --once --verify --from docs/prd.md --session login-verify --json-progress
+fastcar-cli auto-iterate --run --once --plan-only --goal "规划订单模块重构" --session order-refactor-plan --json-progress
+fastcar-cli auto-iterate --run --autopilot --optimize --goal "优化查询性能" --session query-optimize --json-progress
+fastcar-cli auto-iterate --run --autopilot --prototype --goal "验证订单状态机" --session order-prototype --json-progress
+fastcar-cli auto-iterate --resume login-bugfix --run --autopilot --json-progress
+```
+
+手动 / fallback 模式示例：
+
+```bash
+fastcar-cli auto-iterate --strict --from docs/prd.md --session prd-impl --yes --no-run
+fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix --yes --no-run
+fastcar-cli auto-iterate --diagnose --goal "诊断登录偶发失败" --session login-diagnose --yes --no-run
+fastcar-cli auto-iterate --verify --from docs/prd.md --session login-verify --yes --no-run
+fastcar-cli auto-iterate --plan-only --goal "规划订单模块重构" --session order-refactor-plan --yes --no-run
+fastcar-cli auto-iterate --optimize --goal "优化查询性能" --session query-optimize --yes --no-run
+fastcar-cli auto-iterate --prototype --goal "验证订单状态机" --session order-prototype --yes --no-run
 fastcar-cli auto-iterate --list
 fastcar-cli auto-iterate --switch login-verify
 fastcar-cli auto-iterate --resume login-bugfix
@@ -289,8 +308,9 @@ fastcar-cli auto-iterate --resume login-bugfix
 - 优先用用户原话推断 `mode`、`goal`、`from`、`session`、迭代预算和是否允许修改。
 - 用户已明确目标、文件路径或 session 名时，不要再重复询问。
 - 只有缺少会影响安全、兼容性或外部资源的关键信息时，才向用户提问。
-- 调用命令后，直接把 CLI 输出的启动提示词作为后续执行依据。
-- Agent 根据自然语言路由自动调用命令时，应追加 `--yes` 进入非交互生成模式，避免卡在 CLI 交互提示。
+- 自动模式下，`--run --json-progress` 的 NDJSON 事件流是后续执行依据；不得要求用户复制 `start-prompt.md`，也不得在当前聊天中内联执行完整协议。
+- 手动 / fallback 模式下，调用不带 `--run` 的启动命令后，直接把 CLI 输出的启动提示词作为后续执行依据。
+- Agent 根据自然语言路由自动调用 fallback 启动命令时，必须同时追加 `--yes --no-run`：`--yes` 避免卡在交互提示，`--no-run` 明确禁止进入 Worker pipeline；自动模式的 `--run` 命令不需要 `--yes`。
 - Agent 根据自然语言路由自动调用命令时，每次都必须生成或指定一个独立 session；用户未指定 session 时，Agent 必须根据目标用英文小写、数字和连字符生成默认 session 名，并在命令中追加 `--session <generated-session>`。
 - 如果用户只是询问命令含义，不要执行命令；只有用户表达“帮我启动/生成/恢复/切换/检查/规划/优化”时才执行。
 

@@ -1,4 +1,4 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const {
   addError,
   addWarning,
@@ -11,7 +11,7 @@ const {
   requireNormalizedPath,
   requireNullableNonEmptyStringFields,
   requirePlainObject,
-} = require("../src/auto-iterate/stateValidationPrimitives");
+} = require("../dist/src/auto-iterate/stateValidationPrimitives");
 
 const cases = [];
 

@@ -1,11 +1,11 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const { spawnSync } = require("child_process");
 const path = require("path");
 const {
   buildAutoIterateHelp,
   showAutoIterateHelp,
-} = require("../src/auto-iterate/sessionHelp");
-const { DISPATCH_AGENT_CONFIGS } = require("../src/auto-iterate/dispatch");
+} = require("../dist/src/auto-iterate/sessionHelp");
+const { DISPATCH_AGENT_CONFIGS } = require("../dist/src/auto-iterate/dispatch");
 
 const cases = [];
 
@@ -35,6 +35,11 @@ test("buildAutoIterateHelp renders major command groups and flags", () => {
     assert(help.includes(section), `missing ${section}`);
   }
   for (const flag of [
+    "Default Router flow:",
+    "fastcar-cli auto-iterate --check --json-progress",
+    'fastcar-cli auto-iterate --run --autopilot --quick --goal "<goal>" --session <session> --json-progress',
+    "Manual/fallback flow:",
+    'fastcar-cli auto-iterate --quick --goal "<goal>" --session <session> --yes --no-run',
     "--strict",
     "--quick",
     "--validate-state [session|state.md|state.json]",
@@ -43,7 +48,9 @@ test("buildAutoIterateHelp renders major command groups and flags", () => {
     "--inactivity-timeout <seconds>",
     "--validation-timeout <seconds>",
     "--scope <glob[,glob]>",
+    "--no-run  force manual/fallback generation; do not enter Worker pipeline",
     "--capture-skills <session> [--yes]",
+    "--yes  non-interactive generation for manual/fallback; --run routing does not need it",
     "--examples [keyword]",
   ]) {
     assert(help.includes(flag), `missing ${flag}`);

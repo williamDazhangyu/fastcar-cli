@@ -1,4 +1,4 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const {
   extractSection,
   extractFirstSection,
@@ -10,7 +10,7 @@ const {
   parseStateBoolean,
   parseStateList,
   parseFileList,
-} = require("../src/auto-iterate/stateMarkdownParsers");
+} = require("../dist/src/auto-iterate/stateMarkdownParsers");
 
 const cases = [];
 

@@ -1,4 +1,4 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -6,7 +6,7 @@ const {
   readJsonFile,
   readJsonFileWithError,
   writeJsonFileAtomic,
-} = require("../src/auto-iterate/stateIO");
+} = require("../dist/src/auto-iterate/stateIO");
 
 const cases = [];
 

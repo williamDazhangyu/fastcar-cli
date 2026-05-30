@@ -4,6 +4,13 @@ export function buildAutoIterateHelp(): string {
   const supportedAgents = Object.keys(DISPATCH_AGENT_CONFIGS).join("|");
   return `Usage: fastcar-cli auto-iterate [options]
 
+Default Router flow:
+  fastcar-cli auto-iterate --check --json-progress
+  fastcar-cli auto-iterate --run --autopilot --quick --goal "<goal>" --session <session> --json-progress
+
+Manual/fallback flow:
+  fastcar-cli auto-iterate --quick --goal "<goal>" --session <session> --yes --no-run
+
 Modes:
   --strict | --quick | --diagnose | --verify | --plan-only | --optimize | --prototype
 
@@ -35,7 +42,7 @@ Pipeline:
   --isolate
   --allow-modify
   --no-validate
-  --no-run
+  --no-run  force manual/fallback generation; do not enter Worker pipeline
 
 Skill Capture:
   --capture-skills <session> [--yes]
@@ -45,7 +52,7 @@ Other:
   --from <file>
   --max-iterations <n>
   --autopilot-max-iterations <n>
-  --yes
+  --yes  non-interactive generation for manual/fallback; --run routing does not need it
   --examples [keyword]
 `;
 }

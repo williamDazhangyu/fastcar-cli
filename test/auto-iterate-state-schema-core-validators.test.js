@@ -1,4 +1,4 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const {
   validateBaselineModel,
   validateBudgetsModel,
@@ -29,7 +29,7 @@ const {
   validateValidationModel,
   validateStateJsonModelCore,
   validateWatchdogModel,
-} = require("../src/auto-iterate/stateSchemaCoreValidators");
+} = require("../dist/src/auto-iterate/stateSchemaCoreValidators");
 
 const cases = [];
 
