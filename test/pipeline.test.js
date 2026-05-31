@@ -3,17 +3,17 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { pickNextFocus } = require("../dist/src/pipeline/pickFocus");
-const { shouldStop, deliveryReady } = require("../dist/src/pipeline/shouldStop");
-const { canFinalizeDelivery, finalizeDeliveryState } = require("../dist/src/pipeline/pipelineFinalization");
-const { applyPhaseGateToState, checkPhaseGate } = require("../dist/src/pipeline/phaseGate");
-const { mergeIterationIntoState } = require("../dist/src/pipeline/mergeState");
-const { parseAndValidateIterationResult } = require("../dist/src/pipeline/resultSchema");
-const { buildIterationPrompt } = require("../dist/src/pipeline/iterationPrompt");
-const { buildDocs } = require("../dist/src/pipeline/deliveryDocs");
-const { runPipeline, updateNoProgressState, needsValidationReconcile, buildDeliveryGate, buildPipelineSnapshot, parseValidationCommands, normalizeActualFilesChanged, getDirectorySignature } = require("../dist/src/pipeline/runPipeline");
-const { evaluateWriteGuard, isInsideScope } = require("../dist/src/pipeline/writeGuard");
-const { makeIsolatedWorktree } = require("../dist/src/pipeline/pipelineIsolateWorktree");
+const { pickNextFocus } = require("../dist/pipeline/pickFocus");
+const { shouldStop, deliveryReady } = require("../dist/pipeline/shouldStop");
+const { canFinalizeDelivery, finalizeDeliveryState } = require("../dist/pipeline/pipelineFinalization");
+const { applyPhaseGateToState, checkPhaseGate } = require("../dist/pipeline/phaseGate");
+const { mergeIterationIntoState } = require("../dist/pipeline/mergeState");
+const { parseAndValidateIterationResult } = require("../dist/pipeline/resultSchema");
+const { buildIterationPrompt } = require("../dist/pipeline/iterationPrompt");
+const { buildDocs } = require("../dist/pipeline/deliveryDocs");
+const { runPipeline, updateNoProgressState, needsValidationReconcile, buildDeliveryGate, buildPipelineSnapshot, parseValidationCommands, normalizeActualFilesChanged, getDirectorySignature } = require("../dist/pipeline/runPipeline");
+const { evaluateWriteGuard, isInsideScope } = require("../dist/pipeline/writeGuard");
+const { makeIsolatedWorktree } = require("../dist/pipeline/pipelineIsolateWorktree");
 
 const repoRoot = path.resolve(__dirname, "..");
 const cliPath = path.join(repoRoot, "bin", "cli.js");
@@ -1779,7 +1779,7 @@ test("runPipeline 在启动即 delivery_ready 时会先执行 finalize 收口", 
     return true;
   };
   try {
-    const { runPipeline } = require("../dist/src/pipeline/runPipeline");
+    const { runPipeline } = require("../dist/pipeline/runPipeline");
     const result = await runPipeline({
       projectRoot: projectDir,
       session: "startup-delivery-ready",
@@ -2217,7 +2217,7 @@ test("Worker 集成矩阵：adapter 内部异常转为 worker_failed", async () 
     phaseGate: { currentPhase: "coding" },
     validation: { commands: [] },
   }), "utf8");
-  const { runPipeline } = require("../dist/src/pipeline/runPipeline");
+  const { runPipeline } = require("../dist/pipeline/runPipeline");
   const events = [];
   const originalWrite = process.stdout.write;
   process.stdout.write = (chunk) => {
@@ -2258,8 +2258,8 @@ test("Worker 集成矩阵：adapter 缺失 prompt 文件输出结构化 prompt_f
     phaseGate: { currentPhase: "coding" },
     validation: { commands: [] },
   }), "utf8");
-  const { runPipeline } = require("../dist/src/pipeline/runPipeline");
-  const { runCodexAdapter } = require("../dist/src/adapters/codex");
+  const { runPipeline } = require("../dist/pipeline/runPipeline");
+  const { runCodexAdapter } = require("../dist/adapters/codex");
   const events = [];
   const originalWrite = process.stdout.write;
   process.stdout.write = (chunk) => {

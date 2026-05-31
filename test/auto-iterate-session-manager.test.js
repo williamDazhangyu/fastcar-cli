@@ -8,8 +8,8 @@ const {
   getSessionSummaries,
   listSessions,
   writeCurrentFile,
-} = require("../dist/src/auto-iterate/sessionManager");
-const { getSessionPaths } = require("../dist/src/auto-iterate/sessionPaths");
+} = require("../dist/auto-iterate/sessionManager");
+const { getSessionPaths } = require("../dist/auto-iterate/sessionPaths");
 
 const cases = [];
 

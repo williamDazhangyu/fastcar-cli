@@ -8,8 +8,8 @@ const {
   handleNeedDecision,
   parseNdjson,
   summarizeProgress,
-} = require("../dist/src/pipeline/routerUx");
-const { FLAG_REGISTRY, isFlagAtLeast, validateRoutableCommand } = require("../dist/src/pipeline/flags");
+} = require("../dist/pipeline/routerUx");
+const { FLAG_REGISTRY, isFlagAtLeast, validateRoutableCommand } = require("../dist/pipeline/flags");
 
 const tests = [];
 

@@ -2,7 +2,7 @@ const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { computeEffectiveTimeouts, parseValidationCommands, runValidationCommands } = require("../dist/src/pipeline/runPipeline");
+const { computeEffectiveTimeouts, parseValidationCommands, runValidationCommands } = require("../dist/pipeline/runPipeline");
 
 const tests = [];
 

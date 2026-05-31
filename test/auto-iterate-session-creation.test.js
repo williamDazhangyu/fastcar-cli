@@ -8,8 +8,8 @@ const {
   ensurePipelineSession,
   readChecklistFile,
   withSessionDefaults,
-} = require("../dist/src/auto-iterate/sessionCreation");
-const { getSessionPaths } = require("../dist/src/auto-iterate/sessionPaths");
+} = require("../dist/auto-iterate/sessionCreation");
+const { getSessionPaths } = require("../dist/auto-iterate/sessionPaths");
 
 const cases = [];
 

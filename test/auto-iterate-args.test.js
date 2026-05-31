@@ -1,5 +1,5 @@
 ﻿const assert = require("assert");
-const { parseArgs } = require("../dist/src/auto-iterate/args");
+const { parseArgs } = require("../dist/auto-iterate/args");
 
 const cases = [];
 

@@ -4,7 +4,7 @@ const {
   promptAutoIterateConfig,
   promptAutoIterateConfigFromFile,
   promptMode,
-} = require("../dist/src/auto-iterate/sessionPromptConfig");
+} = require("../dist/auto-iterate/sessionPromptConfig");
 
 const cases = [];
 

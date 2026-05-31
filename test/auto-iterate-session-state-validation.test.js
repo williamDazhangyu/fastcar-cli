@@ -5,7 +5,7 @@ const path = require("path");
 const {
   compareCurrentPointerToExpected,
   resolveStateFileForValidation,
-} = require("../dist/src/auto-iterate/sessionStateValidation");
+} = require("../dist/auto-iterate/sessionStateValidation");
 
 const cases = [];
 

@@ -9,7 +9,7 @@ const {
   makeUniqueSessionName,
   slugifySessionName,
   toRelative,
-} = require("../dist/src/auto-iterate/sessionPaths");
+} = require("../dist/auto-iterate/sessionPaths");
 
 const cases = [];
 

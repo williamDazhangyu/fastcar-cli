@@ -1,7 +1,7 @@
 const assert = require("assert");
-const { isFocusAllowedForMode, pickNextFocus } = require("../dist/src/pipeline/pickFocus");
-const { shouldStop } = require("../dist/src/pipeline/shouldStop");
-const { resolveLoopPolicy } = require("../dist/src/pipeline/loopPolicy");
+const { isFocusAllowedForMode, pickNextFocus } = require("../dist/pipeline/pickFocus");
+const { shouldStop } = require("../dist/pipeline/shouldStop");
+const { resolveLoopPolicy } = require("../dist/pipeline/loopPolicy");
 
 const tests = [];
 

@@ -3,7 +3,7 @@ const {
   NATURAL_LANGUAGE_EXAMPLES,
   getNaturalLanguageExampleSections,
   renderNaturalLanguageExamples,
-} = require("../dist/src/auto-iterate/naturalLanguageExamples");
+} = require("../dist/auto-iterate/naturalLanguageExamples");
 
 const cases = [];
 

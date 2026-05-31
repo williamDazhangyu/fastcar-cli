@@ -2,7 +2,7 @@
 const {
   STATE_SCHEMA_VERSION,
   buildStateModel,
-} = require("../dist/src/auto-iterate/sessionStateModel");
+} = require("../dist/auto-iterate/sessionStateModel");
 
 const cases = [];
 

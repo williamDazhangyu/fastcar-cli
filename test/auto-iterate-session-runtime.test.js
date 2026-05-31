@@ -2,9 +2,9 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { initAutoIterate } = require("../dist/src/auto-iterate/sessionRuntime");
-const autoIterateEntry = require("../dist/src/auto-iterate");
-const { buildAutoIterateHelp } = require("../dist/src/auto-iterate/sessionHelp");
+const { initAutoIterate } = require("../dist/auto-iterate/sessionRuntime");
+const autoIterateEntry = require("../dist/auto-iterate");
+const { buildAutoIterateHelp } = require("../dist/auto-iterate/sessionHelp");
 
 const cases = [];
 

@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const compiledEntry = path.join(__dirname, "..", "dist", "src", "cli.js");
+const compiledEntry = path.join(__dirname, "..", "dist", "cli.js");
 
 if (!fs.existsSync(compiledEntry)) {
   console.error("fastcar-cli has not been built. Run `npm run build` before executing bin/cli.js.");

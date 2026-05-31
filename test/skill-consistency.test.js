@@ -193,10 +193,10 @@ test("pipeline 测试已按 focus、schema 和 validation 职责拆分", () => {
   const validation = read("test/pipeline-validation.test.js");
   const packageJson = read("package.json");
 
-  assert.ok(focusLoop.includes("../dist/src/pipeline/pickFocus"));
-  assert.ok(focusLoop.includes("../dist/src/pipeline/shouldStop"));
-  assert.ok(focusLoop.includes("../dist/src/pipeline/loopPolicy"));
-  assert.ok(resultSchema.includes("../dist/src/pipeline/resultSchema"));
+  assert.ok(focusLoop.includes("../dist/pipeline/pickFocus"));
+  assert.ok(focusLoop.includes("../dist/pipeline/shouldStop"));
+  assert.ok(focusLoop.includes("../dist/pipeline/loopPolicy"));
+  assert.ok(resultSchema.includes("../dist/pipeline/resultSchema"));
   assert.ok(validation.includes("runValidationCommands"));
   assert.ok(!pipeline.includes("loopPolicy 集中解析 once/plan/autopilot/maxSteps 语义"));
   assert.ok(!pipeline.includes("pickFocus 支持 fix/harden/optimize 和 mode-specific focus"));

@@ -7,7 +7,7 @@ const {
   extractSkillCandidates,
   sanitizeSkillCaptureText,
   updateSkillsIndexFile,
-} = require("../dist/src/auto-iterate/skillCapture");
+} = require("../dist/auto-iterate/skillCapture");
 
 const cases = [];
 

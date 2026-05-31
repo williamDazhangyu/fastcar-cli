@@ -2,10 +2,10 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { validateState } = require("../dist/src/auto-iterate/stateValidationRunner");
+const { validateState } = require("../dist/auto-iterate/stateValidationRunner");
 const {
   REQUIRED_STATE_SECTIONS,
-} = require("../dist/src/auto-iterate/sessionBaselineValidation");
+} = require("../dist/auto-iterate/sessionBaselineValidation");
 
 const cases = [];
 

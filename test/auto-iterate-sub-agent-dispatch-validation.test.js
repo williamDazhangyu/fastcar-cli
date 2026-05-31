@@ -1,7 +1,7 @@
 ﻿const assert = require("assert");
 const {
   validateSubAgentDispatchState,
-} = require("../dist/src/auto-iterate/subAgentDispatchValidation");
+} = require("../dist/auto-iterate/subAgentDispatchValidation");
 
 const cases = [];
 

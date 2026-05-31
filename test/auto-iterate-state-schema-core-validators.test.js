@@ -29,7 +29,7 @@ const {
   validateValidationModel,
   validateStateJsonModelCore,
   validateWatchdogModel,
-} = require("../dist/src/auto-iterate/stateSchemaCoreValidators");
+} = require("../dist/auto-iterate/stateSchemaCoreValidators");
 
 const cases = [];
 

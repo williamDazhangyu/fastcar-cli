@@ -14,7 +14,7 @@ const {
   validateNonNegativeInteger,
   validatePositiveInteger,
   withModeDefaults,
-} = require("../dist/src/auto-iterate/sessionConfig");
+} = require("../dist/auto-iterate/sessionConfig");
 
 const cases = [];
 

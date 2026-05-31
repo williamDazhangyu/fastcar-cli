@@ -8,7 +8,7 @@ const {
   hasValidatedBaseline,
   isEnginePhase,
   validateBudgetRelationships,
-} = require("../dist/src/auto-iterate/stateValidationHelpers");
+} = require("../dist/auto-iterate/stateValidationHelpers");
 
 const cases = [];
 

@@ -6,7 +6,7 @@ const {
   readJsonFile,
   readJsonFileWithError,
   writeJsonFileAtomic,
-} = require("../dist/src/auto-iterate/stateIO");
+} = require("../dist/auto-iterate/stateIO");
 
 const cases = [];
 

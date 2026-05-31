@@ -2,8 +2,8 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { finalizeAutoIterateSession } = require("../dist/src/auto-iterate/sessionFinalize");
-const { createAutoIterateSession } = require("../dist/src/auto-iterate/sessionCreation");
+const { finalizeAutoIterateSession } = require("../dist/auto-iterate/sessionFinalize");
+const { createAutoIterateSession } = require("../dist/auto-iterate/sessionCreation");
 
 const cases = [];
 

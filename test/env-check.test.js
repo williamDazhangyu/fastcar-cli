@@ -2,7 +2,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { checkEnvironment } = require("../dist/src/pipeline/envCheck");
+const { checkEnvironment } = require("../dist/pipeline/envCheck");
 
 const tests = [];
 

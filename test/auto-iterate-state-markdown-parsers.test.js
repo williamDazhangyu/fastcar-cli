@@ -10,7 +10,7 @@ const {
   parseStateBoolean,
   parseStateList,
   parseFileList,
-} = require("../dist/src/auto-iterate/stateMarkdownParsers");
+} = require("../dist/auto-iterate/stateMarkdownParsers");
 
 const cases = [];
 

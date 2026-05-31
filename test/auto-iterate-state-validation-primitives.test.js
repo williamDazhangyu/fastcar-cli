@@ -11,7 +11,7 @@ const {
   requireNormalizedPath,
   requireNullableNonEmptyStringFields,
   requirePlainObject,
-} = require("../dist/src/auto-iterate/stateValidationPrimitives");
+} = require("../dist/auto-iterate/stateValidationPrimitives");
 
 const cases = [];
 

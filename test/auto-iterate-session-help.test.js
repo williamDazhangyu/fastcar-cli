@@ -4,9 +4,9 @@ const path = require("path");
 const {
   buildAutoIterateHelp,
   showAutoIterateHelp,
-} = require("../dist/src/auto-iterate/sessionHelp");
-const { DISPATCH_AGENT_CONFIGS } = require("../dist/src/auto-iterate/dispatch");
-const { FLAG_REGISTRY } = require("../dist/src/pipeline/flags");
+} = require("../dist/auto-iterate/sessionHelp");
+const { DISPATCH_AGENT_CONFIGS } = require("../dist/auto-iterate/dispatch");
+const { FLAG_REGISTRY } = require("../dist/pipeline/flags");
 
 const cases = [];
 

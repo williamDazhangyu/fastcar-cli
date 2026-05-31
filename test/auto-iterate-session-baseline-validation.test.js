@@ -5,7 +5,7 @@ const path = require("path");
 const {
   REQUIRED_STATE_SECTIONS,
   validateSessionStateBaseline,
-} = require("../dist/src/auto-iterate/sessionBaselineValidation");
+} = require("../dist/auto-iterate/sessionBaselineValidation");
 
 const cases = [];
 

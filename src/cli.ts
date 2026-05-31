@@ -13,7 +13,8 @@ import {
 } from "./skill";
 import { initAutoIterate } from "./auto-iterate";
 import { updateCosTemplate } from "./update";
-import packageINFO from "../package.json";
+import fs from "fs";
+import path from "path";
 import templates from "./templates.json";
 
 interface SkillCommandOptions {
@@ -165,7 +166,9 @@ Reverse 命令参数说明:
 }
 
 function showVersion(): void {
-  console.log(`fastcar-cli version ${packageINFO.version}`);
+  const packageJsonPath = path.join(__dirname, "..", "package.json");
+  const packageInfo = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as { version?: string };
+  console.log(`fastcar-cli version ${packageInfo.version || "unknown"}`);
 }
 
 export async function run(argv: string[]): Promise<void> {

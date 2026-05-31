@@ -1,5 +1,5 @@
 ﻿const assert = require("assert");
-const { IMPLEMENTATION_MODES, isImplementationMode } = require("../dist/src/auto-iterate/modeRules");
+const { IMPLEMENTATION_MODES, isImplementationMode } = require("../dist/auto-iterate/modeRules");
 
 const cases = [];
 

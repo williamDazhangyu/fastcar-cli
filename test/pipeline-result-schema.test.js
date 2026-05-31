@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { normalizeRelativePath, parseAndValidateIterationResult } = require("../dist/src/pipeline/resultSchema");
+const { normalizeRelativePath, parseAndValidateIterationResult } = require("../dist/pipeline/resultSchema");
 
 const tests = [];
 

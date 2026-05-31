@@ -10,7 +10,7 @@ const {
   updateDecisionsMarkdownForDispatch,
   updateStateJsonForDispatch,
   updateStateMarkdownForDispatch,
-} = require("../dist/src/auto-iterate/dispatch");
+} = require("../dist/auto-iterate/dispatch");
 
 const cases = [];
 

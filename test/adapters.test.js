@@ -2,13 +2,13 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { fillTemplate, runTemplateAdapter } = require("../dist/src/adapters/template");
-const { getAdapter } = require("../dist/src/adapters");
-const { resolveCommand, runNativeCommand, runNativeCommandAsync } = require("../dist/src/adapters/commandResolver");
-const { buildCodexWorkerPrompt, extractJsonObject, resolveWindowsNativeCodex } = require("../dist/src/adapters/codex");
-const { ensureResultFromWorkerOutput } = require("../dist/src/adapters/resultRecovery");
-const { resolveCursorCommand, runCursorAdapter } = require("../dist/src/adapters/cursor");
-const { buildKimiPrompt } = require("../dist/src/adapters/kimi");
+const { fillTemplate, runTemplateAdapter } = require("../dist/adapters/template");
+const { getAdapter } = require("../dist/adapters");
+const { resolveCommand, runNativeCommand, runNativeCommandAsync } = require("../dist/adapters/commandResolver");
+const { buildCodexWorkerPrompt, extractJsonObject, resolveWindowsNativeCodex } = require("../dist/adapters/codex");
+const { ensureResultFromWorkerOutput } = require("../dist/adapters/resultRecovery");
+const { resolveCursorCommand, runCursorAdapter } = require("../dist/adapters/cursor");
+const { buildKimiPrompt } = require("../dist/adapters/kimi");
 
 const tests = [];
 
