@@ -11,6 +11,7 @@ import { readJsonFile, writeJsonFileAtomic } from "./stateIO";
 import { parseFileList } from "./stateMarkdownParsers";
 import { resolveStateFileForValidation } from "./sessionStateValidation";
 import { validationConfigCommands } from "../pipeline/validationCommands";
+import { pathExists } from "../fsUtils";
 
 const MAX_SUB_AGENT_HISTORY_ITEMS = 200;
 
@@ -138,15 +139,6 @@ const DISPATCH_AGENT_ALIAS_MAP = Object.entries(DISPATCH_AGENT_CONFIGS).reduce<R
   },
   {},
 );
-
-async function pathExists(filePath: string): Promise<boolean> {
-  try {
-    await fs.promises.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function getIsoTimestamp(): string {
   return new Date().toISOString();

@@ -18,14 +18,26 @@ export function asArray(value: unknown): unknown[] {
 
 /**
  * @param {unknown} value
+ * @param {{ compact?: boolean }} [options]
  * @returns {unknown[]}
  */
-export function normalizeArray(value: unknown): unknown[] {
+export function normalizeArray(value: unknown, options: { compact?: boolean } = { compact: true }): unknown[] {
   if (!value) {
     return [];
   }
-  return (Array.isArray(value) ? value : [value])
-    .filter((item) => item !== undefined && item !== null && item !== false && item !== "");
+  const items = Array.isArray(value) ? value : [value];
+  if (options.compact === false) {
+    return items;
+  }
+  return items.filter((item) => item !== undefined && item !== null && item !== false && item !== "");
+}
+
+/**
+ * @param {unknown} value
+ * @returns {unknown[]}
+ */
+export function normalizeArrayLoose(value: unknown): unknown[] {
+  return normalizeArray(value, { compact: false });
 }
 
 /**

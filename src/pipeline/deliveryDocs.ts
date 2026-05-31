@@ -5,7 +5,7 @@ import {
   languageCode,
 } from "./language";
 import { isValidationHistoryEntry } from "./validationCommands";
-import { asRecord } from "./valueUtils";
+import { asRecord, normalizeArrayLoose as normalizeArray } from "./valueUtils";
 import type {
   DeliveryDocsOptions,
   DeliveryDocsResult,
@@ -22,17 +22,6 @@ interface DeliveryDocText {
   noValidation: string;
   traceNotice: string;
   generated: string;
-}
-
-/**
- * @param {unknown} value
- * @returns {unknown[]}
- */
-function normalizeArray(value: unknown): unknown[] {
-  if (!value) {
-    return [];
-  }
-  return Array.isArray(value) ? value : [value];
 }
 
 /**

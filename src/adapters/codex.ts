@@ -7,6 +7,8 @@ import type {
 import { runNativeCommandAsync } from "./commandResolver";
 import { buildRunOptions } from "./runOptions";
 import { readPromptFile } from "./promptFile";
+export { extractJsonObject } from "./resultRecovery";
+import { ensureResultFromWorkerOutput } from "./resultRecovery";
 
 function extractPromptField(prompt: string, name: string): string {
   const pattern = new RegExp(`^${name}:\\s*(.+)$`, "m");
@@ -83,67 +85,6 @@ export function buildCodexWorkerPrompt(
   ].join("\n");
 }
 
-export function extractJsonObject(text: string): string | null {
-  const value = String(text || "").trim().replace(/^\uFEFF/, "");
-  if (!value) {
-    return null;
-  }
-  try {
-    JSON.parse(value);
-    return value;
-  } catch {
-    // Try fenced JSON or prose-wrapped JSON produced by the agent.
-  }
-  const fence = value.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fence) {
-    const fenced = fence[1].trim();
-    try {
-      JSON.parse(fenced);
-      return fenced;
-    } catch {
-      // Fall through to brace scan.
-    }
-  }
-  const start = value.indexOf("{");
-  const end = value.lastIndexOf("}");
-  if (start >= 0 && end > start) {
-    const candidate = value.slice(start, end + 1);
-    try {
-      JSON.parse(candidate);
-      return candidate;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
-function ensureResultFromCodexOutput(
-  result: PipelineWorkerBaseResult,
-  outputPath: string,
-  resultPath: string,
-): PipelineWorkerBaseResult {
-  if (fs.existsSync(resultPath)) {
-    return result;
-  }
-  let output = result.stdout || "";
-  try {
-    output = `${output}\n${fs.readFileSync(outputPath, "utf8")}`;
-  } catch {
-    // output-last-message is best-effort.
-  }
-  const json = extractJsonObject(output);
-  if (!json) {
-    return result;
-  }
-  fs.mkdirSync(path.dirname(resultPath), { recursive: true });
-  fs.writeFileSync(resultPath, `${json.trim()}\n`, "utf8");
-  return {
-    ...result,
-    stdout: `${result.stdout || ""}\n[fastcar-cli] wrote result.json from Codex final output\n`,
-  };
-}
-
 function getCodexTargetTriple(): string | null {
   if (process.platform !== "win32") {
     return null;
@@ -201,5 +142,8 @@ export function runCodexAdapter(
   ];
   return runNativeCommandAsync(resolveWindowsNativeCodex() || "codex", args, buildRunOptions(options, {
     input: prompt,
-  })).then((result) => ensureResultFromCodexOutput(result, outputPath, options.resultPath));
+  })).then((result) => ensureResultFromWorkerOutput(result, options.resultPath, {
+    extraOutputPaths: [outputPath],
+    label: "Codex final output",
+  }));
 }

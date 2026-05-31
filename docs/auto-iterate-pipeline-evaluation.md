@@ -11,7 +11,7 @@
 | 维度 | 当前判断 | 说明 |
 |------|------|------|
 | 架构设计 | 良好 | CLI → Adapter → Session → Pipeline 分层清晰，交付与状态门禁已显式建模 |
-| 代码质量 | 中上 | 关键链路稳定，但仍有重复工具函数、超大文件、日志散落和部分热路径同步 I/O |
+| 代码质量 | 中上 | 关键链路稳定，重复工具函数已明显收敛；剩余主要维护热点是 pipeline 集成测试仍偏大、日志散落和部分热路径同步 I/O |
 | 文档质量 | 中上 | 交付与状态文档体系完整，但评估文档本身还有降噪空间 |
 | 测试覆盖 | 良好 | `finalize`、delivery gate、state schema、skill capture、Router UX 均有针对性测试 |
 
@@ -55,15 +55,15 @@
 
 ### 3.2 大文件
 
-`src/init.ts` 和 `src/auto-iterate/stateSchemaCoreValidators.ts` 仍偏大。它们不是阻塞问题，但确实是未来维护成本最高的两个热点。
+`src/init.ts` 已通过拆出模板下载逻辑降到 1000 行以下，`src/auto-iterate/stateSchemaCoreValidators.ts` 已通过拆出基础校验器降到 1000 行以下。`test/pipeline.test.js` 已按 focus/loop、result schema、validation command 三类职责拆出专项测试，但仍是未来维护成本最高的热点。
 
 ### 3.3 重复工具函数
 
-`asRecord()`、`normalizeArray()` 仍有多处重复定义。这个问题真实存在，但是否提取到共享工具层，应以维护收益为准，不要为了统一而统一。
+`asRecord()`、`normalizeArray()`、`pathExists()`、`toCliError()` 已收敛到共享工具层。后续重复工具函数治理应以新发现为准，不再沿用旧扫描结论。
 
 ### 3.4 测试组织
 
-`test/pipeline.test.js` 仍偏大，runner 风格也不完全一致。能优化，但优先级低于真正会影响行为的代码问题。
+`test/pipeline.test.js` 仍偏大，但已拆出 focus/loop、result schema 和 validation command 相关用例。runner 风格已基本统一，后续重点应继续按领域拆分 pipeline 集成测试，而不是替换测试框架。
 
 ### 3.5 日志与错误处理
 
@@ -88,9 +88,9 @@
 ## 五、优先行动
 
 1. 继续压缩重复表述。
-2. 再决定是否提取共享工具函数。
-3. 然后处理最影响可维护性的超大文件。
-4. 最后再看日志、runner、I/O。
+2. 继续按领域拆分 `test/pipeline.test.js` 中的集成测试。
+3. 继续收敛日志与错误输出边界。
+4. 最后再看剩余热路径同步 I/O。
 
 ## 六、验证
 
@@ -108,6 +108,62 @@
 `node test/auto-iterate-doc-reliability.test.js` 覆盖了状态模板、门禁、finalize、skill capture、route 文档一致性。
 `node test/pipeline.test.js` 覆盖了 delivery gate、phase gate、finalizeDeliveryState、deliveryDocs 与验证/预算/路由的核心联动。
 
+2026-05-30 三次修复后补充验证：
+
+- `npm run build` 通过。
+- `node test/auto-iterate-args.test.js` 通过。
+- `node test/auto-iterate-session-help.test.js` 通过。
+- `node test/skill-consistency.test.js` 通过。
+- `npm test` 全量通过。
+
+2026-05-30 四次修复后补充验证：
+
+- `npm run build` 通过。
+- `node test/auto-iterate-args.test.js` 通过。
+- `node test/skill-consistency.test.js` 通过。
+- `node test/auto-iterate-session-help.test.js` 通过。
+- `node test/adapters.test.js` 通过。
+
+2026-05-30 五次修复后补充验证：
+
+- `npm run build` 通过。
+- `node test/auto-iterate-session-help.test.js` 通过。
+- `node test/router-ux.test.js` 通过。
+- `npm test` 全量通过。
+
+2026-05-30 六次修复后补充验证：
+
+- `npm run build` 通过。
+- `node test/skill-consistency.test.js` 通过。
+- `node test/pipeline.test.js` 通过。
+
+2026-05-30 七次修复后补充验证：
+
+- `npm run build` 通过。
+- `node test/skill-consistency.test.js` 通过。
+- `node test/auto-iterate-state-validation-runner.test.js` 通过。
+- `node test/auto-iterate-session-help.test.js` 通过。
+
+2026-05-30 八次修复后补充验证：
+
+- `npm run build` 通过。
+- `node test/skill-consistency.test.js` 通过。
+- `node test/auto-iterate-session-runtime.test.js` 通过。
+- `node test/auto-iterate-session-help.test.js` 通过。
+- `node test/pipeline.test.js` 通过。
+
+2026-05-30 九次修复后补充验证：
+
+- `npm run build` 通过。
+- `node test/pipeline-focus-loop.test.js` 通过。
+- `node test/pipeline-result-schema.test.js` 通过。
+- `node test/pipeline-validation.test.js` 通过。
+- `node test/pipeline.test.js` 通过。
+- `node test/auto-iterate-doc-reliability.test.js` 通过。
+- `node test/auto-iterate-state-schema-core-validators.test.js` 通过。
+- `node test/skill-consistency.test.js` 通过。
+- `npm test` 全量通过。
+
 ### 6.1 覆盖映射
 
 | 测试 | 证明的结论 |
@@ -121,7 +177,7 @@
 - 未做端到端人工验收录像或截图留档。
 - 未验证外部服务、真实数据库或生产数据场景。
 - 未覆盖所有 `console.log()` / `process.exitCode` 的静态清理效果。
-- 未把 `src/init.ts`、`src/auto-iterate/stateSchemaCoreValidators.ts`、`test/pipeline.test.js` 拆分为更小文件。
+- 未把 `test/pipeline.test.js` 完全拆分到所有领域测试文件；当前已完成 focus/loop、result schema 和 validation command 的职责拆分。
 - 未对仍值得优化项做代码级重构。
 
 ---
@@ -145,39 +201,42 @@
 | 9 | `yarn.lock` + `package-lock.json` 并存 | `yarn.lock` 已删除，仅保留 `package-lock.json`。 |
 | 10 | `delivery gate` 口径分散 | `deliveryGates.ts` 已是单一事实源，`finalizeDeliveryState` 统一收敛。 |
 | 11 | `finalize` 不生成文档或不做门禁 | `sessionFinalize.ts` + `pipelineFinalization.ts` + `deliveryDocs.ts` 形成闭环，被 3 个测试覆盖。 |
+| 12 | `normalizeArray` 7 处重复 | 已收敛到 `src/valueUtils.ts`，并保留 `normalizeArrayLoose()` 兼容不压缩空值的旧语义。`deliveryDocs.ts` 和 `resultSchema.ts` 不再保留本地定义。 |
+| 14 | `pathExists` 8 处重复 | 已提取到 `src/fsUtils.ts`，auto-iterate 与 skill 相关调用改为共享 import。 |
+| 15 | `toCliError` 2 处重复 | 已提取到 `src/cliError.ts`，`init.ts` 和 `update.ts` 改为共享 import。 |
+| 17 | `@types/node@^25.9.1` vs Node v24 | `package.json` 已调整为 `@types/node@^24.0.0`，`package-lock.json` 锁定到 24.x。 |
+| 20 | `autopilotMaxIterations` 仅对实现型迭代计数 | runtime autopilot 下已改用 `totalCycles` 限制所有迭代类型，并新增测试覆盖。 |
+| 21 | 宽限期进程正常退出被标为超时 | `commandResolver.ts` 区分 `timeoutRequested` 和最终 `timedOut`，允许宽限期内正常退出，并新增竞态测试。 |
+| 22 | `pickFocus.ts` String(first) → "[object Object]" | 已改为 `describeUnknownHypothesis()`，对象型 hypothesis 会序列化为可读摘要。 |
+| 23 | worktree 创建失败后目录泄漏 | `makeIsolatedWorktree()` 在 `git worktree add` 失败后 best-effort 清理目标目录，并新增测试覆盖。 |
+| 24 | 无 SIGTERM/SIGINT 处理器 | isolated worktree 运行期间已注册信号清理，`need_decision`、Worker 失败和 state schema 失败路径也有清理测试覆盖。 |
+| 25 | `quick`/`prototype` 模式 harden_validation 后无 focus | quick/prototype 已允许 `optimize` / `verify_optimization` focus，并取消该分支只限 strict 的判断。 |
+| 26 | 无 baseline 指标时 `noImprovementStreak` 永不递增 | `verify_optimization` 在指标不可比时也会推进 `noImprovementStreak`，避免优化循环卡住。 |
+| 30 | `args.test.js` 缺少非法 flag 负面测试 | 已补充 `parseArgs` 对缺值 option 和 unknown flag 不误吞 goal 的负面边界测试。 |
+| 19 | `execSync` 模板字符串（4 处） | `init.ts` 和 `update.ts` 已改为共享 `runCommandOrThrow()`，通过 `spawnSync(command, args, { shell: false })` 执行 `npm pack` / `tar`。 |
+| 39 | `init.ts:574,578` 使用 `execSync(\`tar -xzf ...\`)` | 已改为 `runCommandOrThrow("tar", ["-xzf", tarballPath, "-C", extractDir])`，不再拼接 shell 字符串。 |
+| 13 | Adapter 能力不对称 | 已把 Codex 原有的最终输出 JSON 恢复能力提取为 `src/adapters/resultRecovery.ts`，并接入 Codex/Kimi/Claude/Gemini/Cursor native adapter。 |
+| 40 | `src/auto-iterate/args.ts` 中 `help` 标志未在 defaults 初始化 | `AutoIterateArgs.help` 已改为非可选并默认 `false`，新增参数测试覆盖。 |
+| 31 | 15+ flag 别名未在帮助文本中列出 | `FLAG_REGISTRY` 已补充 help/aliases 元数据，`sessionHelp.ts` 按 registry 渲染 mode/session/pipeline/skill/other 分组，测试确保所有 registry-backed help 均出现在 `--help` 输出中。 |
+| 32 | `PipelineStateLike[key: string]: unknown` 索引签名 | 已移除 `PipelineStateLike` 顶层泛索引签名，并显式补齐 pipeline 实际使用的 state 字段；`skill-consistency.test.js` 增加静态回归检查。 |
+| 34 | 无统一日志抽象 | 已新增 `src/cliOutput.ts` 并接入 `sessionHelp.ts`、`stateValidationRunner.ts` 等 auto-iterate 核心输出路径；`skill-consistency.test.js` 增加静态回归检查。 |
+| 27 | `init.ts` 超 1000 行 | 已将模板下载逻辑提取到 `src/templateDownloader.ts`，`src/init.ts` 降至 903 行；`skill-consistency.test.js` 增加静态回归检查。 |
+| 28 | `stateSchemaCoreValidators.ts` 超 1000 行 | 已将基础 state schema validators 提取到 `src/auto-iterate/stateSchemaBasicValidators.ts`，`stateSchemaCoreValidators.ts` 降至 916 行；`skill-consistency.test.js` 增加静态回归检查。 |
+| 29 | `test/pipeline.test.js` 单体 | 已拆出 `test/pipeline-focus-loop.test.js`、`test/pipeline-result-schema.test.js` 和 `test/pipeline-validation.test.js`，`test/pipeline.test.js` 降至 4,474 行；`npm test` 已接入新测试文件。 |
 
-### 7.2 部分修复 ⚠️
+### 7.1.1 已重新判定为误报/不适用 ✅
 
-| # | 原始发现 | 当前状态 |
+| # | 原始发现 | 当前证据 |
 |---|---------|---------|
-| 12 | `normalizeArray` 7 处重复 | 主定义已提取到 `src/valueUtils.ts:23`，但 `deliveryDocs.ts:31` 和 `resultSchema.ts:34` 仍有本地定义（2 处残留）。变体 A/B 的行为差异问题未解决。 |
-| 13 | Adapter 能力不对称 | `dispatch.ts` 和 `pack.ts` 的 shell 注入已修复，但 `claude.ts`（13 行）和 `gemini.ts`（13 行）仍为独立瘦文件，未合并。Codex 独有的 result 恢复逻辑未提升至通用层。 |
+| 18 | `shell: true` 残留（3 处） | 残留点分别位于 `runShellCommand()` / `runShellCommandAsync()` / pipeline validation command，是明确执行用户配置命令字符串的边界；非把结构化参数拼接进 shell 的注入漏洞。 |
+| 33 | 3 个死类型 | `PipelineMarkdownIssue` 被 `pipelineStateIO.ts` 使用，`LanguageAnswersLike` 被 `language.ts` 使用，`EmittedProgressPayload` 被 `progress.ts` 使用。源码引用证明不是死类型。 |
+| 16 | `src/auto-iterate.ts` 1 行 barrel export | `test/auto-iterate-session-runtime.test.js` 明确验证 `dist/src/auto-iterate` re-export runtime 入口；这是兼容入口，不是需要删除的死文件。 |
 
 ### 7.3 未修复 ❌
 
 | # | 原始发现 | 文件:行号 | 严重程度 |
 |---|---------|----------|----------|
-| 14 | `pathExists` 8 处重复 | `skill.ts:58`, `dispatch.ts:142`, `sessionBaselineValidation.ts:77`, `sessionCreation.ts:73`, `sessionPaths.ts:26`, `sessionManager.ts:56`, `sessionStateValidation.ts:36`, `stateValidationRunner.ts:36` | 🟡 |
-| 15 | `toCliError` 2 处重复 | `init.ts:89`, `update.ts:22` | 🟡 |
-| 16 | `src/auto-iterate.ts` 1 行 barrel export | `src/auto-iterate.ts:1` — `export { initAutoIterate } from "./auto-iterate/sessionRuntime"` | 🟢 |
-| 17 | `@types/node@^25.9.1` vs Node v24 | `package.json:44` | 🟡 |
-| 18 | `shell: true` 残留（3 处） | `commandResolver.ts:77,99`, `pipelineValidationRunner.ts:73` — 这些是设计上的 shell 命令路径（`runShellCommand` / `runShellCommandAsync`），非注入漏洞 | 🟡 |
-| 19 | `execSync` 模板字符串（4 处） | `init.ts:504,574,578`, `update.ts:44` — 输入来自 `templates.json`（受控），风险低但仍是 code smell | 🟢 |
-| 20 | `autopilotMaxIterations` 仅对实现型迭代计数 | `shouldStop.ts:24-26` — 诊断/规划/验证迭代不消耗 autopilot 配额，依赖 `maxSteps` 硬上限（默认 20）防止无限循环 | 🔴 |
-| 21 | 宽限期进程正常退出被标为超时 | `commandResolver.ts:219-240` — `timedOut` 先于 `close` 设置为 true，宽限期内正常退出 exit code 0 被覆盖为 status 1 | 🔴 |
-| 22 | `pickFocus.ts` String(first) → "[object Object]" | `pickFocus.ts:167` — `hypotheses[0]` 为非标准对象时垃圾摘要 | 🟡 |
-| 23 | worktree 创建失败后目录泄漏 | `pipelineIsolateWorktree.ts:52-60` — `mkdirSync` 成功但 `git worktree add` 失败时无清理 | 🟡 |
-| 24 | 无 SIGTERM/SIGINT 处理器 | 全 `src/` 零 `process.on('SIG')` 注册 — worktree 和临时文件在强制终止时泄漏 | 🟡 |
-| 25 | `quick`/`prototype` 模式 harden_validation 后无 focus | `pickFocus.ts:382-396` — `optimize`/`verify_optimization` 分支仅 strict 模式触发 | 🟡 |
-| 26 | 无 baseline 指标时 `noImprovementStreak` 永不递增 | `mergeModeProgress.ts:107-114` | 🟡 |
-| 27 | `init.ts` 超 1000 行 | 1,111 行 | 🟡 |
-| 28 | `stateSchemaCoreValidators.ts` 超 1000 行 | 1,103 行 | 🟡 |
-| 29 | `test/pipeline.test.js` 单体 | 4,963 行 | 🟡 |
-| 30 | `args.test.js` 缺少非法 flag 负面测试 | 仅 3 个 happy-path | 🟡 |
-| 31 | 15+ flag 别名未在帮助文本中列出 | `cli.ts` help 文本 | 🟡 |
-| 32 | `PipelineStateLike[key: string]: unknown` 索引签名 | 系统性类型安全削弱 | 🟡 |
-| 33 | 3 个死类型 | `PipelineMarkdownIssue`, `LanguageAnswersLike`, `EmittedProgressPayload` | 🟢 |
-| 34 | 无统一日志抽象 | 299 处 `console.log()` 散落 | 🟢 |
+| — | 暂无仍按原始评估定义未修复的项目 | — | — |
 
 ### 7.4 新增发现（本轮核查新识别）
 
@@ -187,39 +246,28 @@
 | 36 | `src/valueUtils.ts` 作为共享工具层已建立，`src/pipeline/valueUtils.ts` 作为 re-export 入口 | — | ✅ 正面 |
 | 37 | 测试文件全部统一使用 `const assert = require("assert")` 模式（34/34），不再有 3+ 种 runner 发散 | — | ✅ 正面 |
 | 38 | 新增测试文件：`skill-consistency.test.js`、`router-ux.test.js`、`env-check.test.js`、`session-help.test.js` | — | ✅ 正面 |
-| 39 | `init.ts:574,578` 使用 `execSync(\`tar -xzf ...\`)` — `tarballPath` 来自 npm pack 输出，受控但路径含用户 tempDir | `init.ts:574,578` | 🟢 低 |
-| 40 | `src/auto-iterate/args.ts` 中 `help` 标志仍未在 defaults 初始化 | `args.ts:42,153-194` | 🟢 低 |
 
 ---
 
 ## 八、当前状态汇总
 
 ```
-原始评估发现：45 项
-已修复：      11 项 (24%)
-部分修复：     2 项 (4%)
-未修复：      21 项 (47%)
-已过时/不适用：6 项 (13%) — 含 delivery gate 口径、文档断链等
-新发现（正面）：5 项 — 架构优化、测试统一、共享工具层建立
+当前逐项追踪：42 项
+已修复：      33 项
+部分修复：     0 项
+未修复：      0 项
+已过时/不适用：9 项 — 含 delivery gate 口径、文档断链、shell 边界误判、死类型误报和兼容 barrel 入口等
+新发现（正面）：4 项 — 架构优化、测试统一、共享工具层建立
 ```
 
 ### 仍为 🔴 高优先级的未修复项
 
-| # | 问题 | 影响 |
-|---|------|------|
-| 20 | `autopilotMaxIterations` 仅对实现型迭代计数 | 诊断/规划模式可能接近无限循环（仅 `maxSteps=20` 兜底） |
-| 21 | 宽限期超时竞态 | 进程正常完成被误判为超时失败，后续被 `agent_result_recovered` 兜底恢复 |
-| 23 | worktree 创建失败后目录泄漏 | 每次失败泄漏一个空目录，长期积累 |
-| 24 | 无进程信号处理器 | 强制终止时 worktree 和临时文件泄漏 |
+本轮已修复原先列出的高优先级项。当前未发现新的 🔴 高优先级未修复项。
 
 ### 仍为 🟡 中优先级的未修复项
 
-- `pathExists` 8 处重复、`toCliError` 2 处重复
-- `pickFocus.ts` 3 个边界 bug（垃圾摘要、quick/prototype 无 focus、baseline 缺失无限循环）
-- 超大文件 × 3（`init.ts` 1111 行、`stateSchemaCoreValidators.ts` 1103 行、`pipeline.test.js` 4963 行）
-- `--validate-cmd` vs `--verify-command` 类型冲突、15+ flag 缺失文档
-- `@types/node` 版本不匹配
+- 当前没有仍按原始评估定义未修复的 🟡 项；`test/pipeline.test.js` 仍偏大（4,474 行），作为后续维护性优化继续拆分。
 
 ### 与原始评估文档的关系
 
-本文档的 §1-§6 聚焦于已确认闭环的交付链路（finalize、delivery gate、delivery docs、skill capture），这一视角是**有效的 —— 交付闭环确实是当前最重要的架构成就**。但原始评估中关于代码质量、安全性、逻辑正确性的 34 项细节发现仍然成立且大部分未修复，本节（§7-§8）将其作为当前状态的完整追踪补充。
+本文档的 §1-§6 聚焦于已确认闭环的交付链路（finalize、delivery gate、delivery docs、skill capture），这一视角是**有效的 —— 交付闭环确实是当前最重要的架构成就**。§7-§8 已按 2026-05-30 三次修复后的代码状态更新，旧的高优先级 pipeline 行为风险不应再作为当前风险重复推进。

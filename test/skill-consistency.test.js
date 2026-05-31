@@ -8,6 +8,18 @@ function read(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
 }
 
+function walkFiles(dir, predicate, files = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      walkFiles(fullPath, predicate, files);
+    } else if (predicate(fullPath)) {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
+
 const tests = [];
 
 function test(name, fn) {
@@ -116,6 +128,106 @@ test("AGENTS.md 声明 Router 与 Worker 分工", () => {
     assert.ok(agents.includes("不得要求用户手动运行"), file);
     assert.ok(agents.includes("不得修改 `.agent-state/auto-iterate/**` 中除本轮指定 `result.json` 以外的文件"), file);
     assert.ok(agents.includes("CLI 是 state merge、预算推进、验证命令、write guard、delivery gate 和 `need_decision` resume 的唯一权威执行者"), file);
+  }
+});
+
+test("重复基础 helper 已集中到共享模块", () => {
+  const sourceFiles = walkFiles(path.join(repoRoot, "src"), (filePath) => filePath.endsWith(".ts"));
+  const pathExistsDefinitions = [];
+  const toCliErrorDefinitions = [];
+  const normalizeArrayDefinitions = [];
+
+  for (const filePath of sourceFiles) {
+    const relative = path.relative(repoRoot, filePath).replace(/\\/g, "/");
+    const content = fs.readFileSync(filePath, "utf8");
+    if (/function\s+pathExists\s*\(/.test(content)) {
+      pathExistsDefinitions.push(relative);
+    }
+    if (/function\s+toCliError\s*\(/.test(content)) {
+      toCliErrorDefinitions.push(relative);
+    }
+    if (/function\s+normalizeArray\s*\(/.test(content)) {
+      normalizeArrayDefinitions.push(relative);
+    }
+  }
+
+  assert.deepStrictEqual(pathExistsDefinitions, ["src/fsUtils.ts"]);
+  assert.deepStrictEqual(toCliErrorDefinitions, ["src/cliError.ts"]);
+  assert.deepStrictEqual(normalizeArrayDefinitions, ["src/valueUtils.ts"]);
+});
+
+test("模板下载命令不使用 shell 拼接执行", () => {
+  const init = read("src/init.ts");
+  const update = read("src/update.ts");
+  const commandUtils = read("src/commandUtils.ts");
+
+  assert.ok(!init.includes("execSync("));
+  assert.ok(!update.includes("execSync("));
+  assert.ok(commandUtils.includes("spawnSync(command, args"));
+  assert.ok(commandUtils.includes("shell: false"));
+});
+
+test("init 模板下载逻辑已拆分到独立模块", () => {
+  const init = read("src/init.ts");
+  const downloader = read("src/templateDownloader.ts");
+
+  assert.ok(init.includes('from "./templateDownloader"'));
+  assert.ok(!init.includes("async function downloadTemplate"));
+  assert.ok(downloader.includes("export async function downloadTemplate"));
+});
+
+test("基础 state schema validators 已拆分到独立模块", () => {
+  const core = read("src/auto-iterate/stateSchemaCoreValidators.ts");
+  const basic = read("src/auto-iterate/stateSchemaBasicValidators.ts");
+
+  assert.ok(core.includes('from "./stateSchemaBasicValidators"'));
+  assert.ok(!core.includes("function validateLanguageModel"));
+  assert.ok(basic.includes("export function validateLanguageModel"));
+  assert.ok(basic.includes("export function validateRequirementsModel"));
+});
+
+test("pipeline 测试已按 focus、schema 和 validation 职责拆分", () => {
+  const pipeline = read("test/pipeline.test.js");
+  const focusLoop = read("test/pipeline-focus-loop.test.js");
+  const resultSchema = read("test/pipeline-result-schema.test.js");
+  const validation = read("test/pipeline-validation.test.js");
+  const packageJson = read("package.json");
+
+  assert.ok(focusLoop.includes("../dist/src/pipeline/pickFocus"));
+  assert.ok(focusLoop.includes("../dist/src/pipeline/shouldStop"));
+  assert.ok(focusLoop.includes("../dist/src/pipeline/loopPolicy"));
+  assert.ok(resultSchema.includes("../dist/src/pipeline/resultSchema"));
+  assert.ok(validation.includes("runValidationCommands"));
+  assert.ok(!pipeline.includes("loopPolicy 集中解析 once/plan/autopilot/maxSteps 语义"));
+  assert.ok(!pipeline.includes("pickFocus 支持 fix/harden/optimize 和 mode-specific focus"));
+  assert.ok(!pipeline.includes("normalizeRelativePath 统一过滤非法路径"));
+  assert.ok(!pipeline.includes("runValidationCommands 依次执行全部命令并在失败时停止"));
+  assert.ok(packageJson.includes("node test/pipeline-focus-loop.test.js"));
+  assert.ok(packageJson.includes("node test/pipeline-result-schema.test.js"));
+  assert.ok(packageJson.includes("node test/pipeline-validation.test.js"));
+});
+
+test("PipelineStateLike 不使用顶层泛索引签名", () => {
+  const types = read("src/pipeline/types.ts");
+  const start = types.indexOf("export interface PipelineStateLike {");
+  const end = types.indexOf("\nexport interface ShouldStopContext", start);
+  assert.ok(start >= 0 && end > start, "PipelineStateLike interface should exist");
+  const body = types.slice(start, end);
+  assert.ok(!/\n\s{2}\[key: string\]: unknown;/.test(body), "PipelineStateLike should model known state fields explicitly");
+});
+
+test("auto-iterate 核心输出路径使用共享 CLI 输出抽象", () => {
+  const cliOutput = read("src/cliOutput.ts");
+  assert.ok(cliOutput.includes("export function writeLine"));
+  assert.ok(cliOutput.includes("export function setExitCode"));
+
+  for (const file of [
+    "src/auto-iterate/sessionHelp.ts",
+    "src/auto-iterate/stateValidationRunner.ts",
+  ]) {
+    const source = read(file);
+    assert.ok(source.includes("../cliOutput"), `${file} should import shared CLI output helpers`);
+    assert.ok(!source.includes("console.log"), `${file} should not write directly to console.log`);
   }
 });
 

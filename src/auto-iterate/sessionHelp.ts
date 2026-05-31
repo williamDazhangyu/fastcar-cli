@@ -1,7 +1,23 @@
 import { DISPATCH_AGENT_CONFIGS } from "./dispatch";
+import { listFlagHelpByKind } from "../pipeline/flags";
+import { writeLine } from "../cliOutput";
+
+function renderFlagLines(kind: Parameters<typeof listFlagHelpByKind>[0]): string {
+  return listFlagHelpByKind(kind)
+    .map((line) => `  ${line}`)
+    .join("\n");
+}
 
 export function buildAutoIterateHelp(): string {
   const supportedAgents = Object.keys(DISPATCH_AGENT_CONFIGS).join("|");
+  const modeFlags = renderFlagLines("mode").replace(/\n/g, " |").replace(/ \|  /g, " | ");
+  const sessionFlags = renderFlagLines("session");
+  const pipelineFlags = renderFlagLines("pipeline");
+  const skillFlags = renderFlagLines("skill");
+  const inputFlags = renderFlagLines("input");
+  const legacyFlags = renderFlagLines("legacy");
+  const compatFlags = renderFlagLines("compat");
+  const otherFlags = renderFlagLines("other");
   return `Usage: fastcar-cli auto-iterate [options]
 
 Default Router flow:
@@ -12,51 +28,29 @@ Manual/fallback flow:
   fastcar-cli auto-iterate --quick --goal "<goal>" --session <session> --yes --no-run
 
 Modes:
-  --strict | --quick | --diagnose | --verify | --plan-only | --optimize | --prototype
+${modeFlags}
 
 Session:
-  --session <name>
-  --list
-  --switch <name>
-  --resume <name>
-  --validate-state [session|state.md|state.json]
-  --strict-state
-  --finalize [session]
+${sessionFlags}
 
 Dispatch:
-  --dispatch <session> --agent <${supportedAgents}> --task <text> --files <glob[,glob]> [--verify-command <cmd>] [--timeout <seconds>] [--dry-run]
+  --dispatch <session> --agent <${supportedAgents}> --task <text> --files <glob[,glob]> [--verify-command|--verify-cmd <cmd>] [--timeout <seconds>] [--dry-run]
 
 Pipeline:
   --run --once [--json-progress]
-  --autopilot
-  --check
-  --step-timeout <seconds>
-  --inactivity-timeout <seconds>
-  --validation-timeout <seconds>
-  --progress-interval <seconds>
-  --max-steps <n>
-  --validate-cmd <cmd>
-  --focus <type:id>
-  --scope <glob[,glob]>
-  --answer <id>
-  --isolate
-  --allow-modify
-  --no-validate
-  --no-run  force manual/fallback generation; do not enter Worker pipeline
+${pipelineFlags}
 
 Skill Capture:
-  --capture-skills <session> [--yes]
+${skillFlags}
 
 Other:
-  --goal <text>
-  --from <file>
-  --max-iterations <n>
-  --autopilot-max-iterations <n>
-  --yes  non-interactive generation for manual/fallback; --run routing does not need it
-  --examples [keyword]
+${inputFlags}
+${legacyFlags}
+${compatFlags}
+${otherFlags}
 `;
 }
 
 export function showAutoIterateHelp(): void {
-  console.log(buildAutoIterateHelp());
+  writeLine(buildAutoIterateHelp());
 }

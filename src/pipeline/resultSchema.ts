@@ -5,6 +5,7 @@
   WorkerIterationResult,
   WorkerResultStatus,
 } from "./types";
+import { normalizeArrayLoose as normalizeArray } from "./valueUtils";
 
 const VALID_STATUSES: ReadonlySet<WorkerResultStatus> = new Set(["completed", "failed", "blocked", "need_decision", "no_progress"]);
 const VALID_REQUIREMENT_STATUSES: ReadonlySet<RequirementStatus> = new Set(["pending", "implemented", "passed", "blocked", "not_verified"]);
@@ -26,17 +27,6 @@ const SENSITIVE_PATTERNS = [
     replacement: "[REDACTED_EMAIL]",
   },
 ];
-
-/**
- * @param {unknown} value
- * @returns {unknown[]}
- */
-function normalizeArray(value: unknown): unknown[] {
-  if (!value) {
-    return [];
-  }
-  return Array.isArray(value) ? value : [value];
-}
 
 /**
  * @param {unknown} value

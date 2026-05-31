@@ -1,11 +1,11 @@
 import path from "path";
-import { promises as fsPromises } from "fs";
 import {
   getSessionPaths,
   getStatePaths,
   toRelative,
 } from "./sessionPaths";
 import { readJsonFile } from "./stateIO";
+import { pathExists } from "../fsUtils";
 import {
   addError,
   normalizeRelativePathForCompare,
@@ -31,15 +31,6 @@ export interface StateFileValidationTarget {
   currentPath: string;
   session: string | null;
   targetType: "current" | "path" | "session";
-}
-
-async function pathExists(filePath: string): Promise<boolean> {
-  try {
-    await fsPromises.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export function compareCurrentPointerToExpected(

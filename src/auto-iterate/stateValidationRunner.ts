@@ -4,6 +4,8 @@ import { readJsonFileWithError } from "./stateIO";
 import { resolveStateFileForValidation } from "./sessionStateValidation";
 import { validateSessionStateBaseline } from "./sessionBaselineValidation";
 import { validateSubAgentDispatchState } from "./subAgentDispatchValidation";
+import { pathExists } from "../fsUtils";
+import { setExitCode, writeLine } from "../cliOutput";
 
 type ValidationIssue = {
   severity: "error" | "warning";
@@ -33,15 +35,6 @@ export type ValidateStateJsonModel = (
   expected?: { session?: string | null },
 ) => ValidationIssue[];
 
-async function pathExists(filePath: string): Promise<boolean> {
-  try {
-    await fsPromises.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function applyStrictWarningEscalation(issues: ValidationIssue[]): void {
   issues.forEach((issue) => {
     if (issue.severity === "warning" &&
@@ -67,7 +60,7 @@ export async function validateState(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!silent) {
-      console.log(`❌ ${message}`);
+      writeLine(`❌ ${message}`);
     }
     return {
       ok: false,
@@ -85,7 +78,7 @@ export async function validateState(
       ? `${message} (${error.message})`
       : message;
     if (!silent) {
-      console.log(`❌ ${message}`);
+      writeLine(`❌ ${message}`);
     }
     return {
       ok: false,
@@ -115,45 +108,45 @@ export async function validateState(
     applyStrictWarningEscalation(issues);
   }
   if (!silent) {
-    console.log(`State: ${toRelative(stateInfo.stateFile)}`);
-    console.log(`State JSON: ${toRelative(stateInfo.stateJsonFile)}`);
+    writeLine(`State: ${toRelative(stateInfo.stateFile)}`);
+    writeLine(`State JSON: ${toRelative(stateInfo.stateJsonFile)}`);
   }
   if (issues.length === 0) {
     if (!silent) {
-      console.log("✅ state.json 强约束校验通过");
-      console.log("✅ auto-iterate session state 校验通过");
-      console.log("✅ sub-agent state 校验通过");
+      writeLine("✅ state.json 强约束校验通过");
+      writeLine("✅ auto-iterate session state 校验通过");
+      writeLine("✅ sub-agent state 校验通过");
     }
     return { ok: true, degraded: false, issues: [] };
   }
 
   const hasError = issues.some((issue) => issue.severity === "error");
   if (!silent) {
-    console.log(hasError ? "❌ auto-iterate session state 校验发现错误:" : "⚠️ auto-iterate session state 校验发现警告:");
+    writeLine(hasError ? "❌ auto-iterate session state 校验发现错误:" : "⚠️ auto-iterate session state 校验发现警告:");
     if (stateJsonIssues.length === 0) {
-      console.log("✅ state.json 强约束校验通过");
+      writeLine("✅ state.json 强约束校验通过");
     } else {
       const hasStateJsonError = stateJsonIssues.some((issue) => issue.severity === "error");
-      console.log(hasStateJsonError ? "❌ state.json 强约束校验发现错误:" : "⚠️ state.json 强约束校验发现警告:");
+      writeLine(hasStateJsonError ? "❌ state.json 强约束校验发现错误:" : "⚠️ state.json 强约束校验发现警告:");
     }
     if (subAgentValidation.issues.length === 0) {
-      console.log("✅ sub-agent state 校验通过");
+      writeLine("✅ sub-agent state 校验通过");
     } else {
       const hasSubAgentError = subAgentValidation.issues.some((issue) => issue.severity === "error");
-      console.log(hasSubAgentError ? "❌ sub-agent state 校验发现错误:" : "⚠️ sub-agent state 校验发现警告:");
+      writeLine(hasSubAgentError ? "❌ sub-agent state 校验发现错误:" : "⚠️ sub-agent state 校验发现警告:");
     }
     issues.forEach((issue) => {
       const prefix = issue.severity === "error" ? "ERROR" : "WARN";
-      console.log(`- ${prefix}: ${issue.message}`);
+      writeLine(`- ${prefix}: ${issue.message}`);
     });
-    console.log(
+    writeLine(
       hasError
         ? "下一步: 先修正 state.json / state.md 中的 session 指针、预算/看门狗或 Sub-Agent Dispatch / Decisions，再重新运行 --validate-state。"
         : "下一步: 建议在下一轮 dispatch、迭代或交付前同步这些 session 状态字段。",
     );
   }
   if (hasError && !silent) {
-    process.exitCode = 1;
+    setExitCode(1);
   }
   return {
     ok: !hasError,

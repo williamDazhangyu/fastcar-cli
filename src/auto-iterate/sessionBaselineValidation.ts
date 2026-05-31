@@ -1,6 +1,6 @@
 import path from "path";
-import { promises as fsPromises } from "fs";
 import { getSessionPaths, toRelative } from "./sessionPaths";
+import { pathExists } from "../fsUtils";
 import {
   addError,
   addWarning,
@@ -73,15 +73,6 @@ export const REQUIRED_STATE_SECTIONS = [
   "## Context Handoff Summary / 上下文交接摘要",
   "## Resume Prompt / 恢复提示",
 ];
-
-async function pathExists(filePath: string): Promise<boolean> {
-  try {
-    await fsPromises.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function isPendingCleanupValue(value: unknown): boolean {
   return /pending|待|未|需要|todo/i.test(String(value || ""));

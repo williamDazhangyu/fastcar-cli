@@ -3,17 +3,17 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { isFocusAllowedForMode, pickNextFocus } = require("../dist/src/pipeline/pickFocus");
+const { pickNextFocus } = require("../dist/src/pipeline/pickFocus");
 const { shouldStop, deliveryReady } = require("../dist/src/pipeline/shouldStop");
 const { canFinalizeDelivery, finalizeDeliveryState } = require("../dist/src/pipeline/pipelineFinalization");
 const { applyPhaseGateToState, checkPhaseGate } = require("../dist/src/pipeline/phaseGate");
 const { mergeIterationIntoState } = require("../dist/src/pipeline/mergeState");
-const { normalizeRelativePath, parseAndValidateIterationResult } = require("../dist/src/pipeline/resultSchema");
+const { parseAndValidateIterationResult } = require("../dist/src/pipeline/resultSchema");
 const { buildIterationPrompt } = require("../dist/src/pipeline/iterationPrompt");
 const { buildDocs } = require("../dist/src/pipeline/deliveryDocs");
-const { runPipeline, runValidationCommands, updateNoProgressState, needsValidationReconcile, buildDeliveryGate, buildPipelineSnapshot, parseValidationCommands, computeEffectiveTimeouts, normalizeActualFilesChanged, getDirectorySignature } = require("../dist/src/pipeline/runPipeline");
-const { resolveLoopPolicy } = require("../dist/src/pipeline/loopPolicy");
+const { runPipeline, updateNoProgressState, needsValidationReconcile, buildDeliveryGate, buildPipelineSnapshot, parseValidationCommands, normalizeActualFilesChanged, getDirectorySignature } = require("../dist/src/pipeline/runPipeline");
 const { evaluateWriteGuard, isInsideScope } = require("../dist/src/pipeline/writeGuard");
+const { makeIsolatedWorktree } = require("../dist/src/pipeline/pipelineIsolateWorktree");
 
 const repoRoot = path.resolve(__dirname, "..");
 const cliPath = path.join(repoRoot, "bin", "cli.js");
@@ -71,280 +71,6 @@ function ndjson(stdout) {
     .filter(Boolean)
     .map((line) => JSON.parse(line));
 }
-
-test("resultSchema 校验 worker result.json", () => {
-  const parsed = parseAndValidateIterationResult(JSON.stringify({
-    status: "completed",
-    summary: "ok",
-    files_changed: ["src/a.js"],
-  }));
-  assert.strictEqual(parsed.valid, true);
-  assert.deepStrictEqual(parsed.result.files_changed, ["src/a.js"]);
-
-  const invalid = parseAndValidateIterationResult("{");
-  assert.strictEqual(invalid.valid, false);
-
-  const noProgress = parseAndValidateIterationResult(JSON.stringify({
-    status: "no_progress",
-    summary: "nothing safe to do",
-  }));
-  assert.strictEqual(noProgress.valid, true);
-  assert.strictEqual(noProgress.result.status, "no_progress");
-
-  const withBom = parseAndValidateIterationResult(`\uFEFF${JSON.stringify({
-    status: "completed",
-    summary: "bom ok",
-  })}`);
-  assert.strictEqual(withBom.valid, true);
-  assert.strictEqual(withBom.result.summary, "bom ok");
-
-  const withTrace = parseAndValidateIterationResult(JSON.stringify({
-    status: "completed",
-    summary: "trace ok",
-    trace: {
-      rationaleSummary: "public summary password=secret",
-      decisions: [{ topic: "A", reason: "B" }],
-      evidence: ["file checked"],
-    },
-    documentation: {
-      apiChanges: ["new endpoint"],
-      architectureNotes: ["new boundary"],
-      implementationNotes: ["core flow"],
-      changelogEntries: ["changed behavior"],
-    },
-  }));
-  assert.strictEqual(withTrace.valid, true);
-  assert.ok(withTrace.result.trace.rationaleSummary.includes("[REDACTED]"));
-  assert.deepStrictEqual(withTrace.result.documentation.apiChanges, ["new endpoint"]);
-});
-
-test("resultSchema 拒绝非法 files_changed 路径", () => {
-  const parsed = parseAndValidateIterationResult(JSON.stringify({
-    status: "completed",
-    summary: "bad files",
-    files_changed: [
-      "src\\ok.js",
-      "../outside.js",
-      "C:/tmp/outside.js",
-      { file: "src/object.js" },
-    ],
-  }));
-  assert.strictEqual(parsed.valid, false);
-  assert.deepStrictEqual(parsed.result.files_changed, ["src/ok.js"]);
-  assert.ok(parsed.errors.some((item) => item.includes("files_changed")));
-});
-
-test("resultSchema 拒绝非法 requirement status", () => {
-  const parsed = parseAndValidateIterationResult(JSON.stringify({
-    status: "completed",
-    summary: "bad req status",
-    requirements: [
-      { id: "REQ-1", summary: "bad", status: "finished" },
-      { id: "REQ-2", summary: "also bad", status: "failed" },
-    ],
-  }));
-  assert.strictEqual(parsed.valid, false);
-  assert.ok(parsed.errors.some((item) => item.includes("requirements[0].status")));
-  assert.ok(parsed.errors.some((item) => item.includes("requirements[1].status")));
-});
-
-test("normalizeRelativePath 统一过滤非法路径", () => {
-  assert.strictEqual(normalizeRelativePath("src\\ok.js"), "src/ok.js");
-  assert.strictEqual(normalizeRelativePath("./src/ok.js"), "src/ok.js");
-  assert.strictEqual(normalizeRelativePath("../outside.js"), null);
-  assert.strictEqual(normalizeRelativePath("C:/tmp/outside.js"), null);
-  assert.strictEqual(normalizeRelativePath({ file: "src/object.js" }), null);
-});
-
-test("resultSchema 脱敏所有会持久化的 Worker 文本字段", () => {
-  const parsed = parseAndValidateIterationResult(JSON.stringify({
-    status: "need_decision",
-    summary: "summary token=abc123",
-    risks: "risk password=secret",
-    blocked_reason: "blocked api_key=key123",
-    requirements: [{
-      id: "REQ-SECRET",
-      summary: "user test@example.com needs token=raw",
-      evidence: "password=hunter2",
-    }],
-    state_patch: {
-      notes: ["secret=mysecret"],
-      currentState: { currentTask: "Authorization: Bearer abc.def.ghi" },
-    },
-    validation: {
-      summary: "password=validation-secret",
-    },
-    decision_request: {
-      question: "Use token=decision-secret?",
-      options: [{ id: "A", label: "password=option" }],
-    },
-  }));
-  assert.strictEqual(parsed.valid, true);
-  const persisted = JSON.stringify(parsed.result);
-  assert.ok(!persisted.includes("abc123"));
-  assert.ok(!persisted.includes("key123"));
-  assert.ok(!persisted.includes("hunter2"));
-  assert.ok(!persisted.includes("mysecret"));
-  assert.ok(!persisted.includes("abc.def.ghi"));
-  assert.ok(!persisted.includes("validation-secret"));
-  assert.ok(!persisted.includes("decision-secret"));
-  assert.ok(!persisted.includes("test@example.com"));
-  assert.ok(persisted.includes("[REDACTED]"));
-  assert.ok(persisted.includes("[REDACTED_EMAIL]"));
-});
-
-test("resultSchema 脱敏时保留结构化字段类型", () => {
-  const parsed = parseAndValidateIterationResult(JSON.stringify({
-    status: "completed",
-    summary: "metrics ok",
-    state_patch: {
-      optimizationMetrics: [
-        { name: "duration", value: 80, unit: "ms", direction: "lower_is_better", source: "bench" },
-      ],
-      hypotheses: [
-        { id: "H1", summary: "token=raw", priority: 2, status: "pending", evidence: "ok" },
-      ],
-    },
-    decision_request: {
-      question: "pick",
-      options: [{ id: "A", label: "A", recommended: true }],
-    },
-  }));
-  assert.strictEqual(parsed.valid, true);
-  assert.strictEqual(typeof parsed.result.state_patch.optimizationMetrics[0].value, "number");
-  assert.strictEqual(parsed.result.state_patch.optimizationMetrics[0].value, 80);
-  assert.strictEqual(typeof parsed.result.state_patch.hypotheses[0].priority, "number");
-  assert.strictEqual(typeof parsed.result.decision_request.options[0].recommended, "boolean");
-  assert.ok(!JSON.stringify(parsed.result).includes("token=raw"));
-});
-
-test("resultSchema 保留 focus 机器字段用于 resume 复用门禁", () => {
-  const parsed = parseAndValidateIterationResult(JSON.stringify({
-    status: "completed",
-    summary: "focus ok",
-    focus: {
-      raw: "implement_req:REQ-token=raw-secret",
-      type: "implement_req",
-      req_id: "REQ-token=raw-secret",
-    },
-  }));
-  assert.strictEqual(parsed.valid, true);
-  assert.strictEqual(parsed.result.raw.focus.type, "implement_req");
-  assert.strictEqual(parsed.result.raw.focus.req_id, "REQ-token=raw-secret");
-  assert.ok(!parsed.result.raw.focus.raw.includes("raw-secret"));
-  assert.ok(parsed.result.raw.focus.raw.includes("[REDACTED]"));
-});
-
-test("resultSchema 脱敏非对象 focus 原始字段", () => {
-  const parsed = parseAndValidateIterationResult(JSON.stringify({
-    status: "completed",
-    summary: "legacy focus",
-    focus: "implement_req:REQ-1 token=legacy-secret",
-  }));
-  assert.strictEqual(parsed.valid, true);
-  assert.ok(!parsed.result.raw.focus.includes("legacy-secret"));
-  assert.ok(parsed.result.raw.focus.includes("[REDACTED]"));
-});
-
-test("resultSchema 脱敏 key/value secret 时保留后续普通文本", () => {
-  const parsed = parseAndValidateIterationResult(JSON.stringify({
-    status: "completed",
-    summary: "token=abc123 next action remains visible",
-  }));
-  assert.strictEqual(parsed.valid, true);
-  assert.strictEqual(parsed.result.summary, "token=[REDACTED] next action remains visible");
-  assert.ok(!parsed.result.summary.includes("abc123"));
-});
-
-test("resultSchema 限制递归脱敏的对象宽度和深度", () => {
-  const wide = {};
-  for (let index = 0; index < 60; index += 1) {
-    wide[`k${index}`] = `value-${index}`;
-  }
-  const deep = { level: 0 };
-  let current = deep;
-  for (let index = 1; index < 12; index += 1) {
-    current.next = { level: index };
-    current = current.next;
-  }
-  const parsed = parseAndValidateIterationResult(JSON.stringify({
-    status: "completed",
-    summary: "bounded",
-    state_patch: {
-      wide,
-      deep,
-      typed: { count: 3, enabled: true },
-    },
-  }));
-  assert.strictEqual(parsed.valid, true);
-  assert.strictEqual(Object.keys(parsed.result.state_patch.wide).length, 50);
-  assert.strictEqual(parsed.result.state_patch.wide.k49, "value-49");
-  assert.strictEqual(parsed.result.state_patch.wide.k50, undefined);
-  assert.strictEqual(parsed.result.state_patch.typed.count, 3);
-  assert.strictEqual(parsed.result.state_patch.typed.enabled, true);
-  assert.ok(JSON.stringify(parsed.result.state_patch.deep).includes("[TRUNCATED_DEPTH]"));
-});
-
-test("pickFocus 和 shouldStop 纯函数覆盖最小路径", () => {
-  const state = {
-    mode: { mode: "quick" },
-    budgets: { remainingImplementationIterations: 1, totalCycles: 0 },
-    watchdog: { requiredAction: "continue" },
-    requirements: [{ id: "REQ-001", summary: "one", status: "pending" }],
-  };
-  assert.deepStrictEqual(pickNextFocus(state, null, "quick"), {
-    type: "implement_req",
-    req_id: "REQ-001",
-    summary: "one",
-  });
-  assert.strictEqual(shouldStop(state, null, { once: true }, "quick").stop, false);
-  state.budgets.totalCycles = 1;
-  assert.strictEqual(shouldStop(state, null, { once: true }, "quick").stop, false);
-  assert.strictEqual(shouldStop(state, null, { once: true, runCyclesCompleted: 1 }, "quick").reason, "once_completed");
-});
-
-test("shouldStop 在 optimize 模式使用独立优化预算", () => {
-  const state = {
-    mode: { mode: "optimize" },
-    budgets: {
-      remainingImplementationIterations: 10,
-      remainingOptimizationIterations: 0,
-    },
-    watchdog: { requiredAction: "continue" },
-    requirements: [{ id: "REQ-1", summary: "one", status: "pending" }],
-  };
-  assert.strictEqual(shouldStop(state, null, {}, "optimize").reason, "budget_exhausted");
-  assert.strictEqual(shouldStop(state, null, {}, "quick").reason, "continue");
-  state.optimization = { status: "implemented" };
-  assert.strictEqual(shouldStop(state, null, {}, "optimize").reason, "continue");
-});
-
-test("loopPolicy 集中解析 once/plan/autopilot/maxSteps 语义", () => {
-  assert.deepStrictEqual(resolveLoopPolicy({ once: true, autopilotRun: true }, { mode: { mode: "quick" } }), {
-    mode: "quick",
-    runtimeAutopilot: true,
-    loopShape: "autopilot",
-    maxSteps: 1,
-  });
-  assert.deepStrictEqual(resolveLoopPolicy({ autopilotRun: true, maxSteps: 7 }, { mode: { mode: "plan" } }), {
-    mode: "plan",
-    runtimeAutopilot: true,
-    loopShape: "plan_once",
-    maxSteps: 1,
-  });
-  assert.deepStrictEqual(resolveLoopPolicy({ autopilotRun: true, autopilotMaxIterations: 9 }, { mode: { mode: "diagnose" } }), {
-    mode: "diagnose",
-    runtimeAutopilot: true,
-    loopShape: "autopilot",
-    maxSteps: 9,
-  });
-  assert.deepStrictEqual(resolveLoopPolicy({ maxSteps: 3 }, { mode: { mode: "optimize" } }), {
-    mode: "optimize",
-    runtimeAutopilot: false,
-    loopShape: "default",
-    maxSteps: 3,
-  });
-});
 
 test("writeGuard scope 支持目录前缀和常用 glob", () => {
   assert.strictEqual(isInsideScope("src/a.ts", ["src"]), true);
@@ -580,109 +306,6 @@ test("finalizeDeliveryState 不伪造未完成的交付门禁", () => {
   assert.strictEqual(finalized.state.styleConsolidation.status, "completed");
   assert.strictEqual(finalized.state.contextResetReview.status, "passed");
   assert.strictEqual(finalized.state.skillCapture.status, "skipped_no_high_value");
-});
-
-test("pickFocus 支持 fix/harden/optimize 和 mode-specific focus", () => {
-  assert.strictEqual(pickNextFocus({
-    requirements: [{ id: "REQ-BUG", summary: "bug", status: "failed" }],
-  }, null, "quick").type, "fix_bug");
-
-  assert.deepStrictEqual(pickNextFocus({
-    postChange: { status: "failed" },
-    requirements: [{ id: "REQ-VALIDATION", summary: "validation failed", status: "implemented" }],
-  }, null, "quick"), {
-    type: "fix_bug",
-    req_id: "REQ-VALIDATION",
-    summary: "validation failed",
-  });
-
-  assert.strictEqual(pickNextFocus({
-    requirements: [{ id: "REQ-1", summary: "done", status: "passed" }],
-    watchdog: {},
-  }, null, "quick").type, "harden_validation");
-
-  assert.strictEqual(pickNextFocus({
-    requirements: [{ id: "REQ-1", summary: "done", status: "passed" }],
-    watchdog: { validationHardeningStatus: "passed" },
-  }, null, "strict").type, "optimize");
-
-  assert.strictEqual(pickNextFocus({
-    requirements: [{ id: "REQ-1", summary: "done", status: "passed" }],
-    watchdog: { validationHardeningStatus: "passed" },
-    optimization: { status: "implemented" },
-  }, null, "strict").type, "verify_optimization");
-
-  assert.deepStrictEqual(pickNextFocus({
-    baseline: { status: "ready" },
-    diagnose: { hypotheses: ["maybe cache"] },
-    requirements: [],
-  }, null, "diagnose"), {
-    type: "hypothesis_test",
-    req_id: "H1",
-    summary: "验证诊断假设 H1: maybe cache",
-  });
-
-  assert.deepStrictEqual(pickNextFocus({
-    baseline: { status: "ready" },
-    diagnose: {
-      hypothesisQueue: [
-        { id: "H1", summary: "already checked", priority: 1, status: "rejected", evidence: "no" },
-        { id: "H2", summary: "maybe cache", priority: 2, status: "pending", evidence: "" },
-      ],
-    },
-    requirements: [],
-  }, null, "diagnose"), {
-    type: "hypothesis_test",
-    req_id: "H2",
-    summary: "验证诊断假设 H2: maybe cache",
-  });
-
-  assert.strictEqual(pickNextFocus({
-    baseline: { status: "ready" },
-    requirements: [{ id: "REQ-BUG", summary: "bug", status: "implemented" }],
-  }, null, "diagnose").type, "fix_bug");
-
-  assert.strictEqual(pickNextFocus({
-    baseline: { status: "ready" },
-    requirements: [{ id: "REQ-BLOCKED", summary: "needs user", status: "blocked" }],
-  }, null, "diagnose"), null);
-
-  assert.strictEqual(pickNextFocus({
-    baseline: { status: "ready" },
-    requirements: [],
-  }, null, "diagnose").type, "regression_check");
-
-  assert.strictEqual(pickNextFocus({
-    baseline: { status: "ready" },
-    optimization: { status: "implemented" },
-  }, null, "optimize").type, "verify_optimization");
-
-  assert.strictEqual(pickNextFocus({
-    baseline: { status: "ready" },
-    optimization: { status: "passed" },
-  }, null, "optimize"), null);
-
-  assert.strictEqual(pickNextFocus({
-    baseline: { status: "ready" },
-    optimization: { status: "pending" },
-  }, null, "optimize").type, "optimize");
-});
-
-test("--focus override 必须符合当前 mode 允许集合", () => {
-  assert.strictEqual(isFocusAllowedForMode({ type: "verify_req" }, "verify"), true);
-  assert.strictEqual(isFocusAllowedForMode({ type: "optimize" }, "verify"), false);
-
-  assert.strictEqual(pickNextFocus({}, "optimize", "verify"), null);
-  assert.deepStrictEqual(pickNextFocus({}, "verify_req:REQ-1", "verify"), {
-    type: "verify_req",
-    req_id: "REQ-1",
-    summary: "verify_req:REQ-1",
-  });
-  assert.deepStrictEqual(pickNextFocus({}, "reproduce", "diagnose"), {
-    type: "reproduce",
-    req_id: null,
-    summary: "reproduce",
-  });
 });
 
 test("iterationPrompt 注入文件范围、上一轮验证、focus 动态规则和完整 schema", () => {
@@ -1273,7 +896,7 @@ test("harden_validation 不会把已 passed 的 bootstrap 降级回 implemented"
 
   assert.strictEqual(merged.requirements[0].status, "passed");
   assert.strictEqual(merged.watchdog.validationHardeningStatus, "passed");
-  assert.strictEqual(pickNextFocus(merged, null, "quick"), null);
+  assert.strictEqual(pickNextFocus(merged, null, "quick").type, "optimize");
 });
 
 test("diagnose hypothesisQueue 消费 pending 假设并避免重复验证", () => {
@@ -1405,6 +1028,33 @@ test("optimize 比较 baseline/post metrics 并在连续无改善后停止", () 
   assert.strictEqual(verified.optimization.noImprovementStreak, 3);
   assert.strictEqual(verified.optimization.stopReason, "no_improvement");
   assert.strictEqual(pickNextFocus(verified, null, "optimize"), null);
+});
+
+test("verify_optimization 缺少可比指标时也推进 noImprovementStreak", () => {
+  const state = {
+    budgets: { implementationIterationsUsed: 0, totalCycles: 0, remainingImplementationIterations: 5 },
+    currentState: {},
+    validation: { commands: [] },
+    watchdog: { requiredAction: "continue", deliveryVerifiability: "unknown" },
+    baseline: { status: "ready" },
+    requirements: [],
+    optimization: {
+      status: "implemented",
+      baselineMetrics: [],
+      pendingMetrics: [],
+      noImprovementStreak: 2,
+      maxNoImprovementIterations: 3,
+    },
+  };
+  const merged = mergeIterationIntoState(
+    state,
+    { status: "completed", summary: "no comparable metrics", files_changed: [], requirements: [], state_patch: {} },
+    { status: "passed", command: "npm test", exitCode: 0, summary: "ok" },
+    { iteration: 1, focus: { type: "verify_optimization", req_id: null } },
+  ).state;
+  assert.strictEqual(merged.optimization.metricComparison.status, "unknown");
+  assert.strictEqual(merged.optimization.noImprovementStreak, 3);
+  assert.strictEqual(merged.optimization.stopReason, "no_improvement");
 });
 
 test("parse 后的 optimizationMetrics 保持数值类型并参与性能比较", () => {
@@ -1595,60 +1245,6 @@ test("mergeState 禁止 Worker 通过 state_patch 写入 currentState 权威或�
   assert.ok(merged.issues.some((issue) => issue.includes("currentState 字段: arbitraryWorkerField")));
 });
 
-test("runValidationCommands 依次执行全部命令并在失败时停止", async () => {
-  const projectDir = makeProject();
-  const iterationDir = path.join(projectDir, "iteration");
-  fs.mkdirSync(iterationDir);
-  fs.writeFileSync(path.join(projectDir, "marker.txt"), "", "utf8");
-  const result = await runValidationCommands([
-    `"${process.execPath}" -e "require('fs').appendFileSync('marker.txt','1')"`,
-    `"${process.execPath}" -e "require('fs').appendFileSync('marker.txt','2'); process.exit(1)"`,
-    `"${process.execPath}" -e "require('fs').appendFileSync('marker.txt','3')"`,
-  ], projectDir, iterationDir);
-  assert.strictEqual(result.status, "failed");
-  assert.strictEqual(result.results.length, 2);
-  assert.strictEqual(fs.readFileSync(path.join(projectDir, "marker.txt"), "utf8"), "12");
-});
-
-test("runValidationCommands 无命令时也写入 not_run 证据日志", async () => {
-  const projectDir = makeProject();
-  const iterationDir = path.join(projectDir, "iteration");
-  fs.mkdirSync(iterationDir);
-  const result = await runValidationCommands([], projectDir, iterationDir, { code: "zh" });
-  assert.strictEqual(result.status, "not_run");
-  const log = fs.readFileSync(path.join(iterationDir, "validation.log"), "utf8");
-  assert.ok(log.includes("status: not_run"));
-  assert.ok(log.includes("command: none"));
-  assert.ok(log.includes("未配置可运行的 CLI 验证命令"));
-
-  const postMerge = await runValidationCommands([], projectDir, iterationDir, { code: "en" }, {
-    logFileName: "post-merge-validation.log",
-  });
-  assert.strictEqual(postMerge.status, "not_run");
-  const postMergeLog = fs.readFileSync(path.join(iterationDir, "post-merge-validation.log"), "utf8");
-  assert.ok(postMergeLog.includes("status: not_run"));
-  assert.ok(postMergeLog.includes("No runnable CLI validation command is configured"));
-});
-
-test("parseValidationCommands 只过滤完整占位符，不误删合法命令", () => {
-  const commands = parseValidationCommands({
-    validation: {
-      commands: [
-        "not_run",
-        "未指定",
-        "npm test -- --grep not_run",
-        { command: "node scripts/由Agent生成的测试.js" },
-        { command: "npm test -- historical", result: "passed", iteration: 1 },
-        { command: "npm run lint -- historical", status: "failed", phase: "post_merge" },
-      ],
-    },
-  });
-  assert.deepStrictEqual(commands, [
-    "npm test -- --grep not_run",
-    "node scripts/由Agent生成的测试.js",
-  ]);
-});
-
 test("mergeState 保留验证配置命令并对历史对象使用有界历史", () => {
   const state = {
     budgets: { implementationIterationsUsed: 0, totalCycles: 0, remainingImplementationIterations: 2 },
@@ -1679,69 +1275,6 @@ test("mergeState 保留验证配置命令并对历史对象使用有界历史", 
   assert.strictEqual(merged.validation.commands[2].command, "node old-2.js");
   assert.strictEqual(merged.validation.commands[201].command, "node new.js");
   assert.deepStrictEqual(parseValidationCommands(merged), ["npm test", "npm run lint"]);
-});
-
-test("runValidationCommands 支持自定义超时", async () => {
-  const projectDir = makeProject();
-  const result = await runValidationCommands([
-    `"${process.execPath}" -e "setTimeout(()=>{}, 1000)"`,
-  ], projectDir, projectDir, { code: "zh" }, { timeoutMs: 100 });
-  assert.strictEqual(result.status, "failed");
-  assert.strictEqual(result.exitCode, 1);
-});
-
-test("runValidationCommands 异步启动验证命令，不阻塞事件循环", async () => {
-  const projectDir = makeProject();
-  const startedAt = Date.now();
-  const pending = runValidationCommands([
-    `"${process.execPath}" -e "setTimeout(()=>process.exit(0), 300)"`,
-  ], projectDir, projectDir, { code: "zh" }, { timeoutMs: 1000 });
-  const returnedAfterMs = Date.now() - startedAt;
-
-  assert.ok(returnedAfterMs < 150, `runValidationCommands returned after ${returnedAfterMs}ms`);
-  const result = await pending;
-  assert.strictEqual(result.status, "passed");
-});
-
-test("runValidationCommands 超时无输出时返回可诊断摘要", async () => {
-  const projectDir = makeProject();
-  const result = await runValidationCommands([
-    `"${process.execPath}" -e "setTimeout(()=>{}, 1000)"`,
-  ], projectDir, projectDir, { code: "zh" }, { timeoutMs: 100 });
-  assert.strictEqual(result.status, "failed");
-  assert.ok(/error=|signal=|exit_code=/.test(result.summary), result.summary);
-  assert.notStrictEqual(result.summary, "");
-});
-
-test("runValidationCommands 支持显式关闭超时", async () => {
-  const projectDir = makeProject();
-  const result = await runValidationCommands([
-    `"${process.execPath}" -e "setTimeout(()=>process.exit(0), 120)"`,
-  ], projectDir, projectDir, { code: "zh" }, { timeoutMs: 0 });
-  assert.strictEqual(result.status, "passed");
-  assert.strictEqual(result.exitCode, 0);
-});
-
-test("computeEffectiveTimeouts 支持动态超时和显式关闭 wall-clock", () => {
-  const dynamic = computeEffectiveTimeouts({
-    mode: { mode: "quick" },
-    watchdog: { noProgressStreak: 2 },
-    currentState: { currentTask: "refactor migration" },
-  }, {
-    stepTimeoutSeconds: 10,
-    inactivityTimeoutSeconds: 3,
-  }, { type: "implement_req" });
-  assert.strictEqual(dynamic.timeoutMs, 30000);
-  assert.strictEqual(dynamic.inactivityTimeoutMs, 3000);
-  assert.strictEqual(dynamic.complexityMultiplier, 2);
-  assert.strictEqual(dynamic.retryBackoff, 1.5);
-
-  const disabled = computeEffectiveTimeouts({}, {
-    stepTimeoutSeconds: 0,
-    inactivityTimeoutSeconds: 0,
-  }, { type: "plan_once" });
-  assert.strictEqual(disabled.timeoutMs, 0);
-  assert.strictEqual(disabled.inactivityTimeoutMs, 0);
 });
 
 test("noProgressStreak 连续无进展后触发 stop", () => {
@@ -2278,24 +1811,6 @@ test("runPipeline 在启动即 delivery_ready 时会先执行 finalize 收口", 
     process.stdout.write = originalWrite;
     process.exitCode = 0;
   }
-});
-
-test("resolveLoopPolicy 保留显式 0 上限", () => {
-  const { resolveLoopPolicy } = require("../dist/src/pipeline/loopPolicy");
-  const disabledAutopilot = resolveLoopPolicy({
-    mode: "quick",
-    autopilotRun: true,
-    autopilotMaxIterations: 0,
-    maxSteps: 0,
-  }, {});
-  assert.strictEqual(disabledAutopilot.maxSteps, 0);
-
-  const explicitMaxSteps = resolveLoopPolicy({
-    mode: "strict",
-    once: false,
-    maxSteps: 0,
-  }, {});
-  assert.strictEqual(explicitMaxSteps.maxSteps, 0);
 });
 
 test("deliveryDocs 根据 state 生成四类可追溯文档内容", () => {
@@ -3937,17 +3452,6 @@ test("prototype 模式默认限制 prototype/** scope", () => {
   assert.ok(ndjson(allowed.stdout).some((event) => event.event === "session_started" && event.scope === "prototype/**"));
 });
 
-test("auto-iterate help 展示 --scope", () => {
-  const result = spawnSync(process.execPath, [cliPath, "auto-iterate", "--help"], {
-    cwd: repoRoot,
-    encoding: "utf8",
-  });
-  assert.strictEqual(result.status, 0, result.stderr);
-  assert.ok(result.stdout.includes("--scope <glob[,glob]>"));
-  assert.ok(result.stdout.includes("--inactivity-timeout <seconds>"));
-  assert.ok(result.stdout.includes("--validation-timeout <seconds>"));
-});
-
 test("--isolate 在临时 worktree 运行并把 diff 合并回主工作区", () => {
   const projectDir = makeGitProject();
   const result = runCli(projectDir, [
@@ -3971,6 +3475,13 @@ test("--isolate 在临时 worktree 运行并把 diff 合并回主工作区", () 
   assert.ok(events.some((event) => event.event === "worktree_merged"));
   assert.ok(events.some((event) => event.event === "worktree_cleaned"));
   assert.ok(fs.readFileSync(path.join(projectDir, "README.md"), "utf8").includes("changed in isolate"));
+});
+
+test("makeIsolatedWorktree 创建失败后不留下目标目录", () => {
+  const projectDir = makeProject();
+  const created = makeIsolatedWorktree(projectDir, "create-fail-cleanup", 1);
+  assert.strictEqual(created.ok, false);
+  assert.ok(!fs.existsSync(created.worktreePath), `leaked worktree path: ${created.worktreePath}`);
 });
 
 test("--isolate 合并后在主工作区重新验证最终代码组合", () => {

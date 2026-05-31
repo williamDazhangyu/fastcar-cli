@@ -42,10 +42,12 @@ import {
 } from "./pipelineStateIO";
 import {
   applyIsolatedWorktreeDiff,
+  clearActiveIsolatedWorktree,
   cleanupIsolatedWorktreeForExit,
   ensureGitWorktree,
   makeIsolatedWorktree,
   rollbackAppliedIsolatedWorktreeDiff,
+  trackActiveIsolatedWorktree,
 } from "./pipelineIsolateWorktree";
 import {
   hasMergedIteration,
@@ -237,6 +239,7 @@ export async function runPipeline(options: PipelineRunOptions): Promise<Pipeline
         return { state, reason: "worktree_create_failed" };
       }
       isolatedWorktree = created.worktreePath;
+      trackActiveIsolatedWorktree(projectRoot, isolatedWorktree, iteration, options);
       workerCwd = isolatedWorktree;
       emitProgress({ event: "worktree_created", iter: iteration, path: toRelative(projectRoot, isolatedWorktree) }, options);
     }
@@ -584,6 +587,7 @@ export async function runPipeline(options: PipelineRunOptions): Promise<Pipeline
           detail: applied.error,
           preserved_worktree: toRelative(projectRoot, isolatedWorktree),
         }, options);
+        clearActiveIsolatedWorktree(isolatedWorktree);
         process.exitCode = 1;
         return { state, reason: "worktree_merge_failed" };
       }

@@ -11,6 +11,7 @@ function hasRemainingBudget(
   mode: string,
 ): boolean {
   const budgets = (state && state.budgets) || {};
+  const runtimeAutopilot = Boolean(state && state.mode && state.mode.runtimeAutopilot);
   if (mode === "optimize" && Number.isInteger(budgets.remainingOptimizationIterations)) {
     const focus = state && state.optimization;
     if (focus && ["implemented", "optimized", "passed", "no_improvement"].includes(focus.status || "")) {
@@ -18,11 +19,14 @@ function hasRemainingBudget(
     }
     return Number(budgets.remainingOptimizationIterations) > 0;
   }
+  if (runtimeAutopilot && Number.isInteger(budgets.autopilotMaxIterations)) {
+    return Number(budgets.totalCycles || 0) < Number(budgets.autopilotMaxIterations);
+  }
   if (Number.isInteger(budgets.remainingImplementationIterations)) {
     return Number(budgets.remainingImplementationIterations) > 0;
   }
   if (Number.isInteger(budgets.autopilotMaxIterations)) {
-    return (budgets.implementationIterationsUsed || 0) < Number(budgets.autopilotMaxIterations);
+    return Number(budgets.totalCycles || budgets.implementationIterationsUsed || 0) < Number(budgets.autopilotMaxIterations);
   }
   return true;
 }

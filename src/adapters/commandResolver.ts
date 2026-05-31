@@ -157,6 +157,7 @@ function runCommandAsync(
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let timeoutRequested = false;
     let timeoutReason: string | null = null;
     let settled = false;
     let terminating = false;
@@ -225,7 +226,7 @@ function runCommandAsync(
         return;
       }
       terminating = true;
-      timedOut = true;
+      timeoutRequested = true;
       timeoutReason = reason;
       if (killOnTimeout && child && child.pid) {
         writeTimeoutWarning(options.timeoutWarningPath, {
@@ -240,12 +241,14 @@ function runCommandAsync(
         void killProcessTree(child.pid, "SIGTERM");
         await new Promise((resolveGrace) => setTimeout(resolveGrace, graceKillMs));
         if (!settled && child && child.pid) {
+          timedOut = true;
           await Promise.race([
             killProcessTree(child.pid, "SIGKILL"),
             new Promise((resolveKill) => setTimeout(resolveKill, 1000)),
           ]);
         }
       }
+      timedOut = true;
       finish({ status: 1, signal: "SIGTERM", error: reason });
     }
 
@@ -363,9 +366,25 @@ function runCommandAsync(
       stopIfResultReady();
     });
     child.on("error", (error: Error) => {
+      if (timeoutRequested) {
+        timedOut = true;
+        finish({ status: 1, signal: "SIGTERM", error: timeoutReason || error.message || "process timed out" });
+        return;
+      }
       finish({ status: 1, error: error.message });
     });
     child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
+      if (options.allowGracefulTimeoutExit === true && timeoutRequested && !timedOut && code === 0) {
+        finish({
+          status: 0,
+          signal,
+          error: null,
+        });
+        return;
+      }
+      if (timeoutRequested && !timedOut) {
+        timedOut = true;
+      }
       finish({
         status: timedOut ? 1 : (code === null ? 1 : code),
         signal,

@@ -1,4 +1,5 @@
 import { promises as fsPromises } from "fs";
+import { pathExists } from "../fsUtils";
 import {
   getSessionPaths,
   getStatePaths,
@@ -52,15 +53,6 @@ export type ValidateStateJsonModel = (
   state: StateObject,
   expected?: { session?: string },
 ) => ValidationIssue[];
-
-async function pathExists(filePath: string): Promise<boolean> {
-  try {
-    await fsPromises.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function extractStateField(content: string, pattern: RegExp, fallback = "unknown"): string {
   const match = content.match(pattern);

@@ -6,6 +6,7 @@ const {
   showAutoIterateHelp,
 } = require("../dist/src/auto-iterate/sessionHelp");
 const { DISPATCH_AGENT_CONFIGS } = require("../dist/src/auto-iterate/dispatch");
+const { FLAG_REGISTRY } = require("../dist/src/pipeline/flags");
 
 const cases = [];
 
@@ -42,16 +43,26 @@ test("buildAutoIterateHelp renders major command groups and flags", () => {
     'fastcar-cli auto-iterate --quick --goal "<goal>" --session <session> --yes --no-run',
     "--strict",
     "--quick",
+    "--diagnose|--debug",
+    "--optimize|--optimise",
+    "--prototype|--proto",
     "--validate-state [session|state.md|state.json]",
+    "--strict-state|--strict-validate|--strict-validation",
     "--dispatch <session>",
+    "--verify-command|--verify-cmd <cmd>",
     "--run --once [--json-progress]",
     "--inactivity-timeout <seconds>",
     "--validation-timeout <seconds>",
     "--scope <glob[,glob]>",
+    "--validate-cmd <cmd>  pipeline 独立验证命令，可重复传入；不同于 dispatch 的 --verify-command/--verify-cmd",
     "--no-run  force manual/fallback generation; do not enter Worker pipeline",
     "--capture-skills <session> [--yes]",
-    "--yes  non-interactive generation for manual/fallback; --run routing does not need it",
+    "-f, --from <file>",
+    "--max-iterations|--max <n>",
+    "--autopilot-max-iterations|--autopilot-max <n>",
+    "--yes|-y|--non-interactive  non-interactive generation for manual/fallback; --run routing does not need it",
     "--examples [keyword]",
+    "--query <keyword>",
   ]) {
     assert(help.includes(flag), `missing ${flag}`);
   }
@@ -64,6 +75,15 @@ test("buildAutoIterateHelp reflects supported dispatch agents", () => {
   assert(help.includes(`--agent <${supportedAgents}>`));
   assert(help.includes("codex|claude|gemini"));
   assert(help.includes("openhands|replit"));
+});
+
+test("buildAutoIterateHelp includes registry-backed flag help", () => {
+  const help = buildAutoIterateHelp();
+  for (const info of Object.values(FLAG_REGISTRY)) {
+    if (info.help) {
+      assert(help.includes(info.help), `missing registry help ${info.help}`);
+    }
+  }
 });
 
 test("showAutoIterateHelp prints the built help text", () => {

@@ -1,12 +1,13 @@
 ﻿import process from "process";
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
 import inquirer from "inquirer";
 import * as utils from "./utils";
 import templates from "./templates.json";
 import { getLocalPath, getTargetNames } from "./skill-targets";
 import { asRecord } from "./valueUtils";
+import { toCliError } from "./cliError";
+import { downloadTemplate, type TemplateConfig } from "./templateDownloader";
 
 interface OptionComponent {
   name: string;
@@ -19,13 +20,6 @@ interface PackageManagerConfig {
   name: string;
   installCmd: string;
   description: string;
-}
-
-interface TemplateConfig {
-  name: string;
-  description: string;
-  package: string;
-  tags?: string[];
 }
 
 interface InitOptions {
@@ -80,15 +74,7 @@ interface PackageInfo {
 
 type PromptQuestion = Parameters<typeof inquirer.prompt>[0] extends Array<infer Item> ? Item : never;
 
-type CliError = NodeJS.ErrnoException & {
-  stderr?: Buffer | string;
-};
-
 const templateRegistry: Record<string, TemplateConfig> = templates;
-
-function toCliError(error: unknown): CliError {
-  return error instanceof Error ? error as CliError : new Error(String(error)) as CliError;
-}
 
 function asPackageInfo(value: unknown): PackageInfo {
   return value && typeof value === "object" && !Array.isArray(value) ? value as PackageInfo : {};
@@ -485,200 +471,6 @@ async function selectTemplate(): Promise<string> {
   ]);
 
   return typeof answer.template === "string" ? answer.template : "web";
-}
-
-// 从 npm 下载模板包
-async function downloadTemplate(packageName: string, targetDir: string): Promise<boolean> {
-  console.log(`📦 正在下载模板 ${packageName}...`);
-  console.log(`📂 目标目录: ${targetDir}`);
-
-  // 使用 npm pack 下载包
-  const tempDir = path.join(process.cwd(), `.fastcar-temp-${Date.now()}`);
-  fs.mkdirSync(tempDir, { recursive: true });
-  console.log(`📂 临时目录: ${tempDir}`);
-
-  try {
-    // 下载 tarball
-    try {
-      console.log(`⬇️  执行: npm pack ${packageName}...`);
-      execSync(`npm pack ${packageName} --pack-destination "${tempDir}"`, {
-        stdio: "pipe",
-        cwd: tempDir,
-      });
-      console.log(`✅ npm pack 执行成功`);
-    } catch (packError) {
-      const typedPackError = toCliError(packError);
-      // 分析 npm pack 错误
-      const errorMsg = typedPackError.message || "";
-      if (errorMsg.includes("E404") || errorMsg.includes("not found")) {
-        throw new Error(
-          `模板包 "${packageName}" 不存在\n` +
-            `💡 可能的原因：\n` +
-            `  1. 包名拼写错误\n` +
-            `  2. 该模板尚未发布到 npm\n` +
-            `  3. 你没有该私有包的访问权限\n` +
-            `💡 解决方案：\n` +
-            `  - 检查模板名称是否正确\n` +
-            `  - 访问 https://www.npmjs.com/package/${packageName} 确认包是否存在`,
-        );
-      } else if (
-        errorMsg.includes("network") ||
-        errorMsg.includes("ECONNREFUSED")
-      ) {
-        throw new Error(
-          `网络连接失败，无法下载模板包 "${packageName}"\n` +
-            `💡 可能的原因：\n` +
-            `  1. 网络连接问题\n` +
-            `  2. npm registry 无法访问\n` +
-            `  3. 代理设置问题\n` +
-            `💡 解决方案：\n` +
-            `  - 检查网络连接\n` +
-            `  - 尝试切换 npm 镜像源：npm config set registry https://registry.npmmirror.com\n` +
-            `  - 检查代理设置：npm config get proxy`,
-        );
-      } else {
-        throw new Error(
-          `下载模板包 "${packageName}" 失败\n` +
-            `📋 错误详情：${typedPackError.message}\n` +
-            `💡 尝试重新执行命令，或手动检查 npm 是否正常工作`,
-        );
-      }
-    }
-
-    // 找到下载的 tarball 文件
-    console.log(`📂 读取临时目录内容...`);
-    const files = fs.readdirSync(tempDir);
-    console.log(`📄 找到文件: ${files.join(", ")}`);
-
-    const tarball = files.find((f) => f.endsWith(".tgz"));
-    console.log(`📦 tarball 文件: ${tarball}`);
-
-    if (!tarball) {
-      throw new Error(
-        `无法找到下载的模板包文件\n` +
-          `💡 可能的原因：npm pack 命令执行异常\n` +
-          `💡 解决方案：\n` +
-          `  - 检查 npm 版本：npm --version\n` +
-          `  - 尝试手动下载：npm pack ${packageName}`,
-      );
-    }
-
-    const tarballPath = path.join(tempDir, tarball);
-
-    // 解压 tarball
-    try {
-      const extractDir = path.join(tempDir, "extracted");
-      fs.mkdirSync(extractDir, { recursive: true });
-
-      if (process.platform === "win32") {
-        execSync(`tar -xzf "${tarballPath}" -C "${extractDir}"`, {
-          stdio: "pipe",
-        });
-      } else {
-        execSync(`tar -xzf "${tarballPath}" -C "${extractDir}"`, {
-          stdio: "pipe",
-        });
-      }
-    } catch (extractError) {
-      const typedExtractError = toCliError(extractError);
-      throw new Error(
-        `解压模板包失败\n` +
-          `📋 错误详情：${typedExtractError.message}\n` +
-          `💡 解决方案：\n` +
-          `  - 检查 tar 命令是否可用\n` +
-          `  - 尝试手动解压：tar -xzf ${tarballPath}`,
-      );
-    }
-
-    // npm pack 解压后会得到 package 目录
-    const packageDir = path.join(tempDir, "extracted", "package");
-    console.log(`📂 检查 package 目录: ${packageDir}`);
-    console.log(`📂 目录是否存在: ${fs.existsSync(packageDir)}`);
-
-    // 列出 extracted 目录内容以便调试
-    const extractDir = path.join(tempDir, "extracted");
-    if (fs.existsSync(extractDir)) {
-      const extractedFiles = fs.readdirSync(extractDir);
-      console.log(`📄 extracted 目录内容: ${extractedFiles.join(", ")}`);
-    }
-
-    if (!fs.existsSync(packageDir)) {
-      throw new Error(
-        `模板包结构不正确，缺少 package 目录\n` +
-          `💡 可能的原因：模板包打包格式不正确\n` +
-          `💡 解决方案：联系模板维护者检查包结构`,
-      );
-    }
-
-    // 检查模板包结构，优先使用 template 目录，否则使用整个包
-    const templateDir = path.join(packageDir, "template");
-    console.log(`📂 检查 template 目录: ${templateDir}`);
-    console.log(`📂 template 目录是否存在: ${fs.existsSync(templateDir)}`);
-
-    const sourceDir = fs.existsSync(templateDir) ? templateDir : packageDir;
-    console.log(`📂 源目录: ${sourceDir}`);
-    console.log(`📂 目标目录: ${targetDir}`);
-
-    // 复制模板文件到目标目录
-    console.log("📋 复制模板文件...");
-    console.log(`   从: ${sourceDir}`);
-    console.log(`   到: ${targetDir}`);
-
-    if (!fs.existsSync(sourceDir)) {
-      throw new Error(
-        `源目录不存在: ${sourceDir}\n` + `💡 可能原因：模板包结构不正确`,
-      );
-    }
-
-    // 检查源目录是否有内容
-    const sourceFiles = fs.readdirSync(sourceDir);
-    console.log(`📄 源目录文件数: ${sourceFiles.length}`);
-    if (sourceFiles.length === 0) {
-      throw new Error(
-        `源目录为空: ${sourceDir}\n` + `💡 可能原因：模板包没有正确打包`,
-      );
-    }
-
-    const copyResult = utils.copyDirectory(sourceDir, targetDir);
-    if (copyResult === false) {
-      throw new Error(
-        `复制模板文件失败\n` +
-          `💡 可能原因：\n` +
-          `  1. 源目录不存在或为空\n` +
-          `  2. 目标目录没有写入权限\n` +
-          `  3. 磁盘空间不足`,
-      );
-    }
-
-    // 检查目标目录内容
-    if (fs.existsSync(targetDir)) {
-      const targetFiles = fs.readdirSync(targetDir);
-      console.log(`📄 目标目录内容: ${targetFiles.join(", ")}`);
-
-      if (targetFiles.length === 0) {
-        throw new Error(
-          `目标目录为空，复制可能失败\n` + `💡 请检查模板包内容是否正确`,
-        );
-      }
-    } else {
-      throw new Error(
-        `目标目录创建失败: ${targetDir}\n` + `💡 请检查是否有写入权限`,
-      );
-    }
-
-    console.log(`✅ 模板 ${packageName} 下载完成`);
-
-    // 清理临时目录
-    utils.delDirectory(tempDir);
-
-    return true;
-  } catch (error) {
-    // 清理临时目录
-    if (fs.existsSync(tempDir)) {
-      utils.delDirectory(tempDir);
-    }
-    throw error;
-  }
 }
 
 // 询问项目信息

@@ -12,6 +12,60 @@ import type {
   UntrackedWorktreeFile,
 } from "./types";
 
+type ActiveIsolatedWorktree = {
+  projectRoot: string;
+  worktreePath: string;
+  iteration: number;
+  options: IsolatedWorktreeOptions;
+};
+
+let activeIsolatedWorktree: ActiveIsolatedWorktree | null = null;
+let signalCleanupRegistered = false;
+
+function registerSignalCleanup(): void {
+  if (signalCleanupRegistered) {
+    return;
+  }
+  signalCleanupRegistered = true;
+  for (const signal of ["SIGINT", "SIGTERM"] as NodeJS.Signals[]) {
+    process.once(signal, () => {
+      const active = activeIsolatedWorktree;
+      activeIsolatedWorktree = null;
+      if (active) {
+        cleanupIsolatedWorktreeForExit(
+          active.projectRoot,
+          active.worktreePath,
+          active.iteration,
+          active.options,
+          false,
+        );
+      }
+      process.exit(128 + (signal === "SIGINT" ? 2 : 15));
+    });
+  }
+}
+
+export function trackActiveIsolatedWorktree(
+  projectRoot: string,
+  worktreePath: string,
+  iteration: number,
+  options: IsolatedWorktreeOptions,
+): void {
+  activeIsolatedWorktree = {
+    projectRoot,
+    worktreePath,
+    iteration,
+    options,
+  };
+  registerSignalCleanup();
+}
+
+export function clearActiveIsolatedWorktree(worktreePath: string | null | undefined): void {
+  if (!worktreePath || !activeIsolatedWorktree || activeIsolatedWorktree.worktreePath !== worktreePath) {
+    return;
+  }
+  activeIsolatedWorktree = null;
+}
 
 /**
  * @param {string} projectRoot
@@ -52,6 +106,13 @@ export function makeIsolatedWorktree(
   fs.mkdirSync(tmpRoot, { recursive: true });
   const result = runGit(["worktree", "add", "--detach", worktreePath, "HEAD"], projectRoot);
   if (result.status !== 0) {
+    try {
+      if (fs.existsSync(worktreePath)) {
+        fs.rmSync(worktreePath, { recursive: true, force: true });
+      }
+    } catch {
+      // Creation failure cleanup is best-effort; the original git error remains authoritative.
+    }
     return {
       ok: false,
       worktreePath,
@@ -107,6 +168,7 @@ export function cleanupIsolatedWorktreeForExit(
     return { ok: true };
   }
   const cleanup = cleanupIsolatedWorktree(projectRoot, worktreePath, options);
+  clearActiveIsolatedWorktree(worktreePath);
   if (!cleanup.ok) {
     emitProgress({ event: "error", iter: iteration, reason: "worktree_cleanup_failed", detail: cleanup.error }, options);
     return cleanup;

@@ -24,6 +24,23 @@ function hasFocusFields(item: unknown): item is FocusLike {
   return Boolean(item && typeof item === "object" && !Array.isArray(item));
 }
 
+function describeUnknownHypothesis(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
+
 /**
  * @param {import("./types").PickFocusStateLike | null | undefined} state
  * @returns {Array<{ id?: string; status?: string; summary?: string }>}
@@ -148,7 +165,7 @@ function firstPendingDiagnoseHypothesis(state: PickFocusStateLike | null | undef
   if (pending) {
     return {
       id: pending.id || null,
-      summary: pending.summary || pending.text || pending.hypothesis || pending.id || "",
+      summary: pending.summary || pending.text || pending.hypothesis || pending.id || describeUnknownHypothesis(pending),
     };
   }
   const hypotheses = Array.isArray(diagnose.hypotheses) ? diagnose.hypotheses : [];
@@ -159,12 +176,12 @@ function firstPendingDiagnoseHypothesis(state: PickFocusStateLike | null | undef
   if (hasFocusFields(first)) {
     return {
       id: first.id || "H1",
-      summary: first.summary || first.text || first.hypothesis || first.id || "",
+      summary: first.summary || first.text || first.hypothesis || first.id || describeUnknownHypothesis(first),
     };
   }
   return {
     id: "H1",
-    summary: String(first),
+    summary: describeUnknownHypothesis(first),
   };
 }
 
@@ -227,8 +244,8 @@ const ALLOWED_FOCUS_BY_MODE: Record<string, Set<string>> = {
   diagnose: new Set(["reproduce", "hypothesis_test", "fix_bug", "regression_check"]),
   optimize: new Set(["establish_baseline", "optimize", "verify_optimization"]),
   strict: new Set(["extract_requirements", "implement_req", "fix_bug", "harden_validation", "optimize", "verify_optimization"]),
-  quick: new Set(["extract_requirements", "implement_req", "fix_bug", "harden_validation"]),
-  prototype: new Set(["extract_requirements", "implement_req", "fix_bug", "harden_validation"]),
+  quick: new Set(["extract_requirements", "implement_req", "fix_bug", "harden_validation", "optimize", "verify_optimization"]),
+  prototype: new Set(["extract_requirements", "implement_req", "fix_bug", "harden_validation", "optimize", "verify_optimization"]),
 };
 
 /**
@@ -379,7 +396,7 @@ export function pickNextFocus(
     };
   }
 
-  if (allRequirementsPassed(state) && stateMode === "strict" && hardeningDone(state) && optimizationNeedsVerification(state)) {
+  if (allRequirementsPassed(state) && hardeningDone(state) && optimizationNeedsVerification(state)) {
     return {
       type: "verify_optimization",
       req_id: null,
@@ -387,7 +404,7 @@ export function pickNextFocus(
     };
   }
 
-  if (allRequirementsPassed(state) && stateMode === "strict" && hardeningDone(state) && !optimizeDone(state)) {
+  if (allRequirementsPassed(state) && hardeningDone(state) && !optimizeDone(state)) {
     return {
       type: "optimize",
       req_id: null,

@@ -39,7 +39,7 @@ export interface AutoIterateArgs {
   yes: boolean;
   examples: boolean;
   query: string | null;
-  help?: boolean;
+  help: boolean;
   captureSkillsSession?: string;
 }
 
@@ -191,6 +191,7 @@ export function parseArgs(args: string[] = []): AutoIterateArgs {
     yes: false,
     examples: false,
     query: null,
+    help: false,
   };
 
   args.forEach((arg, index) => {

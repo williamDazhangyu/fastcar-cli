@@ -1,6 +1,7 @@
 import inquirer from "inquirer";
 import path from "path";
 import { promises as fsPromises } from "fs";
+import { pathExists } from "../fsUtils";
 import {
   buildDefaultSessionName,
   getSessionPaths,
@@ -68,15 +69,6 @@ export interface CreatedAutoIterateSession {
   sessionPaths: SessionPaths;
   answers: StateObject;
   promptContent: string;
-}
-
-export async function pathExists(filePath: string): Promise<boolean> {
-  try {
-    await fsPromises.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export async function readChecklistFile(filePath: string): Promise<SourceChecklist> {

@@ -54,6 +54,7 @@ test("parseArgs preserves pipeline run flags and repeated validate commands", ()
   assert.strictEqual(options.stepTimeoutSeconds, 0);
   assert.strictEqual(options.inactivityTimeoutSeconds, 0);
   assert.strictEqual(options.autopilotMaxIterations, 3);
+  assert.strictEqual(options.help, false);
 });
 
 test("parseArgs preserves explicit zero run budget flags", () => {
@@ -66,6 +67,30 @@ test("parseArgs preserves explicit zero run budget flags", () => {
 
   assert.strictEqual(options.maxSteps, 0);
   assert.strictEqual(options.autopilotMaxIterations, 0);
+});
+
+test("parseArgs initializes help and parses dispatch verify aliases", () => {
+  const defaults = parseArgs([]);
+  assert.strictEqual(defaults.help, false);
+
+  const help = parseArgs(["--help"]);
+  assert.strictEqual(help.help, true);
+
+  const verifyCommand = parseArgs(["--dispatch", "s", "--verify-command", "npm test"]);
+  assert.strictEqual(verifyCommand.verifyCommand, "npm test");
+
+  const verifyCmd = parseArgs(["--dispatch", "s", "--verify-cmd=npm run test:unit"]);
+  assert.strictEqual(verifyCmd.verifyCommand, "npm run test:unit");
+});
+
+test("parseArgs does not treat option values or unknown flags as inferred goals", () => {
+  const missingValue = parseArgs(["--session"]);
+  assert.strictEqual(missingValue.session, null);
+  assert.strictEqual(missingValue.goal, null);
+
+  const unknownFlag = parseArgs(["--unknown-flag", "--run"]);
+  assert.strictEqual(unknownFlag.run, true);
+  assert.strictEqual(unknownFlag.goal, null);
 });
 
 let passed = 0;

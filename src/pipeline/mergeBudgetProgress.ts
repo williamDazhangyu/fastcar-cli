@@ -10,7 +10,8 @@ export function isImplementationFocus(focus: unknown): boolean {
 }
 
 export function isOptimizationFocus(focus: unknown, mode: unknown): boolean {
-  return mode === "optimize" && hasFocusType(focus) && focus.type === "optimize";
+  return (mode === "optimize" && hasFocusType(focus) && focus.type === "optimize") ||
+    (hasFocusType(focus) && focus.type === "optimize");
 }
 
 function countValue(value: unknown): number {

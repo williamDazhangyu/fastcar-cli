@@ -41,13 +41,18 @@ export type FlagKind =
   | "mode"
   | "input"
   | "session"
-  | "compat";
+  | "compat"
+  | "dispatch"
+  | "skill"
+  | "other";
 
 export interface FlagInfo {
   stage: FlagStage;
   kind: FlagKind;
   stable: boolean;
   stability?: "not_stable" | "experimental" | "stable";
+  help?: string;
+  aliases?: string[];
 }
 
 export interface FlagIssue {
@@ -409,17 +414,30 @@ export interface PipelineBudgets {
 }
 
 export interface PipelineStateLike {
+  updatedAt?: string;
+  session?: Record<string, unknown>;
+  task?: Record<string, unknown>;
+  language?: Record<string, unknown>;
+  sourceChecklist?: Record<string, unknown>;
   budgets?: PipelineBudgets;
   requirements?: unknown[];
+  baseline?: Record<string, unknown>;
   optimization?: {
     status?: string;
     [key: string]: unknown;
   };
+  traceability?: Record<string, unknown>;
+  documentation?: Record<string, unknown>;
+  notes?: unknown[];
   deliveryEvidence?: Record<string, unknown>;
   validation?: Record<string, unknown>;
   watchdog?: Record<string, unknown>;
   postChange?: Record<string, unknown>;
   postAgentValidationGate?: Record<string, unknown>;
+  decisionRequest?: Record<string, unknown>;
+  implementationContract?: Record<string, unknown>;
+  phaseGate?: Record<string, unknown>;
+  isolate?: Record<string, unknown>;
   cleanup?: Record<string, unknown>;
   currentState?: Record<string, unknown>;
   deltaAssessment?: Record<string, unknown>;
@@ -432,7 +450,6 @@ export interface PipelineStateLike {
     mode?: AutoIterateMode | string;
     [key: string]: unknown;
   };
-  [key: string]: unknown;
 }
 
 export interface ShouldStopContext {
@@ -568,6 +585,7 @@ export interface PipelineWorkerAdapterOptions {
   commandLabel?: string;
   detached?: boolean;
   killOnTimeout?: boolean;
+  allowGracefulTimeoutExit?: boolean;
   agentFile?: string;
   maxStepsPerTurn?: number;
   stopWhenResultValid?: (resultPath?: string) => boolean;

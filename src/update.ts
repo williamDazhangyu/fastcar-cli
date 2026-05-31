@@ -1,11 +1,12 @@
 ﻿import process from "process";
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
 import compressing from "compressing";
 import inquirer from "inquirer";
 import * as utils from "./utils";
 import templates from "./templates.json";
+import { toCliError } from "./cliError";
+import { npmCommand, runCommandOrThrow } from "./commandUtils";
 
 interface TemplateConfig {
   name: string;
@@ -13,15 +14,7 @@ interface TemplateConfig {
   package: string;
 }
 
-type CliError = NodeJS.ErrnoException & {
-  stderr?: Buffer | string;
-};
-
 const templateRegistry: Record<string, TemplateConfig> = templates;
-
-function toCliError(error: unknown): CliError {
-  return error instanceof Error ? error as CliError : new Error(String(error)) as CliError;
-}
 
 /**
  * 从 npm 下载模板包并仅同步 template/target 文件夹
@@ -41,10 +34,7 @@ export async function updateTemplateTarget(packageName: string, targetDir: strin
     // 下载 tarball
     try {
       console.log(`⬇️  执行: npm pack ${packageName}...`);
-      execSync(`npm pack ${packageName} --pack-destination "${tempDir}"`, {
-        stdio: "pipe",
-        cwd: tempDir,
-      });
+      runCommandOrThrow(npmCommand, ["pack", packageName, "--pack-destination", tempDir], tempDir);
       console.log(`✅ npm pack 执行成功`);
     } catch (packError) {
       const typedPackError = toCliError(packError);

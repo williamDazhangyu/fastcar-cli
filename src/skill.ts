@@ -6,6 +6,7 @@ import {
   getGlobalPath,
   getLocalPath,
 } from "./skill-targets";
+import { pathExists } from "./fsUtils";
 
 const fsPromises = fs.promises;
 
@@ -50,18 +51,6 @@ function getSkillsDir(): string {
  */
 function getSharedAgentsPath(): string {
   return path.join(getSkillsDir(), 'AGENTS.md');
-}
-
-/**
- * 检查路径是否存在
- */
-async function pathExists(checkPath: string): Promise<boolean> {
-  try {
-    await fsPromises.access(checkPath);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**

@@ -1,6 +1,7 @@
 import { promises as fsPromises } from "fs";
 import fs from "fs";
 import path from "path";
+import { pathExists } from "../fsUtils";
 
 const STATE_DIR = ".agent-state";
 const SESSION_ROOT_DIR = "auto-iterate";
@@ -21,15 +22,6 @@ export interface SessionPaths extends StatePaths {
   sessionStateJsonPath: string;
   sessionStatePath: string;
   sessionPromptPath: string;
-}
-
-async function pathExists(filePath: string): Promise<boolean> {
-  try {
-    await fsPromises.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export function toRelative(filePath: string): string {

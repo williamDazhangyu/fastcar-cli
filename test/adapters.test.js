@@ -6,6 +6,7 @@ const { fillTemplate, runTemplateAdapter } = require("../dist/src/adapters/templ
 const { getAdapter } = require("../dist/src/adapters");
 const { resolveCommand, runNativeCommand, runNativeCommandAsync } = require("../dist/src/adapters/commandResolver");
 const { buildCodexWorkerPrompt, extractJsonObject, resolveWindowsNativeCodex } = require("../dist/src/adapters/codex");
+const { ensureResultFromWorkerOutput } = require("../dist/src/adapters/resultRecovery");
 const { resolveCursorCommand, runCursorAdapter } = require("../dist/src/adapters/cursor");
 const { buildKimiPrompt } = require("../dist/src/adapters/kimi");
 
@@ -80,6 +81,33 @@ test("Codex adapter 可从最终消息中提取 JSON 兜底写 result", () => {
     "```",
   ].join("\n"));
   assert.strictEqual(json, "{\"status\":\"completed\",\"summary\":\"ok\",\"files_changed\":[]}");
+});
+
+test("native adapters 共享从输出恢复 result.json 的能力", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fastcar-result-recovery-"));
+  const resultPath = path.join(dir, "result.json");
+  const result = ensureResultFromWorkerOutput({
+    command: "worker",
+    status: 0,
+    signal: null,
+    error: null,
+    stdout: [
+      "done",
+      "```json",
+      "{\"status\":\"completed\",\"summary\":\"ok\",\"files_changed\":[]}",
+      "```",
+    ].join("\n"),
+    stderr: "",
+    timedOut: false,
+  }, resultPath, { label: "test output" });
+
+  assert.ok(fs.existsSync(resultPath));
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(resultPath, "utf8")), {
+    status: "completed",
+    summary: "ok",
+    files_changed: [],
+  });
+  assert.ok(result.stdout.includes("test output"));
 });
 
 test("Kimi 专用适配器在无 env 时使用 native command", () => {
@@ -226,6 +254,14 @@ test("native Worker adapters 统一透传 timeout policy 选项", () => {
   }
 });
 
+test("native Worker adapters 统一复用 result 输出恢复能力", () => {
+  const files = ["codex.ts", "kimi.ts", "claude.ts", "gemini.ts", "cursor.ts"];
+  for (const file of files) {
+    const source = fs.readFileSync(path.join(__dirname, "..", "src", "adapters", file), "utf8");
+    assert.ok(source.includes("ensureResultFromWorkerOutput"), `${file} must reuse shared result recovery`);
+  }
+});
+
 test("runNativeCommandAsync 超时后返回 timedOut", async () => {
   const result = await runNativeCommandAsync(process.execPath, [
     "-e",
@@ -303,6 +339,25 @@ test("runNativeCommandAsync 同时触发 wall 与 inactivity timeout 时只终�
   const warning = JSON.parse(fs.readFileSync(warningPath, "utf8"));
   assert.strictEqual(warning.event, "timeout_kill");
   assert.match(warning.reason, /timed out/);
+});
+
+test("runNativeCommandAsync 宽限期内正常退出不标记为超时失败", async () => {
+  if (process.platform === "win32") {
+    console.log("↷ runNativeCommandAsync graceful timeout exit skipped: Windows taskkill cannot deliver SIGTERM to Node handler");
+    return;
+  }
+  const result = await runNativeCommandAsync(process.execPath, [
+    "-e",
+    "process.on('SIGTERM',()=>setTimeout(()=>process.exit(0),50));setTimeout(()=>{},5000)",
+  ], {
+    cwd: process.cwd(),
+    timeoutMs: 150,
+    warnBeforeMs: 0,
+    graceKillMs: 1000,
+    allowGracefulTimeoutExit: true,
+  });
+  assert.strictEqual(result.status, 0, result.stderr || result.error);
+  assert.strictEqual(result.timedOut, false);
 });
 
 test("runNativeCommandAsync 在 result 已就绪后不会被超时竞态误杀", async () => {

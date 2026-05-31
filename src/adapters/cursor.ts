@@ -5,6 +5,7 @@ import type {
 import { resolveCommand, runNativeCommandAsync } from "./commandResolver";
 import { buildRunOptions } from "./runOptions";
 import { readPromptFile } from "./promptFile";
+import { ensureResultFromWorkerOutput } from "./resultRecovery";
 
 export interface ResolvedCursorCommand {
   command: string;
@@ -29,12 +30,13 @@ export function resolveCursorCommand(): ResolvedCursorCommand {
 }
 
 export function runCursorAdapter(
-  options: PipelineWorkerAdapterOptions & { promptPath: string; cwd: string },
+  options: PipelineWorkerAdapterOptions & { promptPath: string; resultPath: string; cwd: string },
 ): Promise<PipelineWorkerBaseResult> {
   const cursor = resolveCursorCommand();
   const prompt = readPromptFile(options.promptPath);
   const args = cursor.command === "cursor"
     ? ["agent", "--prompt", `@${options.promptPath}`]
     : ["--print", "--output-format", "text", "--trust", "--workspace", options.cwd, prompt];
-  return runNativeCommandAsync(cursor.command, args, buildRunOptions(options));
+  return runNativeCommandAsync(cursor.command, args, buildRunOptions(options))
+    .then((result) => ensureResultFromWorkerOutput(result, options.resultPath, { label: "Cursor output" }));
 }

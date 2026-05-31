@@ -7,6 +7,7 @@ import type {
 import { runNativeCommandAsync } from "./commandResolver";
 import { buildRunOptions } from "./runOptions";
 import { readPromptFile } from "./promptFile";
+import { ensureResultFromWorkerOutput } from "./resultRecovery";
 
 function extractPromptField(prompt: string, name: string): string {
   const pattern = new RegExp(`^${name}:\\s*(.+)$`, "m");
@@ -84,5 +85,5 @@ export function runKimiAdapter(
       PYTHONIOENCODING: "utf-8",
       PYTHONUTF8: "1",
     },
-  }));
+  })).then((result) => ensureResultFromWorkerOutput(result, options.resultPath, { label: "Kimi output" }));
 }

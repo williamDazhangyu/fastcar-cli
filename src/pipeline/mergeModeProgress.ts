@@ -97,7 +97,7 @@ export function mergeModeProgress(
     const comparable = comparison.status !== "unknown";
     const noImprovementStreak = comparison.status === "improved" ? 0 :
       comparable ? Number(optimization.noImprovementStreak || 0) + 1 :
-        Number(optimization.noImprovementStreak || 0);
+        Number(optimization.noImprovementStreak || 0) + 1;
     const maxNoImprovementIterations = Number(optimization.maxNoImprovementIterations || 3);
     const verifiedStatus = cliValidation.status === "passed" && comparison.status !== "regression" ?
       (comparison.status === "unchanged" ? "no_improvement" : "passed") :
