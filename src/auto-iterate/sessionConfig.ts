@@ -244,6 +244,7 @@ export function withModeDefaults(answers: StateObject): StateObject {
     ...answers,
     language,
     mode,
+    executionMode: answers.executionMode === "protocol_only" ? "protocol_only" : "native_subagent",
     modeLabel: config.label,
     modeDescription: config.description,
     autopilot: config.autopilot,
@@ -280,6 +281,7 @@ export function buildNonInteractiveConfig(
 
   const base = {
     mode,
+    executionMode: options.noRun ? "protocol_only" : "native_subagent",
     goal,
     maxIterations,
     autopilotMaxIterations,

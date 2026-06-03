@@ -77,6 +77,7 @@ function makeMode(overrides = {}) {
     allowAgentInference: true,
     allowModify: true,
     loopShape: "default",
+    executionMode: "native_subagent",
     ...overrides,
   };
 }
@@ -412,15 +413,21 @@ test("validateTaskModel requires non-empty success criteria for delivery gate", 
   ]);
 });
 
-test("validateModeModel enforces known mode and loop shape", () => {
+test("validateModeModel enforces known mode, loop shape, and execution mode", () => {
   const issues = [];
 
-  validateModeModel(issues, makeMode({ mode: "unknown", loopShape: "forever", allowModify: "yes" }), ["quick", "strict"]);
+  validateModeModel(issues, makeMode({
+    mode: "unknown",
+    loopShape: "forever",
+    executionMode: "silent_manual",
+    allowModify: "yes",
+  }), ["quick", "strict"]);
 
   assert.deepStrictEqual(issues, [
     { severity: "error", message: "state.json.mode.mode=unknown 不是有效模式" },
     { severity: "error", message: "state.json.mode.allowModify 必须是 boolean" },
     { severity: "error", message: "state.json.mode.loopShape=forever 不是合法值" },
+    { severity: "error", message: "state.json.mode.executionMode=silent_manual 不是合法值" },
   ]);
 });
 
@@ -491,6 +498,7 @@ test("validateValidationModel validates final verifiability and command history"
       finalVerifiability: "maybe",
       commands: [
         { command: "", result: "ok", iteration: -1 },
+        { executable: "", args: [1] },
       ],
     },
     { deliveryVerifiability: ["verifiable", "unknown"] },
@@ -502,6 +510,9 @@ test("validateValidationModel validates final verifiability and command history"
     { severity: "error", message: "state.json.validation.commands[0].command 必须是非空字符串" },
     { severity: "error", message: "state.json.validation.commands[0].result=ok 不是合法值" },
     { severity: "error", message: "state.json.validation.commands[0].iteration 必须是大于 0 的整数" },
+    { severity: "error", message: "state.json.validation.commands[1].command 必须是非空字符串" },
+    { severity: "error", message: "state.json.validation.commands[1].executable 必须是非空字符串" },
+    { severity: "error", message: "state.json.validation.commands[1].args 必须是字符串数组" },
   ]);
 });
 
@@ -804,6 +815,10 @@ test("validateValidationCommandsModel validates blank string and history entry f
         result: "bad",
         exitCode: "1",
         iteration: 0,
+      },
+      {
+        executable: "node",
+        args: ["scripts/verify.js"],
       },
     ],
     (item) => Boolean(item && typeof item === "object" && "result" in item),

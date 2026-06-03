@@ -4,8 +4,12 @@ import { spawn } from "child_process";
 import treeKill from "tree-kill";
 
 import { getLanguageText } from "./language";
-import { validationConfigCommands } from "./validationCommands";
+import {
+  normalizeValidationCommand,
+  validationConfigDeterministicCommands,
+} from "./validationCommands";
 import type {
+  DeterministicValidationCommand,
   PipelineStateLike,
   PipelineValidationOptions,
   ValidationCommandResult,
@@ -22,10 +26,6 @@ function tail(value: unknown, max = 4096): string {
   return text.length > max ? text.slice(text.length - max) : text;
 }
 
-function isTruthyString(item: unknown): item is string {
-  return typeof item === "string" && Boolean(item);
-}
-
 function killValidationProcessTree(pid: number | undefined | null): Promise<void> {
   if (!pid) {
     return Promise.resolve();
@@ -36,11 +36,12 @@ function killValidationProcessTree(pid: number | undefined | null): Promise<void
 }
 
 function runValidationCommand(
-  command: string,
+  commandConfig: DeterministicValidationCommand,
   projectRoot: string,
   timeoutMs: number,
 ): Promise<ValidationCommandWithOutput> {
   const startedAt = Date.now();
+  const { command, executable, args } = commandConfig;
   return new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
@@ -58,6 +59,8 @@ function runValidationCommand(
       }
       resolve({
         command,
+        executable,
+        args,
         status: result.status || "failed",
         exitCode: result.exitCode === undefined ? 1 : result.exitCode,
         signal: result.signal || "none",
@@ -68,9 +71,9 @@ function runValidationCommand(
       });
     }
 
-    const child = spawn(command, {
+    const child = spawn(executable, args, {
       cwd: projectRoot,
-      shell: true,
+      shell: false,
       windowsHide: true,
     });
 
@@ -86,7 +89,7 @@ function runValidationCommand(
     child.on("close", (code: number | null, signal: string | null) => {
       finish({
         status: code === 0 && !timedOut ? "passed" : "failed",
-        exitCode: code === null ? (timedOut ? 1 : 1) : code,
+        exitCode: timedOut ? 1 : (code === null ? 1 : code),
         signal: signal || (timedOut ? "SIGTERM" : "none"),
         error: timedOut ? "process timed out" : "none",
       });
@@ -116,11 +119,15 @@ export function parseValidationCommands(
   explicit: unknown,
 ): string[] {
   if (explicit) {
-    return (Array.isArray(explicit) ? explicit : [explicit]).filter(isTruthyString);
+    return (Array.isArray(explicit) ? explicit : [explicit])
+      .map(normalizeValidationCommand)
+      .filter((item): item is DeterministicValidationCommand => Boolean(item))
+      .map((item) => item.command);
   }
   const validation = state && state.validation && typeof state.validation === "object" ? state.validation : {};
   const commands = Array.isArray(validation.commands) ? validation.commands : [];
-  return validationConfigCommands(commands)
+  return validationConfigDeterministicCommands(commands)
+    .map((item) => item.command)
     .filter((item) => {
       const normalized = String(item).trim();
       if (/^由 Agent 自动识别/.test(normalized)) {
@@ -142,8 +149,14 @@ export function parseValidationCommands(
     });
 }
 
+function normalizeRunnableValidationCommands(commands: unknown[]): DeterministicValidationCommand[] {
+  return commands
+    .map(normalizeValidationCommand)
+    .filter((item): item is DeterministicValidationCommand => Boolean(item));
+}
+
 export async function runValidationCommands(
-  commands: string[],
+  commands: unknown[],
   projectRoot: string,
   iterationDir: string,
   language: unknown,
@@ -170,9 +183,31 @@ export async function runValidationCommands(
     };
   }
 
+  const runnableCommands = normalizeRunnableValidationCommands(commands);
+  if (runnableCommands.length === 0) {
+    const summary = "No deterministic Node validation command is configured";
+    await fs.promises.writeFile(
+      path.join(iterationDir, logFileName),
+      [
+        "status: not_run",
+        "command: none",
+        `reason: ${summary}`,
+        "runner: deterministic_node_spawn",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    return {
+      status: "not_run",
+      command: null,
+      exitCode: null,
+      summary,
+    };
+  }
+
   const timeoutMs = Number.isFinite(options.timeoutMs) ? Number(options.timeoutMs) : 10 * 60 * 1000;
   const results: ValidationCommandWithOutput[] = [];
-  for (const command of commands) {
+  for (const command of runnableCommands) {
     const result = await runValidationCommand(command, projectRoot, timeoutMs);
     results.push(result);
     if (result.status !== "passed") {
@@ -181,6 +216,9 @@ export async function runValidationCommands(
   }
   const log = results.map((item) => [
     `command: ${item.command}`,
+    "runner: deterministic_node_spawn",
+    `executable: ${item.executable || ""}`,
+    `args_json: ${JSON.stringify(item.args || [])}`,
     `exit_code: ${item.exitCode}`,
     `signal: ${item.signal}`,
     `error: ${item.error}`,
@@ -201,7 +239,7 @@ export async function runValidationCommands(
   ].filter(Boolean).join(" ");
   return {
     status: failed ? "failed" : "passed",
-    command: commands.join(" && "),
+    command: runnableCommands.map((item) => item.command).join(" && "),
     exitCode: last.exitCode,
     durationMs: results.reduce((total, item) => total + (item.durationMs || 0), 0),
     summary: outputSummary || fallbackSummary || (failed ? "validation command failed without output" : ""),

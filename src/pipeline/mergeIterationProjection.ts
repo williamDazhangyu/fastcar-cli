@@ -100,9 +100,11 @@ export function applyIterationProjection(input: ApplyIterationProjectionInput): 
     regressionDetected: effectiveValidation.status === "failed",
     perCommand: Array.isArray(effectiveValidation.results)
       ? effectiveValidation.results.map((item) => ({
-          command: item.command || "not_run",
-          status: item.status || "not_run",
-          result: item.exitCode === null || item.exitCode === undefined ? null : String(item.exitCode),
+            command: item.command || "not_run",
+            executable: item.executable,
+            args: Array.isArray(item.args) ? item.args : undefined,
+            status: item.status || "not_run",
+            result: item.exitCode === null || item.exitCode === undefined ? null : String(item.exitCode),
           exitCode: item.exitCode === undefined ? null : item.exitCode,
           signal: item.signal || "none",
           error: item.error || "none",

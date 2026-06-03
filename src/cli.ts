@@ -47,6 +47,7 @@ Commands:
 
   update:cos               更新 @fastcar/template-cos 的 target 文件夹
   auto-iterate             交互式生成 auto-iterate-coding 启动文件
+                           当前默认架构: 主 Agent 直接派发 coder subagent；CLI 生成/维护 session
                            内置 Watchdog 状态模板守卫；不启动独立后台进程
                            --mode strict|quick|diagnose|verify|plan|optimize|prototype
                            --strict / --quick / --diagnose / --verify / --plan-only / --optimize / --prototype
@@ -55,17 +56,17 @@ Commands:
                            --max-iterations <n> 普通迭代预算
                            --autopilot-max-iterations <n> Autopilot 迭代预算
                            --list / --switch <name> / --resume <name>
-                           --dispatch <session> --agent codex|claude|gemini|kimi|cursor|windsurf|copilot|jules|devin|openhands|replit --task <text> --files <glob[,glob]> [--dry-run]
-                           --verify-command <cmd> dispatch worker 的验证命令
-                           --run --once [--json-progress] CLI 驱动单轮 pipeline
-                           --run --autopilot --json-progress CLI 驱动多轮 pipeline
-                           --check [--json-progress] 只读检查 Worker CLI 环境
-                           --validate-cmd <cmd> pipeline 的 CLI 独立验证命令
-                           --scope <glob[,glob]> 限定 pipeline Worker 可修改范围
-                           --progress-interval <seconds> Worker 运行中进度统计输出间隔
-                           --isolate 每轮在临时 git worktree 中运行 Worker
-                           --allow-modify Verify 模式下允许 Worker 写文件
-                           --yes, -y 非交互生成，适合手动/fallback；CLI 驱动路由使用 --run --json-progress
+                           --dispatch <session> --agent codex|claude|gemini|kimi|cursor|windsurf|copilot|jules|devin|openhands|replit --task <text> --files <glob[,glob]> [--dry-run] legacy/deprecated dispatch prompt 兼容
+                           --verify-command <cmd> legacy dispatch worker 的验证命令
+                           --run --once [--json-progress] legacy/deprecated CLI pipeline 兼容
+                           --run --autopilot --json-progress legacy/deprecated CLI pipeline 兼容
+                           --check [--json-progress] legacy/deprecated Worker CLI 环境检查
+                           --validate-cmd <cmd> legacy pipeline 的 CLI 独立验证命令
+                           --scope <glob[,glob]> legacy pipeline Worker 可修改范围
+                           --progress-interval <seconds> legacy Worker 运行中进度统计输出间隔
+                           --isolate legacy pipeline 每轮在临时 git worktree 中运行 Worker
+                           --allow-modify Verify 模式下允许 legacy Worker 写文件
+                           --yes, -y 非交互生成，适合手动/fallback
                            --examples [关键词] 输出可复制的自然语言触发示例
                            -f, --from    从本地清单文档导入长需求
 
@@ -102,23 +103,21 @@ Examples:
   $ fastcar-cli pack pnpm      # 使用 pnpm 安装依赖
 
   $ fastcar-cli update:cos     # 更新 cos 模板的 target 文件夹
-  $ fastcar-cli auto-iterate   # 手动/fallback 交互式生成自动迭代开发状态和启动提示
-  $ fastcar-cli auto-iterate --check --json-progress # 只读检查可用 Worker CLI
-  $ fastcar-cli auto-iterate --run --autopilot --quick --goal "修复登录失败问题" --session login-bugfix --autopilot-max-iterations 5 --json-progress # CLI 驱动多轮 pipeline
-  $ fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix --yes --no-run # 手动/fallback 启动 session（非交互）
-  $ fastcar-cli auto-iterate --run --autopilot --diagnose --goal "诊断登录偶发失败" --session login-diagnose --json-progress # 诊断模式：先复现和假设验证
-  $ fastcar-cli auto-iterate --run --once --verify --from docs/prd.md --session login-verify --json-progress # Verify-only 验收 session
-  $ fastcar-cli auto-iterate --run --autopilot --prototype --goal "验证订单状态机" --session order-prototype --json-progress # 一次性原型澄清
+  $ fastcar-cli auto-iterate   # 交互式生成自动迭代开发状态和启动提示
+  $ fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix --yes # 默认 native-subagent session（非交互）
+  $ fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix --yes --no-run # protocol-only / LLM-only session
+  $ fastcar-cli auto-iterate --diagnose --goal "诊断登录偶发失败" --session login-diagnose --yes # 诊断 session
+  $ fastcar-cli auto-iterate --verify --from docs/prd.md --session login-verify --yes # Verify-only 验收 session
+  $ fastcar-cli auto-iterate --prototype --goal "验证订单状态机" --session order-prototype --yes # 原型澄清 session
   $ fastcar-cli auto-iterate --list # 列出 auto-iterate sessions
   $ fastcar-cli auto-iterate --examples # 输出自然语言触发示例
   $ fastcar-cli auto-iterate --examples 验收 # 按关键词检索触发示例
   $ fastcar-cli auto-iterate --switch login-verify # 切换当前 session
   $ fastcar-cli auto-iterate --resume login-bugfix # 恢复指定 session
   $ fastcar-cli auto-iterate --validate-state login-bugfix # 只读校验 session 基线和 sub-agent 协议一致性
-  $ fastcar-cli auto-iterate --run --once --quick --goal "修复登录失败问题" --session login-bugfix --json-progress # CLI 驱动单轮 pipeline
-  $ fastcar-cli auto-iterate --dispatch login-bugfix --agent codex --task "修复 REQ-001" --files "src/auth.js,test/auth.test.js" --dry-run # 生成本地 Agent worker prompt
-  $ fastcar-cli auto-iterate --run --once --plan-only --goal "设计支付模块" --session payment-plan --json-progress # Plan-only 规划模式
-  $ fastcar-cli auto-iterate --run --autopilot --strict --from docs/ai-checklist.md --session checklist-impl --json-progress # 从本地清单文档生成并执行
+  $ fastcar-cli auto-iterate --finalize login-bugfix # 汇总并交付已验证 session
+  $ fastcar-cli auto-iterate --plan-only --goal "设计支付模块" --session payment-plan --yes # Plan-only 规划 session
+  $ fastcar-cli auto-iterate --strict --from docs/ai-checklist.md --session checklist-impl --yes # 从本地清单文档生成 session
 
   $ fastcar-cli skill install fastcar-framework       # 交互式安装
   $ fastcar-cli skill install fastcar-framework -g    # 全局安装

@@ -74,4 +74,4 @@ max_no_improvement_iterations = 3
 - 无法重新运行真实验证。
 - 优化需要引入新抽象但没有明确复用收益。
 
-当优化暴露架构摩擦时，停止本轮自动优化并按 [architecture-friction.md](architecture-friction.md) 汇报。
+当优化暴露架构摩擦时，停止本轮自动优化，按 `interface-and-seams.md` 识别缺失 seam、patch 扩散或远处失败，并把下一步收敛为明确的接口、测试 seam 或用户决策。

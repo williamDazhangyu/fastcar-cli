@@ -37,7 +37,7 @@ test("parseArgs preserves pipeline run flags and repeated validate commands", ()
     "--json-progress",
     "--validate-cmd",
     "npm run typecheck",
-    "--validate-cmd=node test/router-ux.test.js",
+    "--validate-cmd=node test/pipeline.test.js",
     "--step-timeout=0",
     "--inactivity-timeout",
     "0",
@@ -49,7 +49,7 @@ test("parseArgs preserves pipeline run flags and repeated validate commands", ()
   assert.strictEqual(options.jsonProgress, true);
   assert.deepStrictEqual(options.validateCommand, [
     "npm run typecheck",
-    "node test/router-ux.test.js",
+    "node test/pipeline.test.js",
   ]);
   assert.strictEqual(options.stepTimeoutSeconds, 0);
   assert.strictEqual(options.inactivityTimeoutSeconds, 0);

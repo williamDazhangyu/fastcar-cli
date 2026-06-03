@@ -94,6 +94,7 @@ export function validateModeModel(issues: ValidationIssue[], mode: unknown, vali
   }
   requireBooleanFields(issues, mode, ["autopilot", "runtimeAutopilot", "allowAgentInference", "allowModify"], "state.json.mode");
   requireEnumValue(issues, mode.loopShape, ["default", "autopilot", "plan_once"], "state.json.mode.loopShape");
+  requireEnumValue(issues, mode.executionMode, ["native_subagent", "protocol_only"], "state.json.mode.executionMode");
 }
 
 export function validateBudgetsModel(issues: ValidationIssue[], budgets: unknown): void {

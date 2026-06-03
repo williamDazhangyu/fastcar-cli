@@ -20,7 +20,7 @@
 | 3 | `## Session / 会话` | 必填；记录 session、状态文件、启动提示、current 指针和恢复优先级 | CLI 初始化 |
 | 4 | `## Mode / 模式` | 必填；记录模式、Autopilot、推断权限和修改权限 | CLI 初始化 |
 | 5 | `## Agent Capability Summary` | 必填；启动后由 Agent 探测并更新 | Agent |
-| 6 | `## Sub-Agent Dispatch / 子 Agent 调度` | 必填；记录子 Agent 并发状态、active/history 列表、计数和预算参数；每轮 dispatch 和 merge 后更新 | CLI 初始化，Agent 更新 |
+| 6 | `## Sub-Agent Dispatch / 子 Agent 调度` | 必填；记录单 coder 交接状态、active/history 列表、计数和预算参数；每轮 coder 结束和主 Agent merge 后更新 | CLI 初始化，Agent 更新 |
 | 7 | `## Budgets` | 必填；记录预算、已用轮次、剩余轮次和预算追加记录 | CLI 初始化，Agent 更新 |
 | 8 | `## Recovery / Reconcile` | 必填；恢复 session 前必须更新 | Agent |
 | 9 | `## Current State` | 必填；每轮实现、优化、压缩、停止和交付前更新 | Agent |
@@ -58,13 +58,13 @@
 - `state.json` 中的枚举、数字、布尔、数组和对象字段必须满足强类型校验；不得把 Markdown 中的自由文本作为机器权威状态。
 - `state.json.language` 可选记录用户语言推断结果，当前支持 `zh` / `en`；旧 session 缺失该字段时可从 `task.goal` 或来源文档推断，不得阻断恢复。
 - `status`、`mode`、`requiredAction`、`deliveryVerifiability` 等机器枚举必须保持英文；只允许人类可读摘要、原因、证据、`state.md` 视图、Worker prompt 和 Skill Capture 文档跟随用户语言。
-- `state.json.mode.runtimeAutopilot` 记录运行时是否启用 CLI 多轮 Autopilot；`mode.loopShape` 只能是 `default`、`autopilot` 或 `plan_once`，用于区分模式默认值和本次 `--run` 形态。
+- `state.json.mode.runtimeAutopilot` 记录运行时是否启用多轮 Autopilot；`mode.loopShape` 只能是 `default`、`autopilot` 或 `plan_once`；`mode.executionMode` 只能是 `native_subagent` 或 `protocol_only`，用于锁定本 session 是否派发原生 coder subagent。执行模式不得运行中静默切换。
 - `state.json.notes[]`、`state.json.diagnose.hypotheses[]` 和 `state.json.diagnose.hypothesisQueue[]` 是 Worker `state_patch.notes` / `state_patch.hypotheses` 的白名单合并目标；Worker 不得通过它们覆盖预算、验证或交付门禁。CLI merge 每类最多保留最近 200 条，避免长期诊断 session 无界膨胀；`hypothesisQueue` 入队时必须保持唯一 `H<n>` ID，旧状态只有 `diagnose.hypotheses[]` 且缺少 `hypothesisQueue[]` 时必须先物化为 pending 队列，`hypothesis_test` focus 必须携带待验证假设 ID，并按 `pending -> supported/rejected/inconclusive` 推进匹配队列项，避免重复验证或误更新同一个假设。
 - `state.json.traceability.iterations[]` 是每轮公开审计记录，只能保存 `rationaleSummary`、决策、证据、文件、验证结果和 prompt/result/log 路径；不得记录或要求 Worker 输出私有 chain-of-thought；CLI merge 只保留最近 200 条，完整每轮原始证据以 `iterations/<n>/result.json`、`worker.log` 和 `validation.log` 为准。
 - `state.json.documentation` 汇总 Worker 的 `documentation.apiChanges`、`architectureNotes`、`implementationNotes` 和 `changelogEntries`，作为 `--finalize` 生成 docs 的输入；Worker 不能直接写 `deliveryDocs`；CLI merge 每类最多保留最近 200 条，避免长期 session 让 `state.json` 无界膨胀。
 - `state.json.deliveryDocs` 由 CLI 在 `--finalize` 阶段生成，默认路径为 `.agent-state/auto-iterate/<session>/docs/`，固定产物为 `api.md`、`changelog.md`、`architecture.md`、`implementation.md`。
 - `state.json.optimization.baselineMetrics` / `postMetrics` / `metricComparison` 记录优化前后可比较指标；连续无改善通过 `noImprovementStreak` 与 `maxNoImprovementIterations` 控制停止，不得在没有改善证据时无限优化。
-- `state.json.validation.commands[]` 允许启动时的字符串命令和未执行配置对象，也允许运行后的对象历史；带 `iteration/result/status/phase/exitCode/summary` 的对象只作为历史证据，不会被 `parseValidationCommands` 回流为下一轮执行命令；历史对象最多保留最近 200 条，字符串和未执行配置对象作为验证配置保留。
+- `state.json.validation.commands[]` 允许启动时的字符串命令、结构化 `{ executable, args }` 确定性命令和未执行配置对象，也允许运行后的对象历史；带 `iteration/result/status/phase/exitCode/summary` 的对象只作为历史证据，不会被 `parseValidationCommands` 回流为下一轮执行命令；历史对象最多保留最近 200 条。运行时由 Node 确定性 runner 使用 `shell:false` 执行，复杂 shell 字符串会被拒绝并标记为未配置可运行验证。
 - `state.json.postChange.perCommand[]` 必须逐条记录本轮实际执行的验证命令；`postChange.status=passed` 时不得包含 `failed` 命令。
 - `task.successCriteria` 不能为空；成功标准缺失时不得进入交付门禁，也不得把“按目标推断”伪装成已确认验收标准。
 - 写入 `state.json` 必须使用临时文件加原子 rename；写入后必须校验通过，再渲染 `state.md`。如果 `state.json` 已成功写入但 `state.md` 生成视图刷新失败，CLI 只能输出 `state_markdown_refresh_failed` warning 并继续以 `state.json` 为权威源，不得回滚或阻断 pipeline。
@@ -106,10 +106,10 @@
 - 所有关键 REQ 均为 `passed` 且 fresh-eyes 已处理后，必须完成 `validation_hardening` 门禁：`validation_hardening_iterations_used >= minimum_validation_hardening_iterations`，并覆盖 `boundary / negative / regression`；无法覆盖时必须把 `validation_hardening_status` 标记为 `blocked / not_available / user_accepted_limited` 并记录原因。
 - `delivery_verifiability = not_verifiable / unknown` 时，不允许按成功交付输出。
 - `Temporary Artifacts / Cleanup` 未完成且没有用户确认保留理由时，不允许按成功交付输出。
-- `Sub-Agent Dispatch` 中 `active_sub_agents` 的 `files_assigned` 在不同子 Agent 间不得重叠（coder 类型必须互斥；explore 类型允许重叠）。
-- 每轮 merge 后，`active_sub_agents` 中 `merge_status=merged` 或 `status=failed` 的条目必须移入 `sub_agent_history`，下一轮 dispatch 前 `active_sub_agents` 必须为空；CLI dispatch 写入 `state.json.subAgentDispatch.subAgentHistory` 时保留最近 200 条并累计 `dispatchedCount` / `completedCount` / `failedCount`，不得重置已有历史。
+- `Sub-Agent Dispatch` 中 `active_sub_agents` 最多只能有一个写代码 coder；只读探索辅助不得写业务代码或 state。
+- 每轮 merge 后，`active_sub_agents` 中 `merge_status=merged` 或 `status=failed` 的条目必须移入 `sub_agent_history`，下一轮派发 coder 前 `active_sub_agents` 必须为空；历史记录保留最近 200 条并累计 `dispatchedCount` / `completedCount` / `failedCount`，不得重置已有历史。
 - 并行实现的 N 个 coder 子 Agent 完成后，`implementation_iterations_used` 只增加 1；explore 和 verify 子 Agent 不增加迭代计数。
-- `failed_count >= max_failed_sub_agents` 时，后续实现轮次不得再 dispatch 新的 coder 子 Agent。
+- `failed_count >= max_failed_sub_agents` 时，后续实现轮次不得再派发新的 coder 子 Agent。
 - 恢复 session 时，`active_sub_agents` 中 `merge_status=pending` 的条目必须在进入下一轮前完成 merge 或标记 skipped；完成后移入 `sub_agent_history`。
 
 ## validate-state 校验基线

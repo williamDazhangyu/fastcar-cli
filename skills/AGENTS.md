@@ -2,19 +2,21 @@
 
 本文件会被 `fastcar-cli skill install` 同步到目标 Agent 或项目根目录，用于指导 Codex、Claude Code、Cursor、Kimi Code、Gemini CLI 等主流 AI Agent 编写 FastCar 相关代码。
 
-## CLI 驱动迁移公告
+## Subagent 驱动迁移公告
 
-本项目正在从 Agent 自治 auto-iterate 迁移到 CLI 驱动流水线。若当前 `fastcar-cli auto-iterate --run` 可用，并且 `fastcar-cli auto-iterate --check` 发现可用 Worker CLI，Router LLM 必须优先调用 `fastcar-cli auto-iterate --run --json-progress ...`，只负责自然语言路由、读取 NDJSON 进度、转述状态和在 `need_decision` 时询问用户；不要在同一聊天会话里内联执行整套自动迭代协议。
+本项目已迁移到主 Agent 直接管理 Subagent 架构。当 `Agent(subagent_type="coder")` 工具可用时，主 Agent 必须直接使用它派发 coder subagent 作为运动员，自身担任裁判：选取 focus、构建 prompt、派发 coder、校验 result、运行 CLI 验证、合并 state、管理看门狗/预算/交付门禁。
 
-不带 `--run` 的流程只作为兼容 fallback：当 Worker CLI 不可用、用户显式要求 `--no-run`，或当前 CLI 不支持目标 flag 时，才回退到生成 `state.json`、`state.md`、`start-prompt.md` 后由 Agent 自治执行；自动路由生成 fallback 启动命令时必须显式追加 `--yes --no-run`。
+旧 CLI 驱动外部 Worker 路径（`fastcar-cli auto-iterate --run`、`src/adapters/`）已废弃，待代码清理。用户显式要求 `--no-run` 或无 `Agent` 工具时，进入 protocol-only / LLM-only 路径：生成 state 骨架后由当前 LLM 遵循自动迭代技巧执行，不启动 subagent。
 
-### Router / Worker 硬边界
+### 主 Agent / Subagent 硬边界
 
-- Router LLM 只负责自然语言路由、执行 `--check` / `--run --json-progress`、读取 NDJSON、转述进度和在 `need_decision` 时询问用户。
-- Router LLM 不得要求用户复制 prompt、不得要求用户手动运行 `fastcar-cli auto-iterate --run`、不得在同一聊天会话里自行维护整套 auto-iterate 状态机。
-- Worker Agent 只执行 CLI 生成的单轮 prompt，必须把结果写到指定 `result.json` 后停止。
-- Worker Agent 不得修改 `.agent-state/auto-iterate/**` 中除本轮指定 `result.json` 以外的文件，不得替 CLI 跑最终验证，不得直接询问用户。
-- CLI 是 state merge、预算推进、验证命令、write guard、delivery gate 和 `need_decision` resume 的唯一权威执行者。
+- 主 Agent（裁判）负责选取 focus、构建 prompt、派发 coder subagent、读取 result.json 做 schema 检查、Node 确定性 runner 跑验证命令、git diff 审计 scope、合并 state、推进预算、看门狗、交付门禁、need_decision 时询问用户。
+- 主 Agent 不得亲自修改业务代码。
+- protocol-only / LLM-only 模式不使用主 Agent / Coder Subagent 角色边界；当前 LLM 可直接修改业务代码，但必须继续维护 RCM、真实验证、state.json/state.md、Watchdog、预算和交付门禁。
+- 自动模式与 protocol-only 模式是 session 级执行风格，启动后不得静默互相切换；subagent 不可用时必须 need_decision 或 blocked。
+- 校验靠工具事实（Node runner exit code、git diff、JSON 内容），不存在幻觉窗口。真正要防的是偷懒：每轮校验写 validation.log，交付前逐条确认命令真实执行过。
+- Coder Subagent（运动员）只执行单轮编码：读取 focus 相关文件、修改 scope 内代码、写入 result.json 后停止。不得运行任何命令，不得写 state.json/state.md。
+- 主 Agent 是 state merge、预算推进、交付门禁的唯一权威执行者。
 
 ## 适用范围
 
@@ -33,12 +35,15 @@
 
 ## 自动迭代 Skill 强触发词
 
-如果用户消息包含以下意图或词语，优先使用 `auto-iterate-coding`，并先读取 `skills/auto-iterate-coding/skill.md`：
+如果用户消息包含以下意图或词语，优先使用 `auto-iterate-coding`，并先读取 `skills/auto-iterate-coding/SKILL.md`：
 
 - 自动迭代、auto-iterate、全自动开发、Autopilot。
+- 全局自动迭代、触发全局自动迭代、采用自动迭代工作流、真实自动迭代、不要只在聊天里模拟迭代。
 - 完整实现、完整做完、全部实现、端到端实现、把需求都做完。
 - 根据文档实现、按文档实现、实现这个文档、实现 docs、实现 docs 文档。
 - 实现 PRD、根据 PRD 实现、按 PRD 实现、按 issue 实现、把文档里的需求都做完。
+- 自动迭代 N 次、自动迭代 N 轮、最多迭代 N 次、最多跑 N 轮、Autopilot 预算 N 轮。
+- 完善 docs/impl/*.md、补充 docs/*.md、优化文档至可开工协议版本。
 - 快速启动、开一个自动迭代任务、帮我自动推进。
 - 一直修到通过、一直修到测试通过、不要停直到完成。
 - 检查是否完成、帮我验收、验收 PRD、验证这个 PRD 是否都实现了。
@@ -49,6 +54,8 @@
 - 恢复任务、切换 session、列出自动迭代任务、resume session、switch session、list session。
 
 用户不需要记住 `fastcar-cli auto-iterate` 参数。Agent 应按 `auto-iterate-coding` 的自然语言命令路由规则，将用户意图映射为对应命令；只有缺少会影响安全、兼容性或外部资源的关键信息时才追问。
+
+目标 Agent 触发前提：目标 Agent 运行时必须能读取到 `auto-iterate-coding` skill 或本 `AGENTS.md` 中的触发规则。若当前 Agent 会话的可用 skills 列表没有 `auto-iterate-coding`，即使全局安装了 `fastcar-cli`，它也通常只能看到普通 FastCar 规则，不会自动进入 CLI 驱动 Router。推荐用 `fastcar-cli skill install auto-iterate-coding --global --target <agent>` 同步到目标 Agent 的可检索目录；项目内也可执行 `fastcar-cli skill install auto-iterate-coding --local --target <agent>`。目标 Agent 的 `target` 名称以 `fastcar-cli skill targets` 输出为准。
 
 ## Codex Goal 模型边界
 

@@ -2,6 +2,7 @@ import inquirer from "inquirer";
 import path from "path";
 import { promises as fsPromises } from "fs";
 import { pathExists } from "../fsUtils";
+import { colorize, visualLine } from "../cliOutput";
 import {
   buildDefaultSessionName,
   getSessionPaths,
@@ -69,6 +70,7 @@ export interface CreatedAutoIterateSession {
   sessionPaths: SessionPaths;
   answers: StateObject;
   promptContent: string;
+  outputSummary: string;
 }
 
 export async function readChecklistFile(filePath: string): Promise<SourceChecklist> {
@@ -96,6 +98,28 @@ export function withSessionDefaults(
     sessionPromptFile: toRelative(sessionPaths.sessionPromptPath),
     currentFile: toRelative(sessionPaths.currentPath),
   };
+}
+
+export function renderCreatedSessionSummary(
+  answers: StateObject,
+  sessionPaths: SessionPaths,
+): string {
+  const sessionStateJsonFile = answers.sessionStateJsonFile || toRelative(sessionPaths.sessionStateJsonPath);
+  const sessionStateFile = answers.sessionStateFile || toRelative(sessionPaths.sessionStatePath);
+  const sessionPromptFile = answers.sessionPromptFile || toRelative(sessionPaths.sessionPromptPath);
+  const currentFile = answers.currentFile || toRelative(sessionPaths.currentPath);
+  const modeLabel = answers.modeLabel ? ` / ${answers.modeLabel}` : "";
+  const executionMode = answers.executionMode || "native_subagent";
+  const goal = answers.goal || "未指定";
+
+  return [
+    colorize("✓ auto-iterate session 已生成", "green"),
+    "",
+    visualLine("🎯", "目标", goal, "cyan"),
+    visualLine("📊", "进度", `session=${sessionPaths.session}；mode=${answers.mode || "unknown"}${modeLabel}；execution=${executionMode}`, "blue"),
+    visualLine("🧭", "执行", `读取 ${sessionPromptFile} 和 ${sessionStateJsonFile} 后开始；终端只显示关键进展`, "magenta"),
+    visualLine("✅", "结果", `state.md=${sessionStateFile}；current=${currentFile}；详细证据保留在状态文件和验证日志`, "green"),
+  ].join("\n");
 }
 
 export async function createAutoIterateSession(
@@ -164,6 +188,7 @@ export async function createAutoIterateSession(
     sessionPaths,
     answers,
     promptContent,
+    outputSummary: renderCreatedSessionSummary(answers, sessionPaths),
   };
 }
 

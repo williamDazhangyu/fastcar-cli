@@ -52,13 +52,13 @@ export async function promptStrictConfig(options: StateObject = {}) {
       name: "goal",
       message: "用户目标:",
       default: options.goal,
-      validate: (value) => Boolean(value && value.trim()) || "请输入用户目标",
+      validate: (value: any) => Boolean(value && value.trim()) || "请输入用户目标",
     },
     {
       type: "editor",
       name: "successCriteria",
       message: "成功标准（每行一条）:",
-      validate: (value) =>
+  validate: (value: unknown) =>
         normalizeLines(value).length > 0 || "请至少输入一条成功标准",
     },
     {
@@ -101,7 +101,7 @@ export async function promptStrictConfig(options: StateObject = {}) {
       message: "max_iterations:",
       default: String(options.maxIterations || config.defaultMaxIterations),
       validate: validatePositiveInteger,
-      filter: (value) => formatNumber(value, config.defaultMaxIterations),
+      filter: (value: any) => formatNumber(value, config.defaultMaxIterations),
     },
     {
       type: "input",
@@ -111,7 +111,7 @@ export async function promptStrictConfig(options: StateObject = {}) {
         valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
       validate: validateNonNegativeInteger,
-      filter: (value) =>
+  filter: (value: unknown) =>
         formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   ]);
@@ -127,7 +127,7 @@ export async function promptQuickConfig(options: StateObject = {}) {
       name: "goal",
       message: "简短目标 / 需求描述:",
       default: options.goal,
-      validate: (value) => Boolean(value && value.trim()) || "请输入目标或需求描述",
+      validate: (value: any) => Boolean(value && value.trim()) || "请输入目标或需求描述",
     },
     {
       type: "confirm",
@@ -147,7 +147,7 @@ export async function promptQuickConfig(options: StateObject = {}) {
       message: "max_iterations:",
       default: String(options.maxIterations || config.defaultMaxIterations),
       validate: validatePositiveInteger,
-      filter: (value) => formatNumber(value, config.defaultMaxIterations),
+      filter: (value: any) => formatNumber(value, config.defaultMaxIterations),
     },
     {
       type: "input",
@@ -157,7 +157,7 @@ export async function promptQuickConfig(options: StateObject = {}) {
         valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
       validate: validateNonNegativeInteger,
-      filter: (value) =>
+      filter: (value: any) =>
         formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   ]);
@@ -186,7 +186,7 @@ export async function promptVerifyConfig(options: StateObject = {}) {
       name: "goal",
       message: "要检查/验收的目标、PRD 或实现说明:",
       default: options.goal,
-      validate: (value) => Boolean(value && value.trim()) || "请输入要检查的目标或说明",
+      validate: (value: any) => Boolean(value && value.trim()) || "请输入要检查的目标或说明",
     },
     {
       type: "confirm",
@@ -218,7 +218,7 @@ export async function promptVerifyConfig(options: StateObject = {}) {
       message: "max_iterations:",
       default: String(options.maxIterations || config.defaultMaxIterations),
       validate: validatePositiveInteger,
-      filter: (value) => formatNumber(value, config.defaultMaxIterations),
+      filter: (value: any) => formatNumber(value, config.defaultMaxIterations),
     },
     {
       type: "input",
@@ -228,7 +228,7 @@ export async function promptVerifyConfig(options: StateObject = {}) {
         valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
       validate: validateNonNegativeInteger,
-      filter: (value) =>
+      filter: (value: any) =>
         formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   ]);
@@ -257,7 +257,7 @@ export async function promptDiagnoseConfig(options: StateObject = {}) {
       name: "goal",
       message: "要诊断的 bug、失败信号或性能回归:",
       default: options.goal,
-      validate: (value) => Boolean(value && value.trim()) || "请输入要诊断的问题",
+      validate: (value: any) => Boolean(value && value.trim()) || "请输入要诊断的问题",
     },
     {
       type: "editor",
@@ -284,7 +284,7 @@ export async function promptDiagnoseConfig(options: StateObject = {}) {
       message: "max_iterations:",
       default: String(options.maxIterations || config.defaultMaxIterations),
       validate: validatePositiveInteger,
-      filter: (value) => formatNumber(value, config.defaultMaxIterations),
+      filter: (value: any) => formatNumber(value, config.defaultMaxIterations),
     },
     {
       type: "input",
@@ -294,7 +294,7 @@ export async function promptDiagnoseConfig(options: StateObject = {}) {
         valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
       validate: validateNonNegativeInteger,
-      filter: (value) =>
+      filter: (value: any) =>
         formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   ]);
@@ -322,7 +322,7 @@ export async function promptPlanConfig(options: StateObject = {}) {
       name: "goal",
       message: "要规划的目标或需求:",
       default: options.goal,
-      validate: (value) => Boolean(value && value.trim()) || "请输入要规划的目标",
+      validate: (value: any) => Boolean(value && value.trim()) || "请输入要规划的目标",
     },
     {
       type: "input",
@@ -341,7 +341,7 @@ export async function promptPlanConfig(options: StateObject = {}) {
       message: "max_iterations:",
       default: String(options.maxIterations || config.defaultMaxIterations),
       validate: validatePositiveInteger,
-      filter: (value) => formatNumber(value, config.defaultMaxIterations),
+      filter: (value: any) => formatNumber(value, config.defaultMaxIterations),
     },
     {
       type: "input",
@@ -351,7 +351,7 @@ export async function promptPlanConfig(options: StateObject = {}) {
         valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
       validate: validateNonNegativeInteger,
-      filter: (value) =>
+      filter: (value: any) =>
         formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   ]);
@@ -379,7 +379,7 @@ export async function promptPrototypeConfig(options: StateObject = {}) {
       name: "goal",
       message: "原型要回答的问题:",
       default: options.goal,
-      validate: (value) => Boolean(value && value.trim()) || "请输入原型要回答的问题",
+      validate: (value: any) => Boolean(value && value.trim()) || "请输入原型要回答的问题",
     },
     {
       type: "list",
@@ -411,7 +411,7 @@ export async function promptPrototypeConfig(options: StateObject = {}) {
       message: "max_iterations:",
       default: String(options.maxIterations || config.defaultMaxIterations),
       validate: validatePositiveInteger,
-      filter: (value) => formatNumber(value, config.defaultMaxIterations),
+      filter: (value: any) => formatNumber(value, config.defaultMaxIterations),
     },
     {
       type: "input",
@@ -421,7 +421,7 @@ export async function promptPrototypeConfig(options: StateObject = {}) {
         valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
       validate: validateNonNegativeInteger,
-      filter: (value) =>
+      filter: (value: any) =>
         formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   ]);
@@ -450,7 +450,7 @@ export async function promptOptimizeConfig(options: StateObject = {}) {
       name: "goal",
       message: "要优化的目标、模块或问题:",
       default: options.goal,
-      validate: (value) => Boolean(value && value.trim()) || "请输入优化目标",
+      validate: (value: any) => Boolean(value && value.trim()) || "请输入优化目标",
     },
     {
       type: "input",
@@ -477,7 +477,7 @@ export async function promptOptimizeConfig(options: StateObject = {}) {
       message: "max_iterations:",
       default: String(options.maxIterations || config.defaultMaxIterations),
       validate: validatePositiveInteger,
-      filter: (value) => formatNumber(value, config.defaultMaxIterations),
+      filter: (value: any) => formatNumber(value, config.defaultMaxIterations),
     },
     {
       type: "input",
@@ -487,7 +487,7 @@ export async function promptOptimizeConfig(options: StateObject = {}) {
         valueOrDefault(options.autopilotMaxIterations, config.defaultAutopilotMaxIterations),
       ),
       validate: validateNonNegativeInteger,
-      filter: (value) =>
+      filter: (value: any) =>
         formatNonNegativeNumber(value, config.defaultAutopilotMaxIterations),
     },
   ]);

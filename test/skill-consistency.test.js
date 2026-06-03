@@ -35,99 +35,162 @@ test("WORKER.md 覆盖 pipeline focus 类型", () => {
   }
 });
 
-test("ORCHESTRATOR.md 覆盖核心 pipeline 模块", () => {
+test("ORCHESTRATOR.md 覆盖当前裁判核心模块且旧 runtime 已删除", () => {
   const orchestrator = read("skills/auto-iterate-coding/orchestrator.md");
   [
-    "runPipeline.ts",
     "iterationPrompt.ts",
-    "iterationPaths.ts",
     "pickFocus.ts",
     "mergeState.ts",
     "shouldStop.ts",
     "resultSchema.ts",
-    "envCheck.ts",
-    "progress.ts",
     "watchdog.ts",
-    "phaseGate.ts",
     "writeGuard.ts",
-    "routerUx.ts",
-    "loopPolicy.ts",
-    "flags.ts",
-    "deliveryDocs.ts",
+    "deliveryGates.ts",
+    "pipelineValidationRunner.ts",
+    "pipelineStateIO.ts",
   ].forEach((name) => {
     assert.ok(orchestrator.includes(name), `ORCHESTRATOR.md should mention ${name}`);
   });
+  [
+    "src/adapters",
+    "src/pipeline/runPipeline.ts",
+    "src/pipeline/pipelineWorkerProgress.ts",
+    "src/pipeline/pipelineIsolateWorktree.ts",
+    "src/pipeline/pipelineGitAudit.ts",
+    "src/pipeline/routerUx.ts",
+    "src/pipeline/envCheck.ts",
+    "src/auto-iterate/dispatch.ts",
+    "src/auto-iterate/subAgentDispatchValidation.ts",
+  ].forEach((relativePath) => {
+    assert.ok(!fs.existsSync(path.join(repoRoot, relativePath)), `${relativePath} should not exist`);
+  });
+    assert.ok(orchestrator.includes("已删除") || orchestrator.includes("不再维护"));
 });
 
-test("SKILL.md 声明 CLI 驱动路径和 fallback 边界", () => {
-  const skill = read("skills/auto-iterate-coding/skill.md");
+test("SKILL.md 声明主 Agent 原生 subagent 路径和 protocol-only 边界", () => {
+  const skill = read("skills/auto-iterate-coding/SKILL.md");
   assert.ok(skill.includes("执行路径识别"));
-  assert.ok(skill.includes("CLI 驱动路径"));
-  assert.ok(skill.includes("无 CLI fallback"));
-  assert.ok(skill.includes("自动模式（路径 A，默认）"));
-  assert.ok(skill.includes("手动 / fallback 模式（路径 B）"));
-  assert.ok(skill.includes("fastcar-cli auto-iterate --run --autopilot --json-progress"));
-  assert.ok(skill.includes("必须同时追加 `--yes --no-run`"));
+  assert.ok(skill.includes("主 Agent 直接管理 Subagent"));
+  assert.ok(skill.includes("Protocol-only / LLM-only"));
+  assert.ok(skill.includes("主 Agent **不亲自修改业务代码**"));
+  assert.ok(skill.includes("fastcar-cli auto-iterate --quick --yes --no-run"));
+  assert.ok(skill.includes("fastcar-cli auto-iterate --run"));
+  assert.ok(skill.includes("External CLI Worker") || skill.includes("旧 CLI 驱动"));
+  assert.ok(skill.includes("已废弃") || skill.includes("deprecated"));
+  assert.ok(skill.includes("不得在 native_subagent 与 protocol_only 之间静默切换") || skill.includes("不得由主 Agent 静默接手写代码"));
   assert.ok(!skill.includes("应追加 `--yes` 进入非交互生成模式"));
 });
 
-test("自然语言路由文档区分自动模式和手动 fallback 命令", () => {
+test("自然语言路由文档区分自动模式和 protocol-only 命令", () => {
   const routing = read("skills/auto-iterate-coding/references/natural-language-routing.md");
-  const mappingStart = routing.indexOf("## 自动 / 手动模式映射表");
-  const fallbackStart = routing.indexOf("## 手动模式 / fallback 路径映射");
+  const mappingStart = routing.indexOf("## 自动 / Protocol-only 模式映射表");
+  const fallbackStart = routing.indexOf("## Protocol-only / LLM-only 路径映射");
   assert.ok(mappingStart >= 0, "routing doc should have automatic/manual mapping section");
   assert.ok(fallbackStart > mappingStart, "fallback section should follow mapping section");
 
   const mapping = routing.slice(mappingStart, fallbackStart);
-  assert.ok(mapping.includes("fastcar-cli auto-iterate --check --json-progress"));
-  assert.ok(mapping.includes("--run --autopilot --quick"));
-  assert.ok(mapping.includes("--run --once --verify"));
-  assert.ok(mapping.includes("--run --once --plan-only"));
+  assert.ok(mapping.includes("主 Agent 原生 subagent"));
+  assert.ok(mapping.includes("Agent(subagent_type=\"coder\")"));
+  assert.ok(mapping.includes("不启动旧 `--check` / `--run` Worker pipeline"));
+  assert.ok(mapping.includes("--quick --goal \"<目标>\" --session <session> --yes"));
   assert.ok(mapping.includes("--quick --goal \"<目标>\" --session <session> --yes --no-run"));
-  assert.ok(mapping.includes("手动 / fallback（路径 B：Agent 自治）"));
+  assert.ok(mapping.includes("Protocol-only / LLM-only（路径 B：当前 LLM 自律执行）"));
 });
 
-test("用户入口文档默认展示自动模式，旧启动命令只作为 fallback", () => {
+test("用户入口文档默认展示原生 subagent，旧流水线只作为 deprecated", () => {
   const files = [
     ["README.md", read("README.md")],
     ["end-to-end-scenarios.md", read("skills/auto-iterate-coding/examples/end-to-end-scenarios.md")],
   ];
 
   for (const [name, content] of files) {
-    assert.ok(content.includes("fastcar-cli auto-iterate --check --json-progress"), `${name} should mention --check`);
-    assert.ok(content.includes("fastcar-cli auto-iterate --run"), `${name} should mention --run`);
+    assert.ok(content.includes("主 Agent") || content.includes("Agent(subagent_type=\"coder\")"), `${name} should mention native subagent flow`);
+    assert.ok(!content.includes("fastcar-cli auto-iterate --check --json-progress"), `${name} should not recommend --check`);
+    assert.ok(!content.includes("fastcar-cli auto-iterate --run --autopilot"), `${name} should not recommend --run`);
   }
 
   const readme = files[0][1];
-  const oldQuickIndex = readme.indexOf('fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix --yes');
-  const fallbackIndex = readme.indexOf("手动 / fallback");
-  assert.ok(oldQuickIndex > fallbackIndex, "README old quick command should only appear after fallback heading");
+  assert.ok(readme.includes('fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix --yes'));
 
   const scenario = files[1][1];
-  const oldScenarioIndex = scenario.indexOf('fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --autopilot-max-iterations 5 --yes --no-run');
-  const scenarioFallbackIndex = scenario.indexOf("## 手动 / fallback 补充");
-  assert.ok(oldScenarioIndex > scenarioFallbackIndex, "scenario old quick command should only appear in fallback section");
+  assert.ok(scenario.includes('fastcar-cli auto-iterate --quick --goal "修复登录失败" --session login-bugfix --autopilot-max-iterations 5 --yes'));
+  assert.ok(scenario.includes('Agent(subagent_type="coder")'));
+  assert.ok(scenario.includes("默认原生 subagent 模式"));
 
   const autopilotStart = read("skills/auto-iterate-coding/examples/autopilot-start.md");
-  assert.ok(autopilotStart.startsWith("# 手动 / fallback Autopilot 启动示例"));
-  assert.ok(autopilotStart.includes("默认自动模式不使用本模板"));
-  assert.ok(autopilotStart.includes("fastcar-cli auto-iterate --check --json-progress"));
-  assert.ok(autopilotStart.includes("fastcar-cli auto-iterate --run --autopilot"));
+  assert.ok(autopilotStart.startsWith("# Protocol-only / LLM-only Autopilot 启动示例"));
+  assert.ok(autopilotStart.includes("默认自动模式不使用旧 Worker pipeline"));
+  assert.ok(!autopilotStart.includes("fastcar-cli auto-iterate --check --json-progress"));
+  assert.ok(!autopilotStart.includes("fastcar-cli auto-iterate --run --autopilot"));
 });
 
-test("AGENTS.md 声明 Router 与 Worker 分工", () => {
+test("AGENTS.md 声明主 Agent 与 Coder 硬边界", () => {
   for (const file of ["AGENTS.md", "skills/AGENTS.md"]) {
     const agents = read(file);
-    assert.ok(agents.includes("CLI 驱动迁移公告"), file);
-    assert.ok(agents.includes("Router / Worker 硬边界"), file);
-    assert.ok(agents.includes("Router LLM"), file);
+    assert.ok(agents.includes("Subagent 驱动迁移公告"), file);
+    assert.ok(agents.includes("主 Agent / Subagent 硬边界"), file);
+    assert.ok(agents.includes("主 Agent（裁判）"), file);
+    assert.ok(agents.includes("Coder Subagent（运动员）"), file);
     assert.ok(agents.includes("need_decision"), file);
-    assert.ok(agents.includes("兼容 fallback"), file);
-    assert.ok(agents.includes("--yes --no-run"), file);
-    assert.ok(agents.includes("不得要求用户复制 prompt"), file);
-    assert.ok(agents.includes("不得要求用户手动运行"), file);
-    assert.ok(agents.includes("不得修改 `.agent-state/auto-iterate/**` 中除本轮指定 `result.json` 以外的文件"), file);
-    assert.ok(agents.includes("CLI 是 state merge、预算推进、验证命令、write guard、delivery gate 和 `need_decision` resume 的唯一权威执行者"), file);
+    assert.ok(agents.includes("--no-run"), file);
+    assert.ok(agents.includes("主 Agent 不得亲自修改业务代码"), file);
+    assert.ok(agents.includes("protocol-only / LLM-only 模式不使用主 Agent / Coder Subagent 角色边界"), file);
+    assert.ok(agents.includes("不得运行任何命令"), file);
+    assert.ok(agents.includes("不得写 state.json/state.md") || agents.includes("不得读写 `.agent-state/` 下非本轮 result.json 的文件"), file);
+  }
+});
+
+test("自动迭代触发前提使用目标 Agent 通用措辞", () => {
+  const agents = read("skills/AGENTS.md");
+  const skill = read("skills/auto-iterate-coding/SKILL.md");
+  const routing = read("skills/auto-iterate-coding/references/natural-language-routing.md");
+
+  for (const [name, content] of [
+    ["skills/AGENTS.md", agents],
+    ["skills/auto-iterate-coding/SKILL.md", skill],
+    ["skills/auto-iterate-coding/references/natural-language-routing.md", routing],
+  ]) {
+    assert.ok(content.includes("目标 Agent"), `${name} should use generic target Agent wording`);
+    assert.ok(content.includes("--target <agent>"), `${name} should document generic skill install target`);
+    assert.ok(content.includes("fastcar-cli skill targets"), `${name} should point to target discovery`);
+    assert.ok(!content.includes("Codex 触发前提"), `${name} should not use Codex-only trigger wording`);
+  }
+});
+
+test("主 Agent 裁判 runbook 不引入 native runtime adapter", () => {
+  const architecture = read("docs/auto-iterate-current-architecture.md");
+  const skill = read("skills/auto-iterate-coding/SKILL.md");
+  const judgeRunbook = read("skills/auto-iterate-coding/references/judge-runbook.md");
+  const sourceFiles = walkFiles(path.join(repoRoot, "src"), (filePath) => filePath.endsWith(".ts"));
+  const source = sourceFiles.map((filePath) => fs.readFileSync(filePath, "utf8")).join("\n");
+
+  for (const [name, content] of [
+    ["SKILL.md", skill],
+    ["judge-runbook.md", judgeRunbook],
+  ]) {
+    assert.ok(content.includes("主 Agent（裁判）") && content.includes("coder"), `${name} should document judge/coder topology`);
+  }
+  assert.ok(architecture.includes("Agent(subagent_type=\"coder\")"));
+  assert.ok(architecture.includes("validation.log"));
+
+  assert.ok(skill.includes("每轮一个 coder"));
+  assert.ok(skill.includes("references/judge-runbook.md"));
+  assert.ok(judgeRunbook.includes("每轮只允许一个 coder 修改业务代码"));
+  assert.ok(judgeRunbook.includes("validation.log"));
+  assert.ok(!fs.existsSync(path.join(repoRoot, "docs", "auto-iterate-cli-driven.md")));
+  assert.ok(!fs.existsSync(path.join(repoRoot, "skills", "auto-iterate-coding", "references", "sub-agent-concurrency.md")));
+  assert.ok(!fs.existsSync(path.join(repoRoot, "skills", "auto-iterate-coding", "references", "native-sub-agent-strict-workflow.md")));
+
+  for (const forbidden of [
+    "--subagent",
+    "--coder",
+    "--orchestrator",
+    "runNativeSubAgent",
+    "spawnSubAgent",
+    "waitSubAgent",
+    "cancelSubAgent",
+  ]) {
+    assert.ok(!source.includes(forbidden), `src should not introduce native sub-agent runtime token: ${forbidden}`);
   }
 });
 
@@ -167,6 +230,20 @@ test("模板下载命令不使用 shell 拼接执行", () => {
   assert.ok(commandUtils.includes("shell: false"));
 });
 
+test("pipeline 验证 runner 使用确定性 Node spawn 而不是 shell 字符串解释", () => {
+  const runner = read("src/pipeline/pipelineValidationRunner.ts");
+  const validationCommands = read("src/pipeline/validationCommands.ts");
+  const architecture = read("docs/auto-iterate-current-architecture.md");
+  const skill = read("skills/auto-iterate-coding/SKILL.md");
+
+  assert.ok(runner.includes("shell: false"));
+  assert.ok(!runner.includes("shell: true"));
+  assert.ok(runner.includes("deterministic_node_spawn"));
+  assert.ok(validationCommands.includes("normalizeValidationCommand"));
+  assert.ok(architecture.includes("Node 确定性 runner"));
+  assert.ok(skill.includes("验证命令不得经 shell 字符串解释"));
+});
+
 test("init 模板下载逻辑已拆分到独立模块", () => {
   const init = read("src/init.ts");
   const downloader = read("src/templateDownloader.ts");
@@ -197,7 +274,11 @@ test("pipeline 测试已按 focus、schema 和 validation 职责拆分", () => {
   assert.ok(focusLoop.includes("../dist/pipeline/shouldStop"));
   assert.ok(focusLoop.includes("../dist/pipeline/loopPolicy"));
   assert.ok(resultSchema.includes("../dist/pipeline/resultSchema"));
-  assert.ok(validation.includes("runValidationCommands"));
+  assert.ok(validation.includes("../dist/pipeline/pipelineValidationRunner"));
+  assert.ok(pipeline.includes("../dist/pipeline/mergeState"));
+  assert.ok(pipeline.includes("../dist/pipeline/workerCapabilityPolicy"));
+  assert.ok(!pipeline.includes("../dist/pipeline/runPipeline"));
+  assert.ok(!pipeline.includes("../dist/pipeline/pipelineIsolateWorktree"));
   assert.ok(!pipeline.includes("loopPolicy 集中解析 once/plan/autopilot/maxSteps 语义"));
   assert.ok(!pipeline.includes("pickFocus 支持 fix/harden/optimize 和 mode-specific focus"));
   assert.ok(!pipeline.includes("normalizeRelativePath 统一过滤非法路径"));

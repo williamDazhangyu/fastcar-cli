@@ -1,6 +1,0 @@
-# Compatibility mirror for legacy paths.
-# Canonical adapter content lives in adapters/openai/openai.yaml.
-interface:
-  display_name: "Auto Iterate Coding"
-  short_description: "Bounded edit-test-fix loops with real validation, prototypes, and architecture guardrails."
-  default_prompt: "Use this skill to implement or repair code through bounded edit-test-fix loops with real validation, progress tracking, feedback-loop discipline, vertical-slice TDD, prototype clarification, architecture-friction detection, cleanup gates, and stop conditions."

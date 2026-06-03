@@ -17,6 +17,23 @@ export function buildPromptContent(rawAnswers: StateObject): string {
   const startModeLine = answers.autopilot
     ? "请使用 auto-iterate-coding skill，进入 Autopilot 全自动迭代模式。"
     : "请使用 auto-iterate-coding skill，按当前模式执行有边界的 Agent 工作流。";
+  const isProtocolOnly = answers.executionMode === "protocol_only";
+  const englishExecutionMode = isProtocolOnly
+    ? `Execution mode: protocol_only / LLM-only.
+Do not dispatch Agent(subagent_type="coder"), do not spawn subagents, and do not use the legacy Worker pipeline.
+The current LLM must still follow auto-iterate techniques: RCM, one minimal focus per iteration, real validation, state updates, Watchdog, budgets, delivery gates, and Skill Capture.
+This execution mode is locked for this session. Do not silently switch between native_subagent and protocol_only; if capability changes require a switch, stop with need_decision.`
+    : `Execution mode: native_subagent.
+Default loop: Main Agent reads skill/state, dispatches Agent(subagent_type="coder"), validates with deterministic Node runner facts, audits diff, then merges state.
+This execution mode is locked for this session. Do not silently switch to protocol_only if the subagent fails or becomes unavailable; stop with need_decision or blocked.`;
+  const chineseExecutionMode = isProtocolOnly
+    ? `执行模式：protocol_only / LLM-only。
+不要派发 Agent(subagent_type="coder")，不要启动 subagent，不要使用旧 Worker pipeline。
+当前 LLM 仍必须遵循 auto-iterate 技巧：Requirement Coverage Matrix、每轮一个最小 focus、真实验证、状态更新、Watchdog、预算、交付门禁和 Skill Capture。
+本 session 的执行模式已锁定；不得在 native_subagent 与 protocol_only 之间静默切换。能力变化需要切换时，必须停止并进入 need_decision。`
+    : `执行模式：native_subagent。
+默认循环：主 Agent 读取 skill/state，派发 Agent(subagent_type="coder")，再用工具事实验证、审计 diff 并合并 state。
+本 session 的执行模式已锁定；subagent 失败或不可用时，不得静默切换到 protocol_only，必须进入 need_decision 或 blocked。`;
 
   if (lang === "en") {
     const startLine = answers.autopilot
@@ -27,10 +44,11 @@ export function buildPromptContent(rawAnswers: StateObject): string {
 Send the following content to the Agent to start this project's auto-iterate-coding workflow.
 
 \`\`\`text
-First read auto-iterate-coding/skill.md and follow its natural-language routing, mode selection, session recovery, capability degradation, stop conditions, and language consistency rules.
+First read auto-iterate-coding/SKILL.md and follow its natural-language routing, mode selection, session recovery, capability degradation, stop conditions, and language consistency rules.
 If this start prompt came from natural-language routing, confirm that the command used an independent --session <name>.
 
 ${startLine}
+${englishExecutionMode}
 
 Current mode: ${answers.mode} / ${answers.modeLabel}
 ${answers.modeDescription}
@@ -109,10 +127,11 @@ Start directly after confirmation. Report only key progress; do not stop for que
 将下面内容发给 Agent，用于启动本项目的 auto-iterate-coding 流程。
 
 \`\`\`text
-请先读取 auto-iterate-coding/skill.md，按该 skill 的自然语言命令路由、模式选择、session 恢复、能力降级、停止条件和语言一致性规则执行。
+请先读取 auto-iterate-coding/SKILL.md，按该 skill 的自然语言命令路由、模式选择、session 恢复、能力降级、停止条件和语言一致性规则执行。
 如果本启动提示来自自然语言路由，请确认命令已经包含独立 session；以后每次自然语言路由都必须显式传入 --session <name>。用户未指定 session 时，由 Agent 根据模式和目标生成英文小写、数字和连字符组成的默认 session 名，例如 quick-login-bugfix、diagnose-flaky-e2e、prototype-order-state-machine，不要省略 --session。
 
 ${startModeLine}
+${chineseExecutionMode}
 
 当前启动模式：${answers.mode} / ${answers.modeLabel}
 ${answers.modeDescription}
@@ -134,13 +153,12 @@ ${answers.modeInstructions}
 上下文与状态管理：
 请始终使用与用户当前提示一致的语言输出、记录状态和交付总结；用户使用中文时不要突然切换为英文，除非术语、命令、代码或用户明确要求保留英文。
 本 skill 是面向 AI Coding Agent 的自动迭代开发协议，不是独立 CLI 工具，也不依赖特定 Agent 平台。
-请先探测当前 Agent 环境可用能力，包括读写文件、运行命令、真实测试、状态持久化、子 Agent/并行、网络、数据库/密钥和 git diff。
+请先探测当前 Agent 环境可用能力，包括读写文件、运行命令、真实测试、状态持久化、coder subagent、只读探索辅助、网络、数据库/密钥和 git diff。
 如果某项能力不可用，请按降级规则标记 not_verified 或 blocked，不要伪造完成或验证。
-如果子 Agent/并行为 available，请先读取 references/sub-agent-concurrency.md，并按“启用门禁与平台适配”“调度流程”和 Sub-Agent Result Schema 维护 Sub-Agent Dispatch；state 字段结构以 examples/state-template.md 为唯一来源，不得自行添加协议旧字段。
-sub-agent 是 Agent 工具执行自动迭代时的协议增强，不是 fastcar-cli 内置运行时；小任务、单文件修改、ownership 不清晰或验证副作用不明时默认串行执行。
-启用任何 coder/background 并发前，请同步维护 Decisions 中的并发决策：parallel_write_allowed、parallel_write_confirmation、coder_file_ownership 和 fallback_strategy；未声明共享文件 owner 或验证副作用时不得并发执行。
-每轮并发 dispatch 前必须建立轻量 baseline，例如 git status、已有 diff 摘要或关键文件 mtime；merge 后必须由父 Agent 执行 Quality Gate，先更新 state.json 中的 active_sub_agents、sub_agent_history、Watchdog、Budgets 和 RCM，再刷新 state.md 生成视图。检测到 state.json 或 state.md 在子 Agent 运行期间被外部修改时，先进入 reconcile，不得继续 dispatch。
-默认并发上限：explore 最多 4，需求提取和 background verify 最多 3，coder 默认最多 2；quick 模式默认只启用 explore/background 并发，只有文件 ownership、用户确认、baseline 和 Quality Gate 均明确时才允许 coder 并发。
+默认自动模式固定为“主 Agent（裁判）-> 单个 coder subagent（运动员）-> 主 Agent（裁判）”。每轮只派发一个 coder；coder 是唯一允许修改业务代码的角色，写入 result.json 后停止。
+请按 references/judge-runbook.md 执行裁判步骤：主 Agent 亲自做 result schema、Node runner 验证、git diff/scope 审计、validation.log、state merge、预算、Watchdog 和交付门禁。
+不要使用 CLI --dispatch、外部 Worker、validator subagent、orchestrator subagent 或 coder 并发写入作为默认路径。只读探索辅助可以并行，但不得写业务代码、不得写 state、不得替代主 Agent 的裁判校验。
+检测到 state.json 或 state.md 在 coder 运行期间被外部修改时，先进入 reconcile，不得继续派发下一轮 coder。
 请不要依赖历史对话作为唯一上下文。
 如果存在 ${answers.sessionStateJsonFile || ".agent-state/auto-iterate/default/state.json"}，请先读取它作为本 session 的机器权威恢复状态；缺少 state.json 的旧 session 才降级读取 ${answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"}。
 恢复前执行 reconcile 检查：当前分支、git 状态/diff 摘要、状态文件与当前代码是否一致、是否存在上次停止后的外部修改、最近验证能否重新运行。

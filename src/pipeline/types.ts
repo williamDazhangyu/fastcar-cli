@@ -114,15 +114,27 @@ export interface ValidationCommandResult {
   stdoutTail?: string;
   stderrTail?: string;
   summary?: string;
+  executable?: string;
+  args?: string[];
+}
+
+export interface DeterministicValidationCommand {
+  command: string;
+  executable: string;
+  args: string[];
 }
 
 export interface ValidationCommandConfig {
   command?: string;
+  executable?: string;
+  args?: unknown;
   [key: string]: unknown;
 }
 
 export interface ValidationHistoryEntry {
   command?: string;
+  executable?: string;
+  args?: string[];
   iteration?: number;
   phase?: string;
   result?: string;
@@ -141,6 +153,8 @@ export type PostChangeStatus =
 
 export interface ValidationPerCommandItem {
   command: string;
+  executable?: string;
+  args?: string[];
   status: string;
   result: string | null;
   exitCode: number | null;
@@ -200,55 +214,11 @@ export interface PipelineFailurePersistResult {
   issues: StateValidationIssue[];
 }
 
-export interface IsolatedWorktreeOptions extends ProgressOptions {
-  cleanupIsolatedWorktreeImpl?: (
-    projectRoot: string,
-    worktreePath: string,
-  ) => IsolatedWorktreeOperationResult;
-  [key: string]: unknown;
-}
-
 export interface IsolatedWorktreeOperationResult {
   ok: boolean;
   skipped?: boolean;
   error?: string;
 }
-
-export interface IsolatedWorktreeCreateResult extends IsolatedWorktreeOperationResult {
-  worktreePath: string;
-}
-
-export interface DeliveryGateResult {
-  ready: boolean;
-  open_requirements: string[];
-  blocked_requirements: string[];
-  validation_verifiability: string;
-  watchdog_verifiability: string;
-  delivery_evidence_status: string;
-  post_agent_gate: string;
-  cleanup_status: string;
-  style_consolidation_status: string;
-  context_reset_review_status: string;
-  skill_capture_status: string;
-  blocking_reasons: string[];
-}
-
-export interface UntrackedWorktreeFile {
-  relativePath: string;
-  source: string;
-  target: string;
-}
-
-export type CollectUntrackedWorktreeFilesResult =
-  | {
-      ok: true;
-      files: UntrackedWorktreeFile[];
-    }
-  | {
-      ok: false;
-      skipped: false;
-      error: string;
-    };
 
 export type IsolatedWorktreeApplyResult =
   | {
@@ -263,10 +233,19 @@ export type IsolatedWorktreeApplyResult =
       error: string;
     };
 
-export interface GitStatusSnapshot {
-  ok: boolean;
-  files: Map<string, string>;
-  error?: string;
+export interface DeliveryGateResult {
+  ready: boolean;
+  open_requirements: string[];
+  blocked_requirements: string[];
+  validation_verifiability: string;
+  watchdog_verifiability: string;
+  delivery_evidence_status: string;
+  post_agent_gate: string;
+  cleanup_status: string;
+  style_consolidation_status: string;
+  context_reset_review_status: string;
+  skill_capture_status: string;
+  blocking_reasons: string[];
 }
 
 export interface MergeIterationContext {
@@ -292,6 +271,7 @@ export interface BuildIterationPromptContext {
   lastValidation?: ValidationResult | null;
   writeScope?: unknown;
   scope?: unknown;
+  sourceChecklist?: unknown;
   allowModify?: boolean;
   autopilotRun?: boolean;
   language?: LanguageInfo | LanguageCode | string;
@@ -522,125 +502,6 @@ export interface ProgressOptions {
   jsonProgress?: boolean;
 }
 
-export interface PipelineTimeoutOptions {
-  stepTimeoutSeconds?: number;
-  inactivityTimeoutSeconds?: number;
-}
-
-export interface EffectiveTimeouts {
-  timeoutMs: number;
-  inactivityTimeoutMs: number;
-  warnBeforeMs: number;
-  graceKillMs: number;
-  baseTimeoutMs: number;
-  complexityMultiplier: number;
-  retryBackoff: number;
-  modeMultiplier: number;
-}
-
-export interface ProgressStatsContext {
-  iteration?: number;
-  startedAt?: number;
-  mode?: string;
-  focus?: PipelineFocus | null;
-}
-
-export interface ProgressStats {
-  iter?: number;
-  elapsed_ms: number;
-  total_cycles: number;
-  budget_left: number | null;
-  total_reqs: number;
-  req_counts: Record<string, number>;
-  focus: PipelineFocus | null;
-  phase?: string;
-  watchdog_action?: string;
-}
-
-export interface PipelineWorkerOutput {
-  event?: string;
-  stream?: "stdout" | "stderr" | string;
-  chunk?: string;
-  reason?: string;
-  remainingMs?: number | null;
-  idleMs?: number;
-}
-
-export interface PipelineWorkerAdapterOptions {
-  timeoutWarningPath?: string;
-  timeoutMs?: number;
-  inactivityTimeoutMs?: number;
-  warnBeforeMs?: number;
-  graceKillMs?: number;
-  timeout?: number;
-  commandTemplate?: string;
-  promptPath?: string;
-  resultPath?: string;
-  session?: string;
-  iteration?: number;
-  cwd?: string;
-  env?: Record<string, string>;
-  input?: string;
-  shell?: boolean;
-  commandLabel?: string;
-  detached?: boolean;
-  killOnTimeout?: boolean;
-  allowGracefulTimeoutExit?: boolean;
-  agentFile?: string;
-  maxStepsPerTurn?: number;
-  stopWhenResultValid?: (resultPath?: string) => boolean;
-  onOutput?: (output: PipelineWorkerOutput) => void;
-  [key: string]: unknown;
-}
-
-export interface PipelineWorkerAdapter {
-  run(options: PipelineWorkerAdapterOptions): Promise<PipelineWorkerBaseResult>;
-  id?: string;
-  [key: string]: unknown;
-}
-
-export interface PipelineWorkerBaseResult {
-  command?: string | null;
-  status?: number | null;
-  signal?: string | null;
-  error?: string | null;
-  errorReason?: string | null;
-  errorPath?: string | null;
-  errorCode?: string | null;
-  stdout?: string;
-  stderr?: string;
-  timedOut?: boolean;
-  timeoutReason?: string | null;
-  durationMs?: number;
-  [key: string]: unknown;
-}
-
-export interface AdapterConfig {
-  label: string;
-  env: string;
-  fallbackCommand: string;
-  runNative?: (options: PipelineWorkerAdapterOptions) => Promise<PipelineWorkerBaseResult> | PipelineWorkerBaseResult;
-}
-
-export interface PipelineWorkerProgressOptions {
-  session?: string;
-  iteration?: number;
-  heartbeatMs?: number;
-  projectRoot: string;
-  options?: ProgressOptions;
-  state?: PipelineStateLike;
-  focus?: PipelineFocus | null;
-  timeoutPolicy?: EffectiveTimeouts | null;
-}
-
-export interface PipelineWorkerRunResult extends PipelineWorkerBaseResult {
-  progressDurationMs: number;
-  progressHeartbeats: number;
-  stdoutBytes: number;
-  stderrBytes: number;
-  lastActivityMs: number;
-}
-
 export interface ProgressPayload {
   event?: string;
   iter?: number;
@@ -749,78 +610,6 @@ export type ParsedIterationResult =
     };
 
 export type ValidParsedIterationResult = Extract<ParsedIterationResult, { valid: true }>;
-
-export interface PipelineRunOptions extends StatePersistenceOptions, PipelineTimeoutOptions {
-  projectRoot?: string;
-  session: string;
-  stateJsonPath: string;
-  adapter?: PipelineWorkerAdapter;
-  agent?: string;
-  scope?: string | null;
-  focus?: PipelineFocus | null;
-  allowModify?: boolean;
-  isolate?: boolean;
-  once?: boolean;
-  noValidate?: boolean;
-  validateCommand?: unknown;
-  validationTimeoutSeconds?: number;
-  progressIntervalSeconds?: number;
-}
-
-export interface PipelineRunResult {
-  state: PipelineStateLike;
-  reason: string;
-}
-
-export interface RouterRunOptions {
-  mode?: AutoIterateMode | string;
-  session?: string;
-  from?: string;
-  goal?: string;
-  validateCmd?: string;
-  scope?: string;
-  noRun?: boolean;
-}
-
-export interface RouterPlanOptions extends RouterRunOptions {
-  noRunMode?: string;
-}
-
-export interface RouterPlan {
-  mode: "fallback" | "run";
-  commands: string[][];
-  userMessage: string;
-  requiresUserShell: boolean;
-  routeValidation: FlagValidationResult;
-}
-
-export interface WorkerCandidate {
-  id: string;
-  command: string;
-  commandCandidates?: string[];
-  env: string;
-  priority: number;
-}
-
-export interface WorkerAvailability {
-  id: string;
-  command: string;
-  env: string;
-  available: boolean;
-  source: "env" | "path" | "missing";
-  reason: string | null;
-  priority?: number;
-}
-
-export interface EnvCheckEvent {
-  event: "env_check";
-  cwd: string;
-  usable: boolean;
-  workers_available: Omit<WorkerAvailability, "priority" | "reason">[];
-  workers_unavailable: Omit<WorkerAvailability, "priority">[];
-  recommended: string | null;
-  issues: string[];
-}
 
 export interface DeliveryDocsOptions {
   state: PipelineStateLike & {

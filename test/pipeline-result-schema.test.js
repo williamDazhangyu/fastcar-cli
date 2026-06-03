@@ -220,6 +220,34 @@ test("resultSchema 限制递归脱敏的对象宽度和深度", () => {
   assert.ok(JSON.stringify(parsed.result.state_patch.deep).includes("[TRUNCATED_DEPTH]"));
 });
 
+test("resultSchema 数组规范化不会把索引误当递归深度", () => {
+  const requirements = Array.from({ length: 10 }, (_, index) => ({
+    id: `REQ-${index + 1}`,
+    summary: `requirement ${index + 1}`,
+    status: "implemented",
+    evidence: `evidence ${index + 1}`,
+  }));
+  const parsed = parseAndValidateIterationResult(JSON.stringify({
+    status: "completed",
+    summary: "many items",
+    requirements,
+    trace: {
+      decisions: Array.from({ length: 10 }, (_, index) => ({ topic: `D${index + 1}` })),
+      evidence: Array.from({ length: 10 }, (_, index) => ({ source: `E${index + 1}` })),
+    },
+    documentation: {
+      architectureNotes: Array.from({ length: 10 }, (_, index) => `note ${index + 1}`),
+    },
+  }));
+  assert.strictEqual(parsed.valid, true);
+  assert.strictEqual(parsed.result.requirements[8].id, "REQ-9");
+  assert.strictEqual(parsed.result.requirements[8].status, "implemented");
+  assert.strictEqual(parsed.result.trace.decisions[8].topic, "D9");
+  assert.strictEqual(parsed.result.trace.evidence[8].source, "E9");
+  assert.strictEqual(parsed.result.documentation.architectureNotes[8], "note 9");
+  assert.ok(!JSON.stringify(parsed.result).includes("[TRUNCATED_DEPTH]"));
+});
+
 async function main() {
   const failures = [];
   for (const item of tests) {

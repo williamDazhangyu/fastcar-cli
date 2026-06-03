@@ -2,7 +2,7 @@ const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { computeEffectiveTimeouts, parseValidationCommands, runValidationCommands } = require("../dist/pipeline/runPipeline");
+const { parseValidationCommands, runValidationCommands } = require("../dist/pipeline/pipelineValidationRunner");
 
 const tests = [];
 
@@ -23,9 +23,9 @@ test("runValidationCommands 依次执行全部命令并在失败时停止", asyn
   fs.mkdirSync(iterationDir);
   fs.writeFileSync(path.join(projectDir, "marker.txt"), "", "utf8");
   const result = await runValidationCommands([
-    `"${process.execPath}" -e "require('fs').appendFileSync('marker.txt','1')"`,
-    `"${process.execPath}" -e "require('fs').appendFileSync('marker.txt','2'); process.exit(1)"`,
-    `"${process.execPath}" -e "require('fs').appendFileSync('marker.txt','3')"`,
+    { executable: process.execPath, args: ["-e", "require('fs').appendFileSync('marker.txt','1')"] },
+    { executable: process.execPath, args: ["-e", "require('fs').appendFileSync('marker.txt','2'); process.exit(1)"] },
+    { executable: process.execPath, args: ["-e", "require('fs').appendFileSync('marker.txt','3')"] },
   ], projectDir, iterationDir);
   assert.strictEqual(result.status, "failed");
   assert.strictEqual(result.results.length, 2);
@@ -60,6 +60,8 @@ test("parseValidationCommands 只过滤完整占位符，不误删合法命令",
         "未指定",
         "npm test -- --grep not_run",
         { command: "node scripts/由Agent生成的测试.js" },
+        { executable: "node", args: ["scripts/structured-validation.js"] },
+        "npm test && echo injected",
         { command: "npm test -- historical", result: "passed", iteration: 1 },
         { command: "npm run lint -- historical", status: "failed", phase: "post_merge" },
       ],
@@ -68,13 +70,14 @@ test("parseValidationCommands 只过滤完整占位符，不误删合法命令",
   assert.deepStrictEqual(commands, [
     "npm test -- --grep not_run",
     "node scripts/由Agent生成的测试.js",
+    "node scripts/structured-validation.js",
   ]);
 });
 
 test("runValidationCommands 支持自定义超时", async () => {
   const projectDir = makeProject();
   const result = await runValidationCommands([
-    `"${process.execPath}" -e "setTimeout(()=>{}, 1000)"`,
+    { executable: process.execPath, args: ["-e", "setTimeout(()=>{}, 1000)"] },
   ], projectDir, projectDir, { code: "zh" }, { timeoutMs: 100 });
   assert.strictEqual(result.status, "failed");
   assert.strictEqual(result.exitCode, 1);
@@ -84,7 +87,7 @@ test("runValidationCommands 异步启动验证命令，不阻塞事件循环", a
   const projectDir = makeProject();
   const startedAt = Date.now();
   const pending = runValidationCommands([
-    `"${process.execPath}" -e "setTimeout(()=>process.exit(0), 300)"`,
+    { executable: process.execPath, args: ["-e", "setTimeout(()=>process.exit(0), 300)"] },
   ], projectDir, projectDir, { code: "zh" }, { timeoutMs: 1000 });
   const returnedAfterMs = Date.now() - startedAt;
 
@@ -96,7 +99,7 @@ test("runValidationCommands 异步启动验证命令，不阻塞事件循环", a
 test("runValidationCommands 超时无输出时返回可诊断摘要", async () => {
   const projectDir = makeProject();
   const result = await runValidationCommands([
-    `"${process.execPath}" -e "setTimeout(()=>{}, 1000)"`,
+    { executable: process.execPath, args: ["-e", "setTimeout(()=>{}, 1000)"] },
   ], projectDir, projectDir, { code: "zh" }, { timeoutMs: 100 });
   assert.strictEqual(result.status, "failed");
   assert.ok(/error=|signal=|exit_code=/.test(result.summary), result.summary);
@@ -106,32 +109,24 @@ test("runValidationCommands 超时无输出时返回可诊断摘要", async () =
 test("runValidationCommands 支持显式关闭超时", async () => {
   const projectDir = makeProject();
   const result = await runValidationCommands([
-    `"${process.execPath}" -e "setTimeout(()=>process.exit(0), 120)"`,
+    { executable: process.execPath, args: ["-e", "setTimeout(()=>process.exit(0), 120)"] },
   ], projectDir, projectDir, { code: "zh" }, { timeoutMs: 0 });
   assert.strictEqual(result.status, "passed");
   assert.strictEqual(result.exitCode, 0);
 });
 
-test("computeEffectiveTimeouts 支持动态超时和显式关闭 wall-clock", () => {
-  const dynamic = computeEffectiveTimeouts({
-    mode: { mode: "quick" },
-    watchdog: { noProgressStreak: 2 },
-    currentState: { currentTask: "refactor migration" },
-  }, {
-    stepTimeoutSeconds: 10,
-    inactivityTimeoutSeconds: 3,
-  }, { type: "implement_req" });
-  assert.strictEqual(dynamic.timeoutMs, 30000);
-  assert.strictEqual(dynamic.inactivityTimeoutMs, 3000);
-  assert.strictEqual(dynamic.complexityMultiplier, 2);
-  assert.strictEqual(dynamic.retryBackoff, 1.5);
-
-  const disabled = computeEffectiveTimeouts({}, {
-    stepTimeoutSeconds: 0,
-    inactivityTimeoutSeconds: 0,
-  }, { type: "plan_once" });
-  assert.strictEqual(disabled.timeoutMs, 0);
-  assert.strictEqual(disabled.inactivityTimeoutMs, 0);
+test("runValidationCommands 不经 shell 解释并拒绝复杂 shell 字符串", async () => {
+  const projectDir = makeProject();
+  const iterationDir = path.join(projectDir, "iteration");
+  fs.mkdirSync(iterationDir);
+  const injectedPath = path.join(projectDir, "injected.txt");
+  const result = await runValidationCommands([
+    `${process.execPath} -e "require('fs').writeFileSync('ok.txt','1')" && ${process.execPath} -e "require('fs').writeFileSync('injected.txt','1')"`,
+  ], projectDir, iterationDir, { code: "zh" });
+  assert.strictEqual(result.status, "not_run");
+  assert.strictEqual(fs.existsSync(injectedPath), false);
+  const log = fs.readFileSync(path.join(iterationDir, "validation.log"), "utf8");
+  assert.ok(log.includes("runner: deterministic_node_spawn"));
 });
 
 async function main() {

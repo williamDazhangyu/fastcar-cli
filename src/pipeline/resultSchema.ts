@@ -127,8 +127,8 @@ function normalizeTrace(value: unknown): WorkerIterationResult["trace"] {
   const trace = normalizeObject(value);
   return {
     rationaleSummary: sanitizeText(trace.rationaleSummary || trace.reasoningSummary || trace.summary || ""),
-    decisions: normalizeArray(trace.decisions).slice(0, MAX_ARRAY_LENGTH).map(sanitizeValue),
-    evidence: normalizeArray(trace.evidence).slice(0, MAX_ARRAY_LENGTH).map(sanitizeValue),
+    decisions: normalizeArray(trace.decisions).slice(0, MAX_ARRAY_LENGTH).map((item) => sanitizeValue(item)),
+    evidence: normalizeArray(trace.evidence).slice(0, MAX_ARRAY_LENGTH).map((item) => sanitizeValue(item)),
   };
 }
 
@@ -139,10 +139,10 @@ function normalizeTrace(value: unknown): WorkerIterationResult["trace"] {
 function normalizeDocumentation(value: unknown): WorkerIterationResult["documentation"] {
   const documentation = normalizeObject(value);
   return {
-    apiChanges: normalizeArray(documentation.apiChanges || documentation.api_changes).slice(0, MAX_ARRAY_LENGTH).map(sanitizeValue),
-    architectureNotes: normalizeArray(documentation.architectureNotes || documentation.architecture_notes).slice(0, MAX_ARRAY_LENGTH).map(sanitizeValue),
-    implementationNotes: normalizeArray(documentation.implementationNotes || documentation.implementation_notes).slice(0, MAX_ARRAY_LENGTH).map(sanitizeValue),
-    changelogEntries: normalizeArray(documentation.changelogEntries || documentation.changelog_entries).slice(0, MAX_ARRAY_LENGTH).map(sanitizeValue),
+    apiChanges: normalizeArray(documentation.apiChanges || documentation.api_changes).slice(0, MAX_ARRAY_LENGTH).map((item) => sanitizeValue(item)),
+    architectureNotes: normalizeArray(documentation.architectureNotes || documentation.architecture_notes).slice(0, MAX_ARRAY_LENGTH).map((item) => sanitizeValue(item)),
+    implementationNotes: normalizeArray(documentation.implementationNotes || documentation.implementation_notes).slice(0, MAX_ARRAY_LENGTH).map((item) => sanitizeValue(item)),
+    changelogEntries: normalizeArray(documentation.changelogEntries || documentation.changelog_entries).slice(0, MAX_ARRAY_LENGTH).map((item) => sanitizeValue(item)),
   };
 }
 
@@ -153,7 +153,7 @@ function normalizeDocumentation(value: unknown): WorkerIterationResult["document
 function normalizeRequirements(value: unknown): unknown[] {
   return normalizeArray(value)
     .slice(0, MAX_ARRAY_LENGTH)
-    .map(sanitizeValue);
+    .map((item) => sanitizeValue(item));
 }
 
 /**

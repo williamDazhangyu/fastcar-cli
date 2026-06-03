@@ -43,6 +43,8 @@ export function validationHistoryEntries(
   if (Array.isArray(cliValidation.results) && cliValidation.results.length > 0) {
     return cliValidation.results.map((item) => ({
       command: item.command || "not_run",
+      executable: item.executable,
+      args: Array.isArray(item.args) ? item.args : undefined,
       result: item.status || "not_run",
       summary: [item.stdoutTail, item.stderrTail].filter(Boolean).join("\n"),
       exitCode: item.exitCode === undefined ? null : item.exitCode,

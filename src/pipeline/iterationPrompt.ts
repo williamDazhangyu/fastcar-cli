@@ -2,6 +2,10 @@
   getLanguageText,
   languageCode,
 } from "./language";
+import {
+  buildSourceInputsSection,
+  buildWorkerCapabilitySection,
+} from "./workerCapabilityPolicy";
 import type {
   BuildIterationPromptContext,
   PipelineFocus,
@@ -108,6 +112,8 @@ function buildFocusRules(
         break;
       case "extract_requirements":
         rules.push("Extract the Requirement Coverage Matrix from the source document or goal; do not implement.");
+        rules.push("If an explicit source/target file is listed in Source inputs, read it and use it as the primary source of truth.");
+        rules.push("Replace the bootstrap placeholder by emitting concrete requirement ids other than only REQ-BOOTSTRAP whenever real requirements can be extracted.");
         break;
       default:
         rules.push("Follow this focus summary and do not advance other tasks.");
@@ -158,6 +164,8 @@ function buildFocusRules(
       break;
     case "extract_requirements":
       rules.push("从来源文档或目标中提取 Requirement Coverage Matrix，不做实现。");
+      rules.push("如果 Source inputs 中列出了显式来源/目标文件，必须读取它并作为主要事实源。");
+      rules.push("能提取到真实需求时，requirements 必须输出具体需求 id，不要只回写 REQ-BOOTSTRAP 占位项。");
       break;
     default:
       rules.push("遵守本轮 focus 摘要，不推进其他任务。");
@@ -188,6 +196,8 @@ function buildLastValidation(lastValidation: ValidationResult | null | undefined
 export function buildIterationPrompt(ctx: BuildIterationPromptContext): string {
   const allowedFiles = buildAllowedFiles(ctx);
   const focusRules = buildFocusRules(ctx.focus, ctx.mode, ctx.language);
+  const sourceInputs = buildSourceInputsSection(ctx);
+  const capabilityBoundary = buildWorkerCapabilitySection(ctx);
   const statusValues = ["completed", "failed", "blocked", "need_decision", "no_progress"];
   const lang = languageCode(ctx.language);
   const text = getLanguageText(ctx.language);
@@ -215,6 +225,10 @@ export function buildIterationPrompt(ctx: BuildIterationPromptContext): string {
       "",
       "Allowed file scope:",
       ...allowedFiles.map((item) => `- ${item}`),
+      "",
+      ...sourceInputs,
+      "",
+      ...capabilityBoundary,
       "",
       "Focus-specific hard rules:",
       ...focusRules.map((item) => `- ${item}`),
@@ -302,6 +316,10 @@ export function buildIterationPrompt(ctx: BuildIterationPromptContext): string {
     "",
     "Allowed file scope:",
     ...allowedFiles.map((item) => `- ${item}`),
+    "",
+    ...sourceInputs,
+    "",
+    ...capabilityBoundary,
     "",
     "Focus-specific hard rules:",
     ...focusRules.map((item) => `- ${item}`),

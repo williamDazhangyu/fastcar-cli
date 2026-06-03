@@ -1,13 +1,13 @@
-# 手动 / fallback Autopilot 启动示例
+# Protocol-only / LLM-only Autopilot 启动示例
 
-默认自动模式不使用本模板：Router 应先执行 `fastcar-cli auto-iterate --check --json-progress`，Worker 可用时再执行 `fastcar-cli auto-iterate --run --autopilot ... --json-progress`，并只转述 NDJSON 进度。
+默认自动模式不使用旧 Worker pipeline：主 Agent 应直接派发 `Agent(subagent_type="coder")`，自己负责验证、write guard、state merge 和交付门禁。CLI 只用于 session 管理、`--validate-state`、`--finalize`，或用 `--yes` 生成 native-subagent session 骨架。
 
-只有 Worker 不可用、CLI flag 不支持、运行环境不能 spawn Worker，或用户显式要求手动模式 / `--no-run` 时，才把下面内容发给当前 Agent，用于在同一会话里按 fallback 协议执行复杂需求的有界多轮迭代。本示例只保留可复制骨架；执行规则以 `auto-iterate-coding/skill.md`、`examples/state-template.md` 和相关 references 为准，避免模板与主协议形成双重来源。
+只有用户显式要求 protocol-only / LLM-only、手动模式、不启动 subagent，或当前环境没有 `Agent(subagent_type="coder")` 工具时，才把下面内容发给当前 LLM，用于在同一会话里按自动迭代技巧执行复杂需求的有界多轮迭代。本示例只保留可复制骨架；执行规则以 `auto-iterate-coding/SKILL.md`、`examples/state-template.md` 和相关 references 为准，避免模板与主协议形成双重来源。
 
 ```text
 请使用 auto-iterate-coding skill，进入 Autopilot 全自动迭代模式。
 
-请严格按 auto-iterate-coding/skill.md 执行：
+请严格按 auto-iterate-coding/SKILL.md 执行：
 - 先完成能力探测、session `state.json` 读取/创建、reconcile 和 Requirement Coverage Matrix；缺少 `state.json` 的旧 session 可降级读取 `state.md`，但要标记 degraded。
 - 每轮按真实 feedback loop 推进，实现后运行可用验证，并更新 `state.json` 的 At-a-Glance、Budgets、Current State、Watchdog、RCM 和 DoD，再刷新 `state.md` 生成视图。
 - 如果 remaining_implementation_iterations = 0，先请求我追加预算，不要自动继续。

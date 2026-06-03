@@ -225,6 +225,37 @@ test("strict mode escalates schema and baseline warnings into errors", async () 
   });
 });
 
+test("strict mode requires validation.log evidence for result iterations", async () => {
+  await withTempCwd(async () => {
+    writeValidSession();
+    writeJson(".agent-state/auto-iterate/demo/state.json", { ok: true });
+    writeJson(".agent-state/auto-iterate/demo/iterations/1/result.json", {
+      status: "completed",
+      files_changed: ["src/a.ts"],
+      requirements: [{ id: "REQ-1", status: "implemented" }],
+    });
+
+    const missingLog = await validateState("demo", { strict: true, silent: true }, schemaOk);
+    assert.strictEqual(missingLog.ok, false);
+    assert(missingLog.issues.some((issue) => issue.message.includes("缺少裁判验证日志")));
+
+    fs.writeFileSync(
+      ".agent-state/auto-iterate/demo/iterations/1/validation.log",
+      [
+        "command: npm test",
+        "runner: deterministic_node_spawn",
+        "exit_code: 0",
+        "duration_ms: 12",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const withLog = await validateState("demo", { strict: true, silent: true }, schemaOk);
+    assert(!withLog.issues.some((issue) => issue.message.includes("validation.log")));
+  });
+});
+
 (async () => {
   let passed = 0;
   for (const item of cases) {

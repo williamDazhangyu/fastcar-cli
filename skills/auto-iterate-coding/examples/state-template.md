@@ -99,7 +99,7 @@ max_sub_agent_rounds：3
 sub_agent_timeout_seconds：300
 max_failed_sub_agents：2
 token_budget_hint：
-concurrency_limit：3
+concurrency_limit：1（写代码 coder 固定串行；只读探索辅助不得写业务代码或 state）
 
 ## Budgets
 max_iterations：
@@ -271,7 +271,7 @@ Requirement Coverage Matrix 状态：
 已确认的产品行为：
 已确认的接口兼容性：
 用户提供的限制：
-并发决策：
+单 coder 决策：
   parallel_write_allowed：false / true
   parallel_write_confirmation：
   coder_file_ownership：

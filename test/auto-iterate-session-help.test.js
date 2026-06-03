@@ -3,9 +3,9 @@ const { spawnSync } = require("child_process");
 const path = require("path");
 const {
   buildAutoIterateHelp,
+  LEGACY_DISPATCH_AGENTS,
   showAutoIterateHelp,
 } = require("../dist/auto-iterate/sessionHelp");
-const { DISPATCH_AGENT_CONFIGS } = require("../dist/auto-iterate/dispatch");
 const { FLAG_REGISTRY } = require("../dist/pipeline/flags");
 
 const cases = [];
@@ -32,15 +32,17 @@ test("buildAutoIterateHelp renders major command groups and flags", () => {
   const help = buildAutoIterateHelp();
 
   assert(help.startsWith("Usage: fastcar-cli auto-iterate [options]"));
-  for (const section of ["Modes:", "Session:", "Dispatch:", "Pipeline:", "Skill Capture:", "Other:"]) {
+  for (const section of ["Modes:", "Session:", "Legacy dispatch (deprecated):", "Legacy CLI pipeline (deprecated):", "Skill Capture:", "Other:"]) {
     assert(help.includes(section), `missing ${section}`);
   }
   for (const flag of [
-    "Default Router flow:",
-    "fastcar-cli auto-iterate --check --json-progress",
-    'fastcar-cli auto-iterate --run --autopilot --quick --goal "<goal>" --session <session> --json-progress',
-    "Manual/fallback flow:",
+    "Native sub-agent flow (default):",
+    'Main Agent reads the auto-iterate skill/state, dispatches Agent(subagent_type="coder"),',
+    "validates the result with deterministic Node runner facts, then merges state.",
+    "CLI can optionally create a resumable session skeleton for this flow.",
+    "Protocol-only LLM flow:",
     'fastcar-cli auto-iterate --quick --goal "<goal>" --session <session> --yes --no-run',
+    "The current LLM follows auto-iterate techniques without dispatching native subagents.",
     "--strict",
     "--quick",
     "--diagnose|--debug",
@@ -50,17 +52,17 @@ test("buildAutoIterateHelp renders major command groups and flags", () => {
     "--strict-state|--strict-validate|--strict-validation",
     "--dispatch <session>",
     "--verify-command|--verify-cmd <cmd>",
-    "--run --once [--json-progress]",
+    "--run --once [--json-progress] (legacy compatibility only)",
     "--inactivity-timeout <seconds>",
     "--validation-timeout <seconds>",
     "--scope <glob[,glob]>",
-    "--validate-cmd <cmd>  pipeline 独立验证命令，可重复传入；不同于 dispatch 的 --verify-command/--verify-cmd",
-    "--no-run  force manual/fallback generation; do not enter Worker pipeline",
+    "--validate-cmd <cmd>  legacy/deprecated pipeline 独立验证命令，可重复传入；不同于 dispatch 的 --verify-command/--verify-cmd",
+    "--no-run  protocol-only LLM execution; do not dispatch native subagent or legacy Worker pipeline",
     "--capture-skills <session> [--yes]",
     "-f, --from <file>",
     "--max-iterations|--max <n>",
     "--autopilot-max-iterations|--autopilot-max <n>",
-    "--yes|-y|--non-interactive  non-interactive generation for manual/fallback; --run routing does not need it",
+    "--yes|-y|--non-interactive  non-interactive session creation",
     "--examples [keyword]",
     "--query <keyword>",
   ]) {
@@ -70,7 +72,7 @@ test("buildAutoIterateHelp renders major command groups and flags", () => {
 
 test("buildAutoIterateHelp reflects supported dispatch agents", () => {
   const help = buildAutoIterateHelp();
-  const supportedAgents = Object.keys(DISPATCH_AGENT_CONFIGS).join("|");
+  const supportedAgents = LEGACY_DISPATCH_AGENTS.join("|");
 
   assert(help.includes(`--agent <${supportedAgents}>`));
   assert(help.includes("codex|claude|gemini"));

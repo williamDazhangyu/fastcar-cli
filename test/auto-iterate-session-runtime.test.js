@@ -77,12 +77,12 @@ test("initAutoIterate routes --examples without creating session files", async (
   await withTempCwd(async () => {
     const { lines } = await captureConsole(() => initAutoIterate(["--examples", "Codex"]));
 
-    assert(lines.join("\n").includes("Codex /goal 与 worker dispatch"));
+    assert(lines.join("\n").includes("Agent skill 发现、goal 与 worker dispatch"));
     assert(!fs.existsSync(".agent-state"));
   });
 });
 
-test("interactive auto-iterate guidance prefers CLI run and marks fallback explicitly", async () => {
+test("interactive auto-iterate output is concise while generated prompt keeps execution details", async () => {
   await withTempCwd(async () => {
     const { lines } = await captureConsole(() => initAutoIterate([
       "--quick",
@@ -95,9 +95,18 @@ test("interactive auto-iterate guidance prefers CLI run and marks fallback expli
     ]));
     const output = lines.join("\n");
 
-    assert(output.includes("CLI 驱动默认路径: fastcar-cli auto-iterate --check --json-progress 后接 --run --json-progress"));
-    assert(output.includes("手动/fallback 路径示例: fastcar-cli auto-iterate --strict --from <清单文档路径> --session <session> --yes --no-run"));
-    assert(!output.includes("也可以使用: fastcar-cli auto-iterate --from <清单文档路径>"));
+    assert(output.includes("初始化 auto-iterate session。"));
+    assert(output.includes("✓ auto-iterate session 已生成"));
+    assert(output.includes("📊 进度: session=guidance-check"));
+    assert(output.includes("execution=protocol_only"));
+    assert(output.includes("终端只显示关键进展"));
+    assert(!output.includes("Requirement Coverage Matrix"));
+    assert(!output.includes("Watchdog"));
+
+    const prompt = fs.readFileSync(".agent-state/auto-iterate/guidance-check/start-prompt.md", "utf8");
+    assert(prompt.includes("执行模式：protocol_only / LLM-only"));
+    assert(prompt.includes("Requirement Coverage Matrix"));
+    assert(prompt.includes("Watchdog"));
   });
 });
 
@@ -112,30 +121,82 @@ test("initAutoIterate creates noninteractive quick session through runtime modul
       "--yes",
     ]));
 
-    assert(lines.join("\n").includes("Session 机器状态"));
+    const output = lines.join("\n");
+    assert(output.includes("🧭 执行: 读取 .agent-state/auto-iterate/runtime-session/start-prompt.md 和 .agent-state/auto-iterate/runtime-session/state.json 后开始"));
+    assert(!output.includes("Session 机器状态"));
     assert(fs.existsSync(".agent-state/auto-iterate/runtime-session/state.json"));
     const state = readJson(".agent-state/auto-iterate/runtime-session/state.json");
     assert.strictEqual(state.task.goal, "运行时抽取验证");
     assert.strictEqual(state.mode.mode, "quick");
+    assert.strictEqual(state.mode.executionMode, "native_subagent");
     assert.strictEqual(readJson(".agent-state/auto-iterate-current.json").session, "runtime-session");
   });
 });
 
-test("initAutoIterate emits json-progress error for invalid --run combinations", async () => {
+test("initAutoIterate rejects deprecated --run pipeline path", async () => {
   await withTempCwd(async () => {
     const previousExitCode = process.exitCode;
     process.exitCode = 0;
 
     const { output } = await captureStdout(() => initAutoIterate([
       "--run",
-      "--validate-state",
-      "demo",
       "--json-progress",
     ]));
 
     assert.strictEqual(process.exitCode, 1);
     const events = output.trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
-    assert(events.some((event) => event.event === "error" && event.reason === "invalid_run_flag_combination"));
+    assert(events.some((event) =>
+      event.event === "error" &&
+      event.reason === "legacy_auto_iterate_pipeline_deprecated" &&
+      event.command === "--run"
+    ));
+    assert(!fs.existsSync(".agent-state"));
+    process.exitCode = previousExitCode;
+  });
+});
+
+test("initAutoIterate rejects deprecated --check worker environment path", async () => {
+  await withTempCwd(async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = 0;
+
+    const { output } = await captureStdout(() => initAutoIterate([
+      "--check",
+      "--json-progress",
+    ]));
+
+    assert.strictEqual(process.exitCode, 1);
+    const events = output.trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+    assert(events.some((event) =>
+      event.event === "error" &&
+      event.reason === "legacy_auto_iterate_pipeline_deprecated" &&
+      event.command === "--check"
+    ));
+    assert(!fs.existsSync(".agent-state"));
+    process.exitCode = previousExitCode;
+  });
+});
+
+test("initAutoIterate rejects deprecated --dispatch external worker path", async () => {
+  await withTempCwd(async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = 0;
+
+    const { lines } = await captureConsole(() => initAutoIterate([
+      "--dispatch",
+      "demo",
+      "--agent",
+      "codex",
+      "--task",
+      "处理 REQ-1",
+      "--files",
+      "src/a.ts",
+      "--dry-run",
+    ]));
+
+    assert.strictEqual(process.exitCode, 1);
+    assert(lines.join("\n").includes("--dispatch 属于已废弃的外部 Worker/pipeline 入口"));
+    assert(!fs.existsSync(".agent-state"));
     process.exitCode = previousExitCode;
   });
 });

@@ -211,7 +211,7 @@ export function mergeIterationIntoState(
   next = mergeModeProgress(next, report, effectiveValidation, ctx);
   next = boundWorkerPatchHistory(next);
 
-  next.requirements = mergeRequirements(next, report, effectiveValidation);
+  next.requirements = mergeRequirements(next, report, effectiveValidation, ctx.focus);
   const traceability = asRecord(next.traceability);
   next.traceability = {
     ...traceability,

@@ -1,9 +1,10 @@
 import { promises as fsPromises } from "fs";
+import path from "path";
 import { toRelative } from "./sessionPaths";
 import { readJsonFileWithError } from "./stateIO";
 import { resolveStateFileForValidation } from "./sessionStateValidation";
 import { validateSessionStateBaseline } from "./sessionBaselineValidation";
-import { validateSubAgentDispatchState } from "./subAgentDispatchValidation";
+import { validateNativeSubAgentWorkflowArtifacts } from "./nativeSubAgentWorkflowValidation";
 import { pathExists } from "../fsUtils";
 import { setExitCode, writeLine } from "../cliOutput";
 
@@ -17,6 +18,57 @@ type StateLike = Record<string, unknown>;
 type JsonReadError = {
   message?: string;
 };
+
+async function listIterationDirs(stateJsonFile: string): Promise<string[]> {
+  const iterationsDir = path.join(path.dirname(stateJsonFile), "iterations");
+  if (!(await pathExists(iterationsDir))) {
+    return [];
+  }
+  const entries = await fsPromises.readdir(iterationsDir, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(iterationsDir, entry.name));
+}
+
+function hasExecutedCommandEvidence(content: string): boolean {
+  const hasExitCode = /(?:^|\n)exit_code:\s*(?:0|[1-9]\d*)\b/.test(content);
+  const durationMatches = Array.from(content.matchAll(/(?:^|\n)duration_ms:\s*(\d+)\b/g));
+  return hasExitCode && durationMatches.some((match) => Number(match[1]) > 0);
+}
+
+async function validateValidationLogEvidence(stateJsonFile: string): Promise<ValidationIssue[]> {
+  const issues: ValidationIssue[] = [];
+  const iterationDirs = await listIterationDirs(stateJsonFile);
+  for (const iterationDir of iterationDirs) {
+    const resultPath = path.join(iterationDir, "result.json");
+    if (!(await pathExists(resultPath))) {
+      continue;
+    }
+    const validationLogPath = path.join(iterationDir, "validation.log");
+    if (!(await pathExists(validationLogPath))) {
+      issues.push({
+        severity: "error",
+        message: `缺少裁判验证日志: ${toRelative(validationLogPath)}；有 result.json 的实现轮次必须写 validation.log`,
+      });
+      continue;
+    }
+    const content = await fsPromises.readFile(validationLogPath, "utf8");
+    if (/status:\s*not_run|validation skipped/i.test(content)) {
+      issues.push({
+        severity: "warning",
+        message: `裁判验证日志未执行真实验证: ${toRelative(validationLogPath)}`,
+      });
+      continue;
+    }
+    if (!hasExecutedCommandEvidence(content)) {
+      issues.push({
+        severity: "error",
+        message: `裁判验证日志缺少 exit_code 或 duration_ms>0 证据: ${toRelative(validationLogPath)}`,
+      });
+    }
+  }
+  return issues;
+}
 
 export interface ValidateStateOptions {
   strict?: boolean;
@@ -102,8 +154,14 @@ export async function validateState(
             : `缺少机器权威 state.json: ${toRelative(stateInfo.stateJsonFile)}`,
       }];
   const sessionValidation = await validateSessionStateBaseline(content, stateInfo);
-  const subAgentValidation = validateSubAgentDispatchState(content);
-  const issues = [...stateJsonIssues, ...sessionValidation.issues, ...subAgentValidation.issues];
+  const nativeWorkflowValidation = await validateNativeSubAgentWorkflowArtifacts(stateInfo.stateJsonFile);
+  const validationLogEvidence = await validateValidationLogEvidence(stateInfo.stateJsonFile);
+  const issues = [
+    ...stateJsonIssues,
+    ...sessionValidation.issues,
+    ...nativeWorkflowValidation.issues,
+    ...validationLogEvidence,
+  ];
   if (options.strict) {
     applyStrictWarningEscalation(issues);
   }
@@ -115,7 +173,7 @@ export async function validateState(
     if (!silent) {
       writeLine("✅ state.json 强约束校验通过");
       writeLine("✅ auto-iterate session state 校验通过");
-      writeLine("✅ sub-agent state 校验通过");
+      writeLine("✅ LLM 原生严格工作流产物校验通过");
     }
     return { ok: true, degraded: false, issues: [] };
   }
@@ -129,11 +187,21 @@ export async function validateState(
       const hasStateJsonError = stateJsonIssues.some((issue) => issue.severity === "error");
       writeLine(hasStateJsonError ? "❌ state.json 强约束校验发现错误:" : "⚠️ state.json 强约束校验发现警告:");
     }
-    if (subAgentValidation.issues.length === 0) {
-      writeLine("✅ sub-agent state 校验通过");
+    if (nativeWorkflowValidation.issues.length === 0) {
+      writeLine("✅ LLM 原生严格工作流产物校验通过");
     } else {
-      const hasSubAgentError = subAgentValidation.issues.some((issue) => issue.severity === "error");
-      writeLine(hasSubAgentError ? "❌ sub-agent state 校验发现错误:" : "⚠️ sub-agent state 校验发现警告:");
+      const hasNativeWorkflowError = nativeWorkflowValidation.issues.some((issue) => issue.severity === "error");
+      writeLine(hasNativeWorkflowError
+        ? "❌ LLM 原生严格工作流产物校验发现错误:"
+        : "⚠️ LLM 原生严格工作流产物校验发现警告:");
+    }
+    if (validationLogEvidence.length === 0) {
+      writeLine("✅ validation.log 裁判证据校验通过");
+    } else {
+      const hasValidationLogError = validationLogEvidence.some((issue) => issue.severity === "error");
+      writeLine(hasValidationLogError
+        ? "❌ validation.log 裁判证据校验发现错误:"
+        : "⚠️ validation.log 裁判证据校验发现警告:");
     }
     issues.forEach((issue) => {
       const prefix = issue.severity === "error" ? "ERROR" : "WARN";
@@ -141,8 +209,8 @@ export async function validateState(
     });
     writeLine(
       hasError
-        ? "下一步: 先修正 state.json / state.md 中的 session 指针、预算/看门狗或 Sub-Agent Dispatch / Decisions，再重新运行 --validate-state。"
-        : "下一步: 建议在下一轮 dispatch、迭代或交付前同步这些 session 状态字段。",
+        ? "下一步: 先修正 state.json / state.md 中的 session 指针、预算/看门狗或原生 sub-agent 工作流产物，再重新运行 --validate-state。"
+        : "下一步: 建议在下一轮迭代或交付前同步这些 session 状态字段。",
     );
   }
   if (hasError && !silent) {

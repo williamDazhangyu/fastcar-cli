@@ -6,6 +6,7 @@ const inquirer = require("inquirer");
 const {
   createAutoIterateSession,
   ensurePipelineSession,
+  renderCreatedSessionSummary,
   readChecklistFile,
   withSessionDefaults,
 } = require("../dist/auto-iterate/sessionCreation");
@@ -101,6 +102,56 @@ test("createAutoIterateSession writes state, prompt, and current files", async (
     assert.strictEqual(state.mode.mode, "quick");
     assert.strictEqual(created.answers.sessionStateJsonFile, ".agent-state/auto-iterate/login-fix/state.json");
     assert(created.promptContent.includes("修复登录"));
+    assert(created.outputSummary.includes("✓ auto-iterate session 已生成"));
+    assert(created.outputSummary.includes("🎯 目标: 修复登录"));
+    assert(created.outputSummary.includes("📊 进度: session=login-fix"));
+    assert(created.outputSummary.includes("🧭 执行: 读取 .agent-state/auto-iterate/login-fix/start-prompt.md 和 .agent-state/auto-iterate/login-fix/state.json 后开始"));
+    assert(created.outputSummary.includes("✅ 结果: state.md=.agent-state/auto-iterate/login-fix/state.md"));
+    assert(!created.outputSummary.includes("Requirement Coverage Matrix"));
+  });
+});
+
+test("renderCreatedSessionSummary keeps terminal output concise", async () => {
+  await withTempCwd(() => {
+    const sessionPaths = getSessionPaths("summary-check");
+    const summary = renderCreatedSessionSummary({
+      mode: "quick",
+      modeLabel: "快速启动",
+      executionMode: "protocol_only",
+      goal: "优化输出结构",
+      sessionStateJsonFile: ".agent-state/auto-iterate/summary-check/state.json",
+      sessionStateFile: ".agent-state/auto-iterate/summary-check/state.md",
+      sessionPromptFile: ".agent-state/auto-iterate/summary-check/start-prompt.md",
+      currentFile: ".agent-state/auto-iterate-current.json",
+    }, sessionPaths);
+
+    assert(summary.includes("🎯 目标: 优化输出结构"));
+    assert(summary.includes("📊 进度: session=summary-check"));
+    assert(summary.includes("execution=protocol_only"));
+    assert(summary.includes("终端只显示关键进展"));
+    assert(!summary.includes("Watchdog"));
+    assert(!summary.includes("Skill Capture"));
+  });
+});
+
+test("renderCreatedSessionSummary supports ANSI color when forced", async () => {
+  await withTempCwd(() => {
+    const previousForceColor = process.env.FORCE_COLOR;
+    process.env.FORCE_COLOR = "1";
+    try {
+      const summary = renderCreatedSessionSummary({
+        mode: "quick",
+        goal: "颜色输出",
+      }, getSessionPaths("color-check"));
+      assert(summary.includes("\u001b["));
+      assert(summary.includes("🎯 目标"));
+    } finally {
+      if (previousForceColor === undefined) {
+        delete process.env.FORCE_COLOR;
+      } else {
+        process.env.FORCE_COLOR = previousForceColor;
+      }
+    }
   });
 });
 

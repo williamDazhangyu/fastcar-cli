@@ -5,6 +5,7 @@ import {
 import { asRecord } from "./valueUtils";
 import type {
   PipelineStateLike,
+  PipelineFocus,
   ValidationResult,
   WorkerIterationResult,
 } from "./types";
@@ -13,12 +14,37 @@ export function isSuccessfulWorkerStatus(status: unknown): boolean {
   return status === "completed";
 }
 
+function getFocusRequirementId(focus: PipelineFocus | null | undefined): unknown {
+  return focus?.req_id || focus?.reqId || null;
+}
+
+function belongsToCurrentRequirementReport(
+  patch: Record<string, unknown>,
+  focus: PipelineFocus | null | undefined,
+): boolean {
+  const focusRequirementId = getFocusRequirementId(focus);
+  return !focusRequirementId || patch.id === focusRequirementId;
+}
+
+function canAdvanceImplementedToPassed(
+  patch: Record<string, unknown>,
+  cliValidation: ValidationResult,
+  workerStatus: unknown,
+  focus: PipelineFocus | null | undefined,
+): boolean {
+  return patch.status === "implemented"
+    && isSuccessfulWorkerStatus(workerStatus)
+    && cliValidation.status === "passed"
+    && belongsToCurrentRequirementReport(patch, focus);
+}
+
 export function mergeRequirement(
   existing: unknown,
   incoming: unknown,
   cliValidation: ValidationResult,
   language: unknown,
   workerStatus: unknown,
+  focus?: PipelineFocus | null,
 ): Record<string, unknown> {
   const text = getLanguageText(language);
   const next = { ...asRecord(existing) };
@@ -46,7 +72,9 @@ export function mergeRequirement(
       next.evidence = next.evidence || patch.evidence || text.none;
       return next;
     }
-    next.status = patch.status === "passed" && (!isSuccessfulWorkerStatus(workerStatus) || cliValidation.status !== "passed")
+    next.status = canAdvanceImplementedToPassed(patch, cliValidation, workerStatus, focus)
+      ? "passed"
+      : patch.status === "passed" && (!isSuccessfulWorkerStatus(workerStatus) || cliValidation.status !== "passed")
       ? "implemented"
       : patch.status;
     if (patch.status === "passed" && !isSuccessfulWorkerStatus(workerStatus)) {
@@ -65,6 +93,7 @@ export function mergeRequirements(
   state: PipelineStateLike,
   report: WorkerIterationResult,
   cliValidation: ValidationResult,
+  focus?: PipelineFocus | null,
 ): unknown[] {
   const text = getLanguageText(inferLanguageFromState(state));
   const current = Array.isArray(state.requirements) ? state.requirements : [];
@@ -92,7 +121,7 @@ export function mergeRequirements(
       blockedReason: text.none,
       nextStep: text.none,
     };
-    byId.set(patch.id, mergeRequirement(existing, patch, cliValidation, inferLanguageFromState(state), report.status));
+    byId.set(patch.id, mergeRequirement(existing, patch, cliValidation, inferLanguageFromState(state), report.status, focus));
   }
   return Array.from(byId.values());
 }

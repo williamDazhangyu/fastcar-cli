@@ -1,6 +1,19 @@
-import { DISPATCH_AGENT_CONFIGS } from "./dispatch";
 import { listFlagHelpByKind } from "../pipeline/flags";
 import { writeLine } from "../cliOutput";
+
+export const LEGACY_DISPATCH_AGENTS = [
+  "codex",
+  "claude",
+  "gemini",
+  "kimi",
+  "cursor",
+  "windsurf",
+  "copilot",
+  "jules",
+  "devin",
+  "openhands",
+  "replit",
+];
 
 function renderFlagLines(kind: Parameters<typeof listFlagHelpByKind>[0]): string {
   return listFlagHelpByKind(kind)
@@ -9,7 +22,7 @@ function renderFlagLines(kind: Parameters<typeof listFlagHelpByKind>[0]): string
 }
 
 export function buildAutoIterateHelp(): string {
-  const supportedAgents = Object.keys(DISPATCH_AGENT_CONFIGS).join("|");
+  const supportedAgents = LEGACY_DISPATCH_AGENTS.join("|");
   const modeFlags = renderFlagLines("mode").replace(/\n/g, " |").replace(/ \|  /g, " | ");
   const sessionFlags = renderFlagLines("session");
   const pipelineFlags = renderFlagLines("pipeline");
@@ -20,12 +33,14 @@ export function buildAutoIterateHelp(): string {
   const otherFlags = renderFlagLines("other");
   return `Usage: fastcar-cli auto-iterate [options]
 
-Default Router flow:
-  fastcar-cli auto-iterate --check --json-progress
-  fastcar-cli auto-iterate --run --autopilot --quick --goal "<goal>" --session <session> --json-progress
+Native sub-agent flow (default):
+  Main Agent reads the auto-iterate skill/state, dispatches Agent(subagent_type="coder"),
+  validates the result with deterministic Node runner facts, then merges state.
+  CLI can optionally create a resumable session skeleton for this flow.
 
-Manual/fallback flow:
+Protocol-only LLM flow:
   fastcar-cli auto-iterate --quick --goal "<goal>" --session <session> --yes --no-run
+  The current LLM follows auto-iterate techniques without dispatching native subagents.
 
 Modes:
 ${modeFlags}
@@ -33,11 +48,11 @@ ${modeFlags}
 Session:
 ${sessionFlags}
 
-Dispatch:
+Legacy dispatch (deprecated):
   --dispatch <session> --agent <${supportedAgents}> --task <text> --files <glob[,glob]> [--verify-command|--verify-cmd <cmd>] [--timeout <seconds>] [--dry-run]
 
-Pipeline:
-  --run --once [--json-progress]
+Legacy CLI pipeline (deprecated):
+  --run --once [--json-progress] (legacy compatibility only)
 ${pipelineFlags}
 
 Skill Capture:

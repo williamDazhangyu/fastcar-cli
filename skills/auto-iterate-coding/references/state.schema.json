@@ -103,7 +103,7 @@
     },
     "mode": {
       "type": "object",
-      "required": ["mode", "label", "description", "autopilot", "runtimeAutopilot", "loopShape", "allowAgentInference", "allowModify", "instructions"],
+      "required": ["mode", "label", "description", "autopilot", "runtimeAutopilot", "loopShape", "executionMode", "allowAgentInference", "allowModify", "instructions"],
       "properties": {
         "mode": { "enum": ["strict", "quick", "diagnose", "verify", "plan", "optimize", "prototype"] },
         "label": { "type": "string", "minLength": 1 },
@@ -111,6 +111,7 @@
         "autopilot": { "type": "boolean" },
         "runtimeAutopilot": { "type": "boolean" },
         "loopShape": { "enum": ["default", "autopilot", "plan_once"] },
+        "executionMode": { "enum": ["native_subagent", "protocol_only"] },
         "allowAgentInference": { "type": "boolean" },
         "allowModify": { "type": "boolean" },
         "instructions": { "type": "string", "minLength": 1 }
@@ -453,9 +454,10 @@
               {
                 "type": "object",
                 "additionalProperties": true,
-                "required": ["command"],
                 "properties": {
                   "command": { "type": "string", "minLength": 1 },
+                  "executable": { "type": "string", "minLength": 1 },
+                  "args": { "type": "array", "items": { "type": "string" } },
                   "result": {
                     "enum": ["passed", "failed", "skipped", "not_run", "not_available", "skipped_with_reason"]
                   },
@@ -508,6 +510,8 @@
             "required": ["command", "status"],
             "properties": {
               "command": { "type": "string", "minLength": 1 },
+              "executable": { "type": "string", "minLength": 1 },
+              "args": { "type": "array", "items": { "type": "string" } },
               "status": {
                 "enum": ["not_run", "passed", "failed", "skipped", "skipped_with_reason", "not_available"]
               },

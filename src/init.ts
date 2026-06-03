@@ -72,7 +72,7 @@ interface PackageInfo {
   [key: string]: unknown;
 }
 
-type PromptQuestion = Parameters<typeof inquirer.prompt>[0] extends Array<infer Item> ? Item : never;
+type PromptQuestion = Record<string, unknown>;
 
 const templateRegistry: Record<string, TemplateConfig> = templates;
 

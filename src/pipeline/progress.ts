@@ -3,6 +3,14 @@ import type {
   ProgressOptions,
   ProgressPayload,
 } from "./types";
+import { colorize, type CliColor } from "../cliOutput";
+
+interface HumanProgressView {
+  icon: string;
+  label: string;
+  color: CliColor;
+  summary: string;
+}
 
 function formatMs(ms: unknown): string {
   const value = Number(ms);
@@ -22,34 +30,53 @@ function formatReqCounts(counts: unknown): string {
     : "none";
 }
 
-function formatHumanProgress(payload: ProgressPayload): string {
+function progressView(
+  icon: string,
+  label: string,
+  color: CliColor,
+  summary: string,
+): HumanProgressView {
+  return {
+    icon,
+    label,
+    color,
+    summary,
+  };
+}
+
+function formatHumanProgress(payload: ProgressPayload): HumanProgressView | null {
   if (payload.event === "worker_started") {
-    return `worker started iter=${payload.iter} focus=${payload.focus && payload.focus.type ? payload.focus.type : "unknown"} timeout=${formatMs(payload.timeout_ms)}`;
+    return progressView("🚀", "开始", "cyan", `第 ${payload.iter || "?"} 轮；focus=${payload.focus && payload.focus.type ? payload.focus.type : "unknown"}`);
   }
   if (payload.event === "worker_output") {
-    return `worker ${payload.stream} iter=${payload.iter} +${payload.bytes || 0}B elapsed=${formatMs(payload.elapsed_ms)}${payload.summary ? ` ${payload.summary}` : ""}`;
+    return null;
   }
   if (payload.event === "pipeline_progress") {
-    return [
-      `iter=${payload.iter}`,
-      `stage=${payload.stage || "unknown"}`,
-      `elapsed=${formatMs(payload.elapsed_ms)}`,
-      `idle=${formatMs(payload.last_activity_ms)}`,
-      `budget=${payload.budget_left === null || payload.budget_left === undefined ? "unknown" : payload.budget_left}`,
-      `reqs=${formatReqCounts(payload.req_counts)}`,
-      payload.last_output ? `last=${payload.last_output}` : "",
-    ].filter(Boolean).join(" ");
+    return progressView("📊", "进度", "blue", [
+      `第 ${payload.iter || "?"} 轮进行中`,
+      `阶段=${payload.stage || "unknown"}`,
+      `剩余预算=${payload.budget_left === null || payload.budget_left === undefined ? "unknown" : payload.budget_left}`,
+      `需求=${formatReqCounts(payload.req_counts)}`,
+    ].filter(Boolean).join(" "));
   }
   if (payload.event === "agent_done") {
-    return `iter=${payload.iter} exit=${payload.exit_code} duration=${formatMs(payload.duration_ms)} stdout=${payload.stdout_bytes || 0}B stderr=${payload.stderr_bytes || 0}B`;
+    return progressView("🧩", "执行", "magenta", `第 ${payload.iter || "?"} 轮编码完成；exit=${payload.exit_code}; duration=${formatMs(payload.duration_ms)}`);
   }
   if (payload.event === "validation_done") {
-    return `iter=${payload.iter} status=${payload.status} exit=${payload.exit_code} duration=${formatMs(payload.duration_ms)} command=${payload.command || "none"}`;
+    const status = String(payload.status || "unknown");
+    const color = status === "passed" ? "green" : status === "failed" ? "red" : "yellow";
+    return progressView(status === "passed" ? "✅" : status === "failed" ? "❌" : "⚠️", "验证", color, `第 ${payload.iter || "?"} 轮=${status}；command=${payload.command || "none"}`);
   }
   if (payload.event === "state_merged") {
-    return `iter=${payload.iter} budget=${payload.budget_left === null || payload.budget_left === undefined ? "unknown" : payload.budget_left} reqs=${formatReqCounts(payload.req_status)}`;
+    return progressView("💾", "结果", "green", `第 ${payload.iter || "?"} 轮状态已合并；剩余预算=${payload.budget_left === null || payload.budget_left === undefined ? "unknown" : payload.budget_left}；需求=${formatReqCounts(payload.req_status)}`);
   }
-  return String(payload.summary || payload.reason || payload.status || "");
+  if (payload.event === "error") {
+    return progressView("❌", "错误", "red", String(payload.summary || payload.reason || payload.status || ""));
+  }
+  if (payload.event === "warning") {
+    return progressView("⚠️", "提醒", "yellow", String(payload.summary || payload.reason || payload.status || ""));
+  }
+  return progressView("ℹ️", "信息", "gray", String(payload.summary || payload.reason || payload.status || ""));
 }
 
 export function emitProgress(
@@ -66,8 +93,11 @@ export function emitProgress(
     return payload;
   }
 
-  const label = payload.event || "progress";
-  const summary = formatHumanProgress(payload);
-  process.stdout.write(`[auto-iterate] ${label}${summary ? `: ${summary}` : ""}\n`);
+  const view = formatHumanProgress(payload);
+  if (view === null) {
+    return payload;
+  }
+  const line = `${view.icon} ${view.label}${view.summary ? `: ${view.summary}` : ""}`;
+  process.stdout.write(`${colorize(line, view.color)}\n`);
   return payload;
 }

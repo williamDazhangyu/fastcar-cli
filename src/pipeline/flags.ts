@@ -14,15 +14,15 @@ export const FLAG_STAGES: readonly FlagStage[] = [
 ];
 
 export const FLAG_REGISTRY: Record<string, FlagInfo> = {
-  "--run": { stage: "routable", kind: "pipeline", stable: false, help: "--run" },
-  "--once": { stage: "routable", kind: "pipeline", stable: false, help: "--once" },
-  "--json-progress": { stage: "routable", kind: "pipeline", stable: false, help: "--json-progress" },
-  "--check": { stage: "routable", kind: "pipeline", stable: false, help: "--check" },
+  "--run": { stage: "routable", kind: "pipeline", stable: false, help: "--run  legacy/deprecated external Worker pipeline; disabled by default" },
+  "--once": { stage: "routable", kind: "pipeline", stable: false, help: "--once  legacy/deprecated pipeline option" },
+  "--json-progress": { stage: "routable", kind: "pipeline", stable: false, help: "--json-progress  legacy/deprecated pipeline output option" },
+  "--check": { stage: "routable", kind: "pipeline", stable: false, help: "--check  legacy/deprecated Worker CLI environment check; disabled by default" },
   "--validate-cmd": {
     stage: "routable",
     kind: "pipeline",
     stable: false,
-    help: "--validate-cmd <cmd>  pipeline 独立验证命令，可重复传入；不同于 dispatch 的 --verify-command/--verify-cmd",
+    help: "--validate-cmd <cmd>  legacy/deprecated pipeline 独立验证命令，可重复传入；不同于 dispatch 的 --verify-command/--verify-cmd",
   },
   "--max-steps": { stage: "implemented", kind: "pipeline", stable: false, help: "--max-steps <n>" },
   "--step-timeout": { stage: "implemented", kind: "pipeline", stable: false, help: "--step-timeout <seconds>" },
@@ -39,7 +39,7 @@ export const FLAG_REGISTRY: Record<string, FlagInfo> = {
     stage: "routable",
     kind: "pipeline",
     stable: false,
-    help: "--no-run  force manual/fallback generation; do not enter Worker pipeline",
+    help: "--no-run  protocol-only LLM execution; do not dispatch native subagent or legacy Worker pipeline",
   },
   "--autopilot": { stage: "routable", kind: "pipeline", stable: false, stability: "not_stable", help: "--autopilot" },
 
@@ -58,7 +58,7 @@ export const FLAG_REGISTRY: Record<string, FlagInfo> = {
     kind: "compat",
     stable: true,
     aliases: ["-y", "--non-interactive"],
-    help: "--yes|-y|--non-interactive  non-interactive generation for manual/fallback; --run routing does not need it",
+    help: "--yes|-y|--non-interactive  non-interactive session creation",
   },
   "--list": { stage: "stable", kind: "session", stable: true, help: "--list" },
   "--resume": { stage: "routable", kind: "session", stable: false, help: "--resume <name>" },

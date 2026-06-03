@@ -45,6 +45,8 @@ export function validationHistoryItems(
   if (results.length > 0) {
     return results.map((item) => ({
       command: item.command || "not_run",
+      executable: item.executable,
+      args: Array.isArray(item.args) ? item.args : undefined,
       result: item.status || "not_run",
       summary: [item.stdoutTail, item.stderrTail].filter(Boolean).join("\n"),
       exitCode: item.exitCode === undefined ? null : item.exitCode,
@@ -68,6 +70,8 @@ export function validationPerCommand(
   return results.length > 0
     ? results.map((item) => ({
         command: item.command || "not_run",
+        executable: item.executable,
+        args: Array.isArray(item.args) ? item.args : undefined,
         status: item.status || "not_run",
         result: item.exitCode === null || item.exitCode === undefined ? null : String(item.exitCode),
         exitCode: item.exitCode === undefined ? null : item.exitCode,

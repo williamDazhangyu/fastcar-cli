@@ -432,8 +432,18 @@ function validateValidationCommandsModel(
     if (!requirePlainObject(issues, item, `state.json.validation.commands[${index}]`)) {
       return;
     }
-    requireNonEmptyString(issues, item.command, `state.json.validation.commands[${index}].command`);
-    if (isValidationHistoryEntry(item)) {
+    const hasExecutable = typeof item.executable === "string" && Boolean(item.executable.trim());
+    if (!hasExecutable) {
+      requireNonEmptyString(issues, item.command, `state.json.validation.commands[${index}].command`);
+    }
+    if (item.executable !== undefined) {
+      requireNonEmptyString(issues, item.executable, `state.json.validation.commands[${index}].executable`);
+    }
+    if (item.args !== undefined && (!Array.isArray(item.args) || item.args.some((arg) => typeof arg !== "string"))) {
+      addError(issues, `state.json.validation.commands[${index}].args 必须是字符串数组`);
+    }
+    const isStructuredRunnableConfig = item.executable !== undefined && item.result === undefined && item.status === undefined;
+    if (isValidationHistoryEntry(item) && !isStructuredRunnableConfig) {
       requireEnumValue(issues, item.result, resultValues, `state.json.validation.commands[${index}].result`);
       if (item.status !== undefined) {
         requireEnumValue(issues, item.status, resultValues, `state.json.validation.commands[${index}].status`);
