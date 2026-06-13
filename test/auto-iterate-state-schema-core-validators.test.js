@@ -20,6 +20,7 @@ const {
   validatePostAgentValidationGateModel,
   validateRequirementsModel,
   validateSessionModel,
+  validateSubAgentDispatchModel,
   validateSkillCaptureModel,
   validateStyleConsolidationModel,
   validateTaskProfileModel,
@@ -333,6 +334,25 @@ function makePostAgentGate(overrides = {}) {
   };
 }
 
+function makeSubAgentDispatch(overrides = {}) {
+  return {
+    enabled: true,
+    currentPhase: "idle",
+    activeSubAgents: [],
+    subAgentHistory: [],
+    dispatchedCount: 0,
+    completedCount: 0,
+    failedCount: 0,
+    lastDispatchRound: 0,
+    lastMergeResult: "N/A",
+    maxSubAgentRounds: 3,
+    subAgentTimeoutSeconds: 300,
+    maxFailedSubAgents: 2,
+    concurrencyLimit: 1,
+    ...overrides,
+  };
+}
+
 test("validateLanguageModel enforces language metadata enums", () => {
   const issues = [];
 
@@ -562,6 +582,7 @@ test("validateStateJsonModelCore enforces top-level schema and required objects"
     taskProfile: {},
     decisionRequest: {},
     decisions: {},
+    subAgentDispatch: {},
     validation: {},
     postChange: {},
     deltaAssessment: {},
@@ -584,7 +605,40 @@ test("validateStateJsonModelCore enforces top-level schema and required objects"
   assert.ok(issues.some((issue) => issue.message === "state.json.currentState 必须是对象"));
   assert.ok(issues.some((issue) => issue.message === "state.json.task.goal 必须是非空字符串"));
   assert.ok(issues.some((issue) => issue.message === "state.json.session.session=missing，期望 session-a"));
+  assert.ok(issues.some((issue) => issue.message === "state.json.subAgentDispatch.enabled 必须是 boolean"));
   assert.ok(issues.some((issue) => issue.message === "state.json.validation.finalVerifiability=missing 不是合法值"));
+});
+
+test("validateSubAgentDispatchModel enforces execution-mode default semantics", () => {
+  const nativeIssues = [];
+  validateSubAgentDispatchModel(
+    nativeIssues,
+    makeSubAgentDispatch({ enabled: false, concurrencyLimit: 0 }),
+    makeMode({ executionMode: "native_subagent" }),
+  );
+  assert.deepStrictEqual(nativeIssues, [
+    { severity: "error", message: "state.json.mode.executionMode=native_subagent 时 subAgentDispatch.enabled 必须为 true" },
+  ]);
+
+  const protocolIssues = [];
+  validateSubAgentDispatchModel(
+    protocolIssues,
+    makeSubAgentDispatch({ enabled: true, concurrencyLimit: 1 }),
+    makeMode({ executionMode: "protocol_only" }),
+  );
+  assert.deepStrictEqual(protocolIssues, [
+    { severity: "error", message: "state.json.mode.executionMode=protocol_only 时 subAgentDispatch.enabled 必须为 false" },
+  ]);
+
+  const concurrencyIssues = [];
+  validateSubAgentDispatchModel(
+    concurrencyIssues,
+    makeSubAgentDispatch({ enabled: true, concurrencyLimit: 2 }),
+    makeMode({ executionMode: "native_subagent" }),
+  );
+  assert.deepStrictEqual(concurrencyIssues, [
+    { severity: "error", message: "subAgentDispatch.enabled=true 时 concurrencyLimit 必须为 1（每轮一个 coder）" },
+  ]);
 });
 
 test("validatePhaseGateModel reports missing phase and missing blocking reasons", () => {

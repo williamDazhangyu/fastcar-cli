@@ -77,6 +77,7 @@ const REQUIRED_STATE_OBJECT_KEYS = [
   "taskProfile",
   "decisionRequest",
   "decisions",
+  "subAgentDispatch",
   "validation",
   "postChange",
   "deltaAssessment",
@@ -829,6 +830,53 @@ function validatePostAgentValidationGateModel(issues: ValidationIssue[], gate: u
 }
 
 /**
+ * @param {ValidationIssue[]} issues
+ * @param {unknown} dispatch
+ * @param {unknown} mode
+ * @returns {void}
+ */
+function validateSubAgentDispatchModel(issues: ValidationIssue[], dispatch: unknown, mode: unknown): void {
+  if (!requirePlainObject(issues, dispatch, "state.json.subAgentDispatch")) {
+    return;
+  }
+
+  requireBooleanFields(issues, dispatch, ["enabled"], "state.json.subAgentDispatch");
+  requireNonEmptyString(issues, dispatch.currentPhase, "state.json.subAgentDispatch.currentPhase");
+  requireArray(issues, dispatch.activeSubAgents, "state.json.subAgentDispatch.activeSubAgents");
+  requireArray(issues, dispatch.subAgentHistory, "state.json.subAgentDispatch.subAgentHistory");
+  requireNonNegativeIntegerFields(
+    issues,
+    dispatch,
+    [
+      "dispatchedCount",
+      "completedCount",
+      "failedCount",
+      "lastDispatchRound",
+      "maxSubAgentRounds",
+      "subAgentTimeoutSeconds",
+      "maxFailedSubAgents",
+      "concurrencyLimit",
+    ],
+    "state.json.subAgentDispatch",
+  );
+  requireNonEmptyString(issues, dispatch.lastMergeResult, "state.json.subAgentDispatch.lastMergeResult");
+
+  const executionMode = isStateObject(mode) ? mode.executionMode : null;
+  if (executionMode === "native_subagent" && dispatch.enabled !== true) {
+    addError(issues, "state.json.mode.executionMode=native_subagent 时 subAgentDispatch.enabled 必须为 true");
+  }
+  if (executionMode === "protocol_only" && dispatch.enabled !== false) {
+    addError(issues, "state.json.mode.executionMode=protocol_only 时 subAgentDispatch.enabled 必须为 false");
+  }
+  if (dispatch.enabled === true && Number(dispatch.concurrencyLimit) !== 1) {
+    addError(issues, "subAgentDispatch.enabled=true 时 concurrencyLimit 必须为 1（每轮一个 coder）");
+  }
+  if (dispatch.enabled === false && Number(dispatch.concurrencyLimit) !== 0) {
+    addError(issues, "subAgentDispatch.enabled=false 时 concurrencyLimit 必须为 0");
+  }
+}
+
+/**
  * @param {unknown} state
  * @param {{
  *   expected?: { session?: string };
@@ -880,6 +928,7 @@ function validateStateJsonModelCore(state: unknown, options: StateJsonModelCoreO
   validateIterationPolicyModel(issues, state.iterationPolicy);
   validateTaskProfileModel(issues, state.taskProfile);
   validateDecisionRequestModel(issues, state.decisionRequest, state.taskProfile, state);
+  validateSubAgentDispatchModel(issues, state.subAgentDispatch, state.mode);
   validatePostChangeModel(issues, state.postChange);
   validateDeltaAssessmentModel(issues, state.deltaAssessment, state.postChange, state.iterationPolicy);
   validateDiffBudgetModel(issues, state.diffBudget, state.iterationPolicy);
@@ -912,6 +961,7 @@ export {
   validatePostChangeModel,
   validatePostAgentValidationGateModel,
   validateSessionModel,
+  validateSubAgentDispatchModel,
   validateSkillCaptureModel,
   validateStyleConsolidationModel,
   validateRequirementsModel,

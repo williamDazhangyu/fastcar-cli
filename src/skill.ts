@@ -32,6 +32,17 @@ function booleanAnswer(value: unknown): boolean {
   return value === true;
 }
 
+function parseFrontmatterScalar(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+    (trimmed.startsWith('"') && trimmed.endsWith('"'))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
 /**
  * 获取包根目录
  */
@@ -561,7 +572,7 @@ export async function listSkills(): Promise<void> {
         const content = await fsPromises.readFile(skillMdPath, 'utf-8');
         const match = content.match(/description:\s*(.+)/);
         if (match) {
-          description = match[1].trim();
+          description = parseFrontmatterScalar(match[1]);
         }
       }
 

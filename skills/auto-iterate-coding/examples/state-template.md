@@ -66,7 +66,7 @@ git 状态/diff：available / unavailable / unknown
 阻塞能力：
 
 ## Sub-Agent Dispatch / 子 Agent 调度
-enabled：true / false
+enabled：true（默认 native_subagent；只有 protocol-only / LLM-only / --no-run 时为 false）
 current_phase：explore / req_extract / verify / implement / idle
 active_sub_agents：无
 active_sub_agents_item_template：

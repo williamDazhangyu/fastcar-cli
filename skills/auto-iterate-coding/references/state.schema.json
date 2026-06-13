@@ -20,6 +20,7 @@
     "decisionRequest",
     "requirements",
     "decisions",
+    "subAgentDispatch",
     "traceability",
     "documentation",
     "deliveryDocs",

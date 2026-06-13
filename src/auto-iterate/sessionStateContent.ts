@@ -16,6 +16,13 @@ type StateObject = Record<string, any>;
 
 export function buildStateContent(rawAnswers: StateObject): string {
   const answers = withModeDefaults(rawAnswers);
+  const isProtocolOnly = answers.executionMode === "protocol_only";
+  const subAgentEnabledLine = isProtocolOnly
+    ? "enabled：false（protocol_only / LLM-only；用户明确手动模式或不启动 subagent）"
+    : "enabled：true（native_subagent 默认开启；每轮最多一个 coder）";
+  const subAgentConcurrencyLine = isProtocolOnly
+    ? "concurrency_limit：0（protocol-only 不派发 coder subagent）"
+    : "concurrency_limit：1（写代码 coder 固定串行；只读探索辅助不得写业务代码或 state）";
   const lang = languageCode(answers.language);
   const sourceChecklist = answers.sourceChecklist
     ? lang === "en"
@@ -106,7 +113,7 @@ git 状态/diff：unknown
 阻塞能力：待 Agent 启动后探测
 
 ## Sub-Agent Dispatch / 子 Agent 调度
-enabled：false（待 Agent 能力探测后决定；默认每轮最多一个 coder）
+${subAgentEnabledLine}
 current_phase：idle
 active_sub_agents：无
 active_sub_agents_item_template：
@@ -139,7 +146,7 @@ max_sub_agent_rounds：3
 sub_agent_timeout_seconds：300
 max_failed_sub_agents：2
 token_budget_hint：未设置
-concurrency_limit：1（写代码 coder 固定串行；只读探索辅助不得写业务代码或 state）
+${subAgentConcurrencyLine}
 
 ## Budgets / 预算
 max_iterations：${answers.maxIterations}

@@ -18,6 +18,8 @@ test("skill list reads packaged skills from root skills directory", () => {
   assert.strictEqual(result.status, 0, result.stderr);
   assert.ok(!result.stdout.includes("没有可用的 skills"), result.stdout);
   assert.ok(result.stdout.includes("auto-iterate-coding"), result.stdout);
+  assert.ok(result.stdout.includes("面向 AI Coding Agent 的有界自动迭代开发协议"), result.stdout);
+  assert.ok(!result.stdout.includes("'面向 AI Coding Agent"), result.stdout);
   assert.ok(result.stdout.includes("fastcar-framework"), result.stdout);
 });
 

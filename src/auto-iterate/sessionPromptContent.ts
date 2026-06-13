@@ -71,7 +71,7 @@ Context and state management:
 Treat ${answers.sessionStateJsonFile || ".agent-state/auto-iterate/default/state.json"} as the machine source of truth when it exists.
 Keep status-like machine fields such as pending, passed, blocked, not_verified, requiredAction, and mode values in English. Localize only human-readable summaries, reasons, evidence, and generated documents.
 Do not rely on conversation history as the only context.
-Probe available capabilities: file read/write, commands, real tests, persistent state, sub-agent/parallel support, network, database/secrets, and git diff.
+Probe available capabilities: file read/write, commands, real tests, persistent state, coder subagent, read-only exploration helpers, network, database/secrets, and git diff.
 If a capability is unavailable, mark affected requirements not_verified or blocked instead of faking completion or validation.
 Run reconcile before resuming: current branch, git status/diff, state/code consistency, external edits after the last stop, and whether recent validation can be rerun.
 After each implementation iteration, optimization iteration, context compression, early stop, or pre-delivery step, update state.json first and refresh state.md.

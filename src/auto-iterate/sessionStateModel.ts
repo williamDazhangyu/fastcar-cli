@@ -18,6 +18,7 @@ type StateObject = Record<string, any>;
 
 export function buildStateModel(rawAnswers: StateObject): StateObject {
   const answers = withModeDefaults(rawAnswers);
+  const isProtocolOnly = answers.executionMode === "protocol_only";
   const remainingImplementationIterations = answers.autopilot
     ? answers.autopilotMaxIterations
     : answers.maxIterations;
@@ -185,6 +186,21 @@ export function buildStateModel(rawAnswers: StateObject): StateObject {
       parallelWriteConfirmation: "禁止并发 coder 写入；每轮只允许一个 coder",
       coderFileOwnership: "由主 Agent 每轮按 focus 分配",
       fallbackStrategy: "无 coder 能力时进入 protocol-only / need_decision，不得静默切换",
+    },
+    subAgentDispatch: {
+      enabled: !isProtocolOnly,
+      currentPhase: "idle",
+      activeSubAgents: [],
+      subAgentHistory: [],
+      dispatchedCount: 0,
+      completedCount: 0,
+      failedCount: 0,
+      lastDispatchRound: 0,
+      lastMergeResult: "N/A",
+      maxSubAgentRounds: 3,
+      subAgentTimeoutSeconds: 300,
+      maxFailedSubAgents: 2,
+      concurrencyLimit: isProtocolOnly ? 0 : 1,
     },
     traceability: {
       policy: "只记录公开可审计推理摘要；不得记录私有思考链。",

@@ -59,6 +59,7 @@
 - `state.json.language` 可选记录用户语言推断结果，当前支持 `zh` / `en`；旧 session 缺失该字段时可从 `task.goal` 或来源文档推断，不得阻断恢复。
 - `status`、`mode`、`requiredAction`、`deliveryVerifiability` 等机器枚举必须保持英文；只允许人类可读摘要、原因、证据、`state.md` 视图、Worker prompt 和 Skill Capture 文档跟随用户语言。
 - `state.json.mode.runtimeAutopilot` 记录运行时是否启用多轮 Autopilot；`mode.loopShape` 只能是 `default`、`autopilot` 或 `plan_once`；`mode.executionMode` 只能是 `native_subagent` 或 `protocol_only`，用于锁定本 session 是否派发原生 coder subagent。执行模式不得运行中静默切换。
+- `mode.executionMode=native_subagent` 时，`subAgentDispatch.enabled` 必须为 `true` 且 `concurrencyLimit=1`；这是默认自动模式。只有 `mode.executionMode=protocol_only`（用户明确 `--no-run`、手动模式、不启动 subagent，或无原生 Agent 工具）时，`subAgentDispatch.enabled=false` 且 `concurrencyLimit=0`。
 - `state.json.notes[]`、`state.json.diagnose.hypotheses[]` 和 `state.json.diagnose.hypothesisQueue[]` 是 Worker `state_patch.notes` / `state_patch.hypotheses` 的白名单合并目标；Worker 不得通过它们覆盖预算、验证或交付门禁。CLI merge 每类最多保留最近 200 条，避免长期诊断 session 无界膨胀；`hypothesisQueue` 入队时必须保持唯一 `H<n>` ID，旧状态只有 `diagnose.hypotheses[]` 且缺少 `hypothesisQueue[]` 时必须先物化为 pending 队列，`hypothesis_test` focus 必须携带待验证假设 ID，并按 `pending -> supported/rejected/inconclusive` 推进匹配队列项，避免重复验证或误更新同一个假设。
 - `state.json.traceability.iterations[]` 是每轮公开审计记录，只能保存 `rationaleSummary`、决策、证据、文件、验证结果和 prompt/result/log 路径；不得记录或要求 Worker 输出私有 chain-of-thought；CLI merge 只保留最近 200 条，完整每轮原始证据以 `iterations/<n>/result.json`、`worker.log` 和 `validation.log` 为准。
 - `state.json.documentation` 汇总 Worker 的 `documentation.apiChanges`、`architectureNotes`、`implementationNotes` 和 `changelogEntries`，作为 `--finalize` 生成 docs 的输入；Worker 不能直接写 `deliveryDocs`；CLI merge 每类最多保留最近 200 条，避免长期 session 让 `state.json` 无界膨胀。
@@ -108,7 +109,7 @@
 - `Temporary Artifacts / Cleanup` 未完成且没有用户确认保留理由时，不允许按成功交付输出。
 - `Sub-Agent Dispatch` 中 `active_sub_agents` 最多只能有一个写代码 coder；只读探索辅助不得写业务代码或 state。
 - 每轮 merge 后，`active_sub_agents` 中 `merge_status=merged` 或 `status=failed` 的条目必须移入 `sub_agent_history`，下一轮派发 coder 前 `active_sub_agents` 必须为空；历史记录保留最近 200 条并累计 `dispatchedCount` / `completedCount` / `failedCount`，不得重置已有历史。
-- 并行实现的 N 个 coder 子 Agent 完成后，`implementation_iterations_used` 只增加 1；explore 和 verify 子 Agent 不增加迭代计数。
+- 单轮只允许一个 coder 子 Agent 写代码；该 coder 完成并由主 Agent 验证/合并后，`implementation_iterations_used` 最多增加 1。只读探索辅助不增加实现迭代计数。
 - `failed_count >= max_failed_sub_agents` 时，后续实现轮次不得再派发新的 coder 子 Agent。
 - 恢复 session 时，`active_sub_agents` 中 `merge_status=pending` 的条目必须在进入下一轮前完成 merge 或标记 skipped；完成后移入 `sub_agent_history`。
 

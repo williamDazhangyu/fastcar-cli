@@ -104,6 +104,10 @@ test("interactive auto-iterate output is concise while generated prompt keeps ex
     assert(!output.includes("Watchdog"));
 
     const prompt = fs.readFileSync(".agent-state/auto-iterate/guidance-check/start-prompt.md", "utf8");
+    const state = readJson(".agent-state/auto-iterate/guidance-check/state.json");
+    assert.strictEqual(state.mode.executionMode, "protocol_only");
+    assert.strictEqual(state.subAgentDispatch.enabled, false);
+    assert.strictEqual(state.subAgentDispatch.concurrencyLimit, 0);
     assert(prompt.includes("执行模式：protocol_only / LLM-only"));
     assert(prompt.includes("Requirement Coverage Matrix"));
     assert(prompt.includes("Watchdog"));
@@ -129,6 +133,8 @@ test("initAutoIterate creates noninteractive quick session through runtime modul
     assert.strictEqual(state.task.goal, "运行时抽取验证");
     assert.strictEqual(state.mode.mode, "quick");
     assert.strictEqual(state.mode.executionMode, "native_subagent");
+    assert.strictEqual(state.subAgentDispatch.enabled, true);
+    assert.strictEqual(state.subAgentDispatch.concurrencyLimit, 1);
     assert.strictEqual(readJson(".agent-state/auto-iterate-current.json").session, "runtime-session");
   });
 });

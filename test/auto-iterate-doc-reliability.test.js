@@ -1256,7 +1256,7 @@ test("子 Agent 协议收敛为主 Agent 裁判和单 coder 串行工作流", ()
 
   for (const expected of [
     "## Sub-Agent Dispatch / 子 Agent 调度",
-    "enabled：",
+    "enabled：true",
     "current_phase：",
     "active_sub_agents：",
     "active_sub_agents：无",
@@ -1283,11 +1283,13 @@ test("子 Agent 协议收敛为主 Agent 裁判和单 coder 串行工作流", ()
     assertIncludes(template, expected, "state-template.md");
     assertIncludes(state, expected, "generated state.md");
   }
+  assertIncludes(state, "execution_mode：native_subagent", "generated state.md");
+  assertNotIncludes(state, "enabled：false（protocol_only / LLM-only", "generated state.md");
 
   assertIncludes(schema, "`Sub-Agent Dispatch` 中 `active_sub_agents`", "state-schema.md");
   assertIncludes(schema, "下一轮派发 coder 前 `active_sub_agents` 必须为空", "state-schema.md");
   assertIncludes(schema, "failed_count >= max_failed_sub_agents", "state-schema.md");
-  assertIncludes(schema, "`implementation_iterations_used` 只增加 1", "state-schema.md");
+  assertIncludes(schema, "`implementation_iterations_used` 最多增加 1", "state-schema.md");
 
   for (const expected of [
     "子 Agent 串行策略",

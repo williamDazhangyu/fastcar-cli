@@ -40,7 +40,11 @@ test("buildStateModel creates the authoritative initial state shape", () => {
   assert.deepStrictEqual(state.task.successCriteria, ["登录成功", "错误提示正确"]);
   assert.strictEqual(state.session.session, "login-fix");
   assert.strictEqual(state.mode.mode, "quick");
+  assert.strictEqual(state.mode.executionMode, "native_subagent");
   assert.strictEqual(state.mode.runtimeAutopilot, true);
+  assert.strictEqual(state.subAgentDispatch.enabled, true);
+  assert.strictEqual(state.subAgentDispatch.concurrencyLimit, 1);
+  assert.deepStrictEqual(state.subAgentDispatch.activeSubAgents, []);
   assert.strictEqual(state.budgets.remainingImplementationIterations, 4);
   assert.strictEqual(state.budgets.minimumValidationHardeningIterations, 1);
   assert.strictEqual(state.currentState.overallStatus, "in_progress");
@@ -48,6 +52,14 @@ test("buildStateModel creates the authoritative initial state shape", () => {
   assert.strictEqual(state.requirements[0].id, "REQ-BOOTSTRAP");
   assert.strictEqual(state.validation.commands.length, 2);
   assert.strictEqual(state.postChange.command, "npm test");
+});
+
+test("protocol-only mode disables sub-agent dispatch in state model", () => {
+  const state = buildStateModel(baseAnswers({ executionMode: "protocol_only" }));
+
+  assert.strictEqual(state.mode.executionMode, "protocol_only");
+  assert.strictEqual(state.subAgentDispatch.enabled, false);
+  assert.strictEqual(state.subAgentDispatch.concurrencyLimit, 0);
 });
 
 test("strict mode sets high-risk gates and validation hardening minimum", () => {

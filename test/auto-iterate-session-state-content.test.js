@@ -33,6 +33,9 @@ test("buildStateContent renders core quick-mode state sections", () => {
 
   assert(content.startsWith("# 自动迭代编码状态"));
   assert(content.includes("模式：quick / 快速启动"));
+  assert(content.includes("execution_mode：native_subagent"));
+  assert(content.includes("enabled：true（native_subagent 默认开启；每轮最多一个 coder）"));
+  assert(content.includes("concurrency_limit：1（写代码 coder 固定串行；只读探索辅助不得写业务代码或 state）"));
   assert(content.includes("进度：implementation 0 / 4；optimization 0 / 未开始"));
   assert(content.includes("remaining_implementation_iterations：4"));
   assert(content.includes("minimum_validation_hardening_iterations：1"));
@@ -40,6 +43,14 @@ test("buildStateContent renders core quick-mode state sections", () => {
   assert(content.includes("## Skill Capture / 技能沉淀"));
   assert(content.includes("## Context Reset Review Gate / 上下文清空复核门禁"));
   assert(content.includes("## Post-Agent Validation Gate / Agent 后置校验门禁"));
+});
+
+test("protocol-only state view disables sub-agent dispatch", () => {
+  const content = buildStateContent(baseAnswers({ executionMode: "protocol_only" }));
+
+  assert(content.includes("execution_mode：protocol_only"));
+  assert(content.includes("enabled：false（protocol_only / LLM-only；用户明确手动模式或不启动 subagent）"));
+  assert(content.includes("concurrency_limit：0（protocol-only 不派发 coder subagent）"));
 });
 
 test("strict mode keeps stricter budget and approval markers", () => {

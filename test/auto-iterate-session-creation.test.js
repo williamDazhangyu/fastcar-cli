@@ -100,6 +100,9 @@ test("createAutoIterateSession writes state, prompt, and current files", async (
     const state = readJson(".agent-state/auto-iterate/login-fix/state.json");
     assert.strictEqual(state.task.goal, "修复登录");
     assert.strictEqual(state.mode.mode, "quick");
+    assert.strictEqual(state.mode.executionMode, "native_subagent");
+    assert.strictEqual(state.subAgentDispatch.enabled, true);
+    assert.strictEqual(state.subAgentDispatch.concurrencyLimit, 1);
     assert.strictEqual(created.answers.sessionStateJsonFile, ".agent-state/auto-iterate/login-fix/state.json");
     assert(created.promptContent.includes("修复登录"));
     assert(created.outputSummary.includes("✓ auto-iterate session 已生成"));
