@@ -30,7 +30,7 @@ export const NATURAL_LANGUAGE_EXAMPLES: NaturalLanguageExampleSection[] = [
         route: '主 Agent 原生 subagent 工作流；可选先生成 session: fastcar-cli auto-iterate --quick --goal "修复登录失败问题" --session login-bugfix --yes',
         notes: [
           "auto-iterate goal 是父任务启动口语，映射为 --goal 参数，不等于 Codex /goal。",
-          "默认走主 Agent + coder subagent，不启动旧 --check/--run Worker pipeline。",
+          "默认走主 Agent + coder subagent。",
           "用户给出 session 时必须显式使用该 session。",
         ],
       },
@@ -125,7 +125,7 @@ export const NATURAL_LANGUAGE_EXAMPLES: NaturalLanguageExampleSection[] = [
         route: '主 Agent 原生 subagent 工作流；可选先生成 session: fastcar-cli auto-iterate --plan-only --goal "订单模块重构" --session order-plan --yes',
         notes: [
           "只规划、不要写代码选择 plan-only。",
-          "plan-only 自动模式使用 --once，不追加 --autopilot。",
+          "plan-only 自动模式不追加 --autopilot（已废弃）。",
           "plan-only 不应进入实现或修复。",
         ],
       },
@@ -207,34 +207,6 @@ export const NATURAL_LANGUAGE_EXAMPLES: NaturalLanguageExampleSection[] = [
     ],
   },
   {
-    title: "Agent skill 发现、goal 与 worker dispatch",
-    keywords: ["agent", "codex", "goal", "worker", "dispatch", "派发", "子 Agent", "全局自动迭代", "skill install"],
-    examples: [
-      "先确保目标 Agent 可读取 auto-iterate-coding：fastcar-cli skill install auto-iterate-coding --global --target <agent>",
-      "如果当前 Agent skills 列表没有 auto-iterate-coding，就不会稳定触发全局自动迭代",
-      "目标 Agent 名称以 fastcar-cli skill targets 输出为准，例如 codex、claude、kimi、cursor",
-      "推荐：先在交互式 Codex 输入 /goal 设置整体目标；随后主 Agent 读取 skill/state 并直接派发 coder subagent，可选用 fastcar-cli auto-iterate --quick --goal \"同一目标摘要\" --session <session> --yes 生成 session 骨架",
-      "说明：/goal 负责 Codex 会话级目标；auto-iterate state.json 负责 session、预算、RCM、验证证据和恢复状态",
-      "说明：这里的 Codex goal 需要先判断语义；子任务默认按 Codex worker / dispatch 处理，不等于更新当前会话 Codex goal 模型",
-      "让 Codex goal 处理 login-bugfix 的 REQ-001，只能改 src/auth.js 和 test/auth.test.js，验证命令 npm test，先 dry-run",
-      "让 Codex goal 接手当前自动迭代任务的 REQ-002，文件白名单是 src/auto-iterate.js 和 test/auto-iterate-doc-reliability.test.js，先生成 worker prompt 不实际执行",
-      "派发给 Codex worker：session 是 dispatch-codex，任务是补充 resume 降级测试，只允许改 test/auto-iterate-doc-reliability.test.js，跑 npm test",
-      "在交互式 Codex 输入 /goal，把当前 Codex goal 设为：完整修复登录失败并通过 npm test",
-      "确认 prompt 后，让本地 Codex 真实执行这个 worker",
-      "先生成 Codex worker prompt，不启动外部 Agent，确认后再配置 AUTO_ITERATE_CODEX_CMD 执行",
-    ],
-    fewShots: [
-      {
-        user: "让 Codex goal 处理 login-bugfix 的 REQ-001，只能改 src/auth.js 和 test/auth.test.js，验证命令 npm test，先 dry-run",
-        route: 'legacy/deprecated: fastcar-cli auto-iterate --dispatch login-bugfix --agent codex --task "处理 REQ-001" --files "src/auth.js,test/auth.test.js" --verify-command "npm test" --dry-run',
-        notes: [
-          "这里的 Codex goal 是旧 worker dispatch 口语，不是当前会话 /goal。",
-          "dispatch 外部 Worker 路径已废弃；当前默认应由主 Agent 直接派发原生 coder subagent。",
-        ],
-      },
-    ],
-  },
-  {
     title: "session 管理",
     keywords: ["session", "会话", "恢复", "切换", "列出", "list", "resume", "switch"],
     examples: [
@@ -262,7 +234,7 @@ export const NATURAL_LANGUAGE_EXAMPLES: NaturalLanguageExampleSection[] = [
     examples: [
       "只遵从 auto-iterate 协议规范执行，不走固定 CLI 流水线",
       "按协议执行，但不要 spawn worker，session 叫 protocol-only-fix",
-      "使用手动模式修复登录失败，不要 --run",
+      "使用手动模式修复登录失败，不要触发旧 pipeline",
       "在当前对话里按自动迭代协议执行，别走 CLI 驱动",
       "我只想让 agent 遵从迭代协议规范执行，而不是按照固定执行流程走",
     ],
@@ -333,7 +305,7 @@ export function renderNaturalLanguageExamples(query?: unknown): string {
     "",
     "把下面任意一句发给 Agent，Agent 应默认走主 Agent + coder subagent 原生工作流；CLI 只用于 session 管理、校验、finalize，或用 --yes 生成 native-subagent session 骨架。用户明确 protocol-only / 手动模式 / 不启动 subagent 时才追加 --no-run。",
     "",
-    "Few-shot 样本中的 Route 是路由目标形态；旧 --check/--run Worker pipeline 已废弃，不得作为默认启动路径。",
+    "Few-shot 样本中的 Route 是路由目标形态。",
     "",
     "自然语言路由必须每次生成独立 session：用户已指定时使用该 session；用户未指定时，由 Agent 根据模式和目标生成英文小写、数字和连字符组成的默认 session，并在命令中显式追加 --session <name>。",
     "",

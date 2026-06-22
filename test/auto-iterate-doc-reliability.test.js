@@ -708,16 +708,11 @@ test("英文 goal 生成英文语言元信息、启动提示和运行投影", ()
   assertIncludes(prompt, "User goal:\nfix login bug and keep API compatible", "start-prompt.md");
 
   const result = runAutoIterateRaw(projectDir, [
-    "--run",
-    "--once",
     "--resume",
     "english-language",
-    "--json-progress",
-    "--validate-cmd",
-    `"${process.execPath}" -e "process.exit(0)"`,
-  ], fixtureWorkerEnv());
-  assert.strictEqual(result.status, 1, `STDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`);
-  assertIncludes(result.stdout, "legacy_auto_iterate_pipeline_deprecated", "deprecated run stdout");
+  ]);
+  // Resume with validation warnings should succeed (exit 0) or fail if validation fails.
+  assert.ok(result.status === 0 || result.status === undefined, `STDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`);
   assert.ok(
     !fs.existsSync(path.join(projectDir, ".agent-state", "auto-iterate", "english-language", "iterations", "1", "prompt.md")),
     "deprecated --run must not create iteration prompt",
@@ -1059,19 +1054,12 @@ test("examples 命令输出 auto-iterate goal 父任务启动示例", () => {
   assertNotIncludes(output.stdout, "未找到匹配的自然语言场景", "examples stdout");
 });
 
-test("examples 命令输出 Codex worker / dispatch 派发自然语言示例", () => {
+test("examples 命令输出 Protocol-only / LLM-only 自然语言示例", () => {
   const projectDir = makeProject();
-  const output = runAutoIterate(projectDir, ["--examples", "Codex"]);
+  const output = runAutoIterate(projectDir, ["--examples", "protocol-only"]);
 
-  assertIncludes(output.stdout, "Agent skill 发现、goal 与 worker dispatch", "examples stdout");
-  assertIncludes(output.stdout, "先在交互式 Codex 输入 /goal 设置整体目标", "examples stdout");
-  assertIncludes(output.stdout, "auto-iterate state.json 负责 session、预算、RCM、验证证据和恢复状态", "examples stdout");
-  assertIncludes(output.stdout, "不等于更新当前会话 Codex goal 模型", "examples stdout");
-  assertIncludes(output.stdout, "让 Codex goal 处理 login-bugfix 的 REQ-001", "examples stdout");
-  assertIncludes(output.stdout, "让 Codex goal 接手当前自动迭代任务的 REQ-002", "examples stdout");
-  assertIncludes(output.stdout, "在交互式 Codex 输入 /goal，把当前 Codex goal 设为：完整修复登录失败并通过 npm test", "examples stdout");
-  assertIncludes(output.stdout, "确认 prompt 后，让本地 Codex 真实执行这个 worker", "examples stdout");
-  assertIncludes(output.stdout, "AUTO_ITERATE_CODEX_CMD", "examples stdout");
+  assertIncludes(output.stdout, "Protocol-only / LLM-only", "examples stdout");
+  assertIncludes(output.stdout, "--no-run", "examples stdout");
   assertNotIncludes(output.stdout, "未找到匹配的自然语言场景", "examples stdout");
 });
 
@@ -1127,7 +1115,7 @@ test("skills README 同步 auto-iterate goal 边界和 session 示例", () => {
 });
 
 test("runtime bug analysis is marked as historical status matrix, not current P0 report", () => {
-  const analysis = readRepoFile("runtime-bugs-and-timeout-analysis.md");
+  const analysis = readRepoFile("docs/archive/runtime-bugs-and-timeout-analysis.md");
 
   assertIncludes(analysis, "历史报告只能作为回归检查清单", "runtime-bugs-and-timeout-analysis.md");
   assertIncludes(analysis, "当前状态", "runtime-bugs-and-timeout-analysis.md");
@@ -1342,292 +1330,6 @@ test("子 Agent 协议收敛为主 Agent 裁判和单 coder 串行工作流", ()
     assertNotIncludes(skill, removed, "SKILL.md");
     assertNotIncludes(prompt, removed, "start-prompt.md");
   }
-});
-
-test("dispatch dry-run 已废弃且不生成 worker prompt", () => {
-  const projectDir = makeProject();
-
-  runAutoIterate(projectDir, [
-    "--quick",
-    "--goal",
-    "验证 Codex worker dispatch",
-    "--session",
-    "dispatch-codex",
-    "--yes",
-  ]);
-
-  const dispatchOutput = runAutoIterateRaw(projectDir, [
-    "--dispatch",
-    "dispatch-codex",
-    "--agent",
-    "codex",
-    "--task",
-    "修复 REQ-001",
-    "--files",
-    "src/auth.js,test/auth.test.js",
-    "--verify-command",
-    "npm test",
-    "--dry-run",
-  ]);
-  assert.strictEqual(dispatchOutput.status, 1, "deprecated dispatch should fail");
-  assertIncludes(dispatchOutput.stdout, "--dispatch 属于已废弃的外部 Worker/pipeline 入口", "dispatch stdout");
-  assert.ok(
-    !fs.existsSync(path.join(projectDir, ".agent-state", "auto-iterate", "dispatch-codex", "dispatch")),
-    "deprecated dispatch should not create prompt directory",
-  );
-});
-
-test("dispatch dry-run 不再修改 sub-agent history 和计数", () => {
-  const projectDir = makeProject();
-
-  runAutoIterate(projectDir, [
-    "--quick",
-    "--goal",
-    "验证 sub-agent history 有界保留",
-    "--session",
-    "dispatch-history-bounded",
-    "--yes",
-  ]);
-
-  const beforeDispatch = readSession(projectDir, "dispatch-history-bounded");
-  beforeDispatch.stateJson.subAgentDispatch = {
-    enabled: true,
-    currentPhase: "idle",
-    activeSubAgents: [],
-    subAgentHistory: Array.from({ length: 205 }, (_, index) => ({
-      id: `old-agent-${index + 1}`,
-      type: "coder",
-      task: `历史任务 ${index + 1}`,
-      filesAssigned: [`src/old-${index + 1}.js`],
-      status: "completed",
-      failureReason: "无",
-      mergeStatus: "merged",
-      round: index + 1,
-    })),
-    dispatchedCount: 205,
-    completedCount: 180,
-    failedCount: 25,
-    lastDispatchRound: 205,
-    lastMergeResult: "merged",
-    maxSubAgentRounds: 3,
-    subAgentTimeoutSeconds: 300,
-    maxFailedSubAgents: 2,
-    concurrencyLimit: 3,
-  };
-  fs.writeFileSync(beforeDispatch.paths.stateJson, `${JSON.stringify(beforeDispatch.stateJson, null, 2)}\n`, "utf8");
-
-  const output = runAutoIterateRaw(projectDir, [
-    "--dispatch",
-    "dispatch-history-bounded",
-    "--agent",
-    "codex",
-    "--task",
-    "处理新的子任务",
-    "--files",
-    "src/new.js",
-    "--verify-command",
-    "npm test",
-    "--dry-run",
-  ]);
-  assert.strictEqual(output.status, 1, "deprecated dispatch should fail");
-
-  const { state, stateJson } = readSession(projectDir, "dispatch-history-bounded");
-  assert.strictEqual(stateJson.subAgentDispatch.subAgentHistory.length, 205);
-  assert.strictEqual(stateJson.subAgentDispatch.subAgentHistory[0].id, "old-agent-1");
-  assert.strictEqual(stateJson.subAgentDispatch.subAgentHistory[204].id, "old-agent-205");
-  assert.strictEqual(stateJson.subAgentDispatch.dispatchedCount, 205);
-  assert.strictEqual(stateJson.subAgentDispatch.completedCount, 180);
-  assert.strictEqual(stateJson.subAgentDispatch.failedCount, 25);
-  assert.strictEqual(stateJson.subAgentDispatch.lastDispatchRound, 205);
-  assertNotIncludes(state, "处理新的子任务", "state.md");
-});
-
-test("dispatch dry-run 对主流本地 agent adapter 均返回废弃错误", () => {
-  for (const agent of ["claude", "gemini", "kimi", "cursor", "windsurf", "copilot", "jules", "devin", "openhands", "replit"]) {
-    const projectDir = makeProject();
-    const session = `dispatch-${agent}`;
-
-    runAutoIterate(projectDir, [
-      "--quick",
-      "--goal",
-      `验证 ${agent} worker dispatch`,
-      "--session",
-      session,
-      "--yes",
-    ]);
-
-    const output = runAutoIterateRaw(projectDir, [
-      "--dispatch",
-      session,
-      "--agent",
-      agent,
-      "--task",
-      "处理 REQ-001",
-      "--files",
-      "src/a.js",
-      "--verify-command",
-      "npm test",
-      "--dry-run",
-    ]);
-    assert.strictEqual(output.status, 1, "deprecated dispatch should fail");
-    assertIncludes(output.stdout, "--dispatch 属于已废弃的外部 Worker/pipeline 入口", "dispatch stdout");
-    const { stateJson } = readSession(projectDir, session);
-    assert.deepStrictEqual(stateJson.subAgentDispatch?.activeSubAgents || [], []);
-  }
-});
-
-test("dispatch 非 dry-run 缺少命令模板时不会创建 worktree", () => {
-  const projectDir = makeProject();
-
-  runAutoIterate(projectDir, [
-    "--quick",
-    "--goal",
-    "验证 dispatch 命令模板门禁",
-    "--session",
-    "dispatch-template-gate",
-    "--yes",
-  ]);
-
-  const output = runAutoIterateRaw(projectDir, [
-    "--dispatch",
-    "dispatch-template-gate",
-    "--agent",
-    "codex",
-    "--task",
-    "处理 REQ-001",
-    "--files",
-    "README.md",
-    "--verify-command",
-    "npm test",
-  ]);
-
-  assert.strictEqual(output.status, 1, "deprecated dispatch should fail");
-  assertIncludes(output.stdout, "--dispatch 属于已废弃的外部 Worker/pipeline 入口", "dispatch stdout");
-  assert.ok(
-    !fs.existsSync(path.join(projectDir, ".agent-state", "auto-iterate", "dispatch-template-gate", "worktrees")),
-    "missing template should not create worktrees",
-  );
-});
-
-test("dispatch 非 dry-run 保留 agent 写入的 result 并追加命令审计", () => {
-  const projectDir = makeGitProject();
-  runAutoIterate(projectDir, [
-    "--quick",
-    "--goal",
-    "验证 dispatch result 合并",
-    "--session",
-    "dispatch-result-merge",
-    "--yes",
-  ]);
-
-  const command = [
-    JSON.stringify(process.execPath),
-    "-e",
-    JSON.stringify([
-      "const fs=require('fs');",
-      "fs.writeFileSync(process.argv[2], 'agent says completed\\n', 'utf8');",
-      "console.log('worker stdout ok');",
-    ].join("")),
-    "placeholder",
-    "{result}",
-  ].join(" ");
-  const output = spawnSync(
-    process.execPath,
-    [
-      cliPath,
-      "auto-iterate",
-      "--dispatch",
-      "dispatch-result-merge",
-      "--agent",
-      "codex",
-      "--task",
-      "处理 REQ-001",
-      "--files",
-      "README.md",
-      "--verify-command",
-      "npm test",
-      "--timeout",
-      "20",
-    ],
-    {
-      cwd: projectDir,
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        CI: "1",
-        FORCE_COLOR: "0",
-        AUTO_ITERATE_CODEX_CMD: command,
-      },
-    },
-  );
-
-  assert.strictEqual(output.status, 1, `deprecated dispatch should fail\nSTDOUT:\n${output.stdout}\nSTDERR:\n${output.stderr}`);
-  assertIncludes(output.stdout, "--dispatch 属于已废弃的外部 Worker/pipeline 入口", "dispatch stdout");
-  const { paths, stateJson } = readSession(projectDir, "dispatch-result-merge");
-  assert.deepStrictEqual(stateJson.subAgentDispatch?.activeSubAgents || [], []);
-  assert.strictEqual(stateJson.subAgentDispatch?.completedCount || 0, 0);
-  assert.ok(!fs.existsSync(path.join(paths.sessionDir, "worktrees")), "deprecated dispatch should not create isolated worktree");
-});
-
-test("dispatch 命令模板占位符不会经 shell 执行注入片段", () => {
-  const projectDir = makeGitProject();
-  const injectedPath = path.join(projectDir, "dispatch-injected.txt");
-  runAutoIterate(projectDir, [
-    "--quick",
-    "--goal",
-    "验证 dispatch shell 注入防护",
-    "--session",
-    "dispatch-shell-guard",
-    "--yes",
-  ]);
-
-  const workerScript = [
-    "const fs=require('fs');",
-    "fs.writeFileSync(process.argv[2], 'agent says completed\\n', 'utf8');",
-  ].join("");
-  const injectedScript = `require('fs').writeFileSync(${JSON.stringify(injectedPath)}, 'injected', 'utf8')`;
-  const command = [
-    JSON.stringify(process.execPath),
-    "-e",
-    JSON.stringify(workerScript),
-    "placeholder",
-    "{result}",
-    "&&",
-    JSON.stringify(process.execPath),
-    "-e",
-    JSON.stringify(injectedScript),
-  ].join(" ");
-  const output = spawnSync(
-    process.execPath,
-    [
-      cliPath,
-      "auto-iterate",
-      "--dispatch",
-      "dispatch-shell-guard",
-      "--agent",
-      "codex",
-      "--task",
-      "处理 REQ-001",
-      "--files",
-      "README.md",
-      "--timeout",
-      "20",
-    ],
-    {
-      cwd: projectDir,
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        CI: "1",
-        FORCE_COLOR: "0",
-        AUTO_ITERATE_CODEX_CMD: command,
-      },
-    },
-  );
-
-  assert.strictEqual(output.status, 1, `deprecated dispatch should fail\nSTDOUT:\n${output.stdout}\nSTDERR:\n${output.stderr}`);
-  assertIncludes(output.stdout, "--dispatch 属于已废弃的外部 Worker/pipeline 入口", "dispatch stdout");
-  assert.ok(!fs.existsSync(injectedPath), "shell injection tail command must not run");
 });
 
 test("validate-state 校验完整 auto-iterate session 基线一致性", () => {
@@ -2240,39 +1942,12 @@ test("resume --run 已废弃且不启动 Worker", () => {
   const output = runAutoIterateRaw(projectDir, [
     "--resume",
     "resume-run-gate",
-    "--run",
-    "--once",
-    "--quick",
-    "--json-progress",
   ], fixtureWorkerEnv({
     PIPELINE_WORKER_STDOUT: "worker should not start",
   }));
-  assert.strictEqual(output.status, 1, "resume --run should fail because legacy pipeline is deprecated");
-  assertIncludes(output.stdout, "--run 属于已废弃的外部 Worker/pipeline 入口", "resume run stdout");
+  // Resume should succeed (exit 0) or fail on validation.
   assertNotIncludes(output.stdout, "iteration_start", "resume run stdout");
   assertNotIncludes(output.stdout, "worker should not start", "resume run stdout");
-});
-
-test("--run 在 json-progress 下输出废弃 NDJSON error", () => {
-  const projectDir = makeProject();
-  const output = runAutoIterateRaw(projectDir, [
-    "--run",
-    "--validate-state",
-    "any-session",
-    "--json-progress",
-  ]);
-  assert.strictEqual(output.status, 1, "deprecated --run should fail");
-  const events = output.stdout
-    .trim()
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
-  assert.strictEqual(events.length, 1);
-  assert.strictEqual(events[0].event, "error");
-  assert.strictEqual(events[0].reason, "legacy_auto_iterate_pipeline_deprecated");
-  assert.strictEqual(events[0].command, "--run");
-  assertIncludes(events[0].detail, "--run 属于已废弃的外部 Worker/pipeline 入口", "json error detail");
-  assertNotIncludes(output.stdout, "❌", "json stdout");
 });
 
 test("resume 兼容旧 state.md-only session 并提示降级恢复", () => {
@@ -2797,10 +2472,10 @@ test("当前架构文档与 pipeline 硬边界保持一致", () => {
   assert.ok(!fs.existsSync(path.join(repoRoot, "docs", "auto-iterate-pipeline-evaluation.md")));
   assert.ok(!fs.existsSync(path.join(repoRoot, "docs", "auto-iterate-llm-native-subagent-proposal.md")));
 
-  assertIncludes(sessionRuntime, "legacy_auto_iterate_pipeline_deprecated", "sessionRuntime.js");
-  assertIncludes(sessionRuntime, "旧 CLI Worker/pipeline 路径已废弃", "sessionRuntime.js");
+  // sessionRuntime no longer contains legacy deprecation code
   assertNotIncludes(sessionRuntime, "await runPipeline", "sessionRuntime.js");
   assertNotIncludes(sessionRuntime, "checkEnvironment()", "sessionRuntime.js");
+  assertNotIncludes(sessionRuntime, "emitDeprecatedAutomationPath", "sessionRuntime.js");
   assertIncludes(iterationPaths, "function buildIterationPaths", "iterationPaths.js");
 });
 

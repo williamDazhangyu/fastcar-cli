@@ -1,108 +1,9 @@
-export type AutoIterateMode =
-  | "strict"
-  | "quick"
-  | "diagnose"
-  | "verify"
-  | "plan"
-  | "optimize"
-  | "prototype";
+// Pipeline operation interfaces — depends on core.ts
 
-export type WorkerResultStatus =
-  | "completed"
-  | "failed"
-  | "blocked"
-  | "need_decision"
-  | "no_progress";
+import type { AutoIterateMode, RequirementStatus, ValidationStatus, PostChangeStatus, WorkerResultStatus, StopReason, WatchdogAction, WriteGuardIssueReason, LanguageInfo, LanguageCode, ProgressOptions, StateValidationIssue } from "./core";
+import type { PipelineFocus, RequirementItem, WorkerRequirementPatch, PipelineBudgets, PipelineStateLike, PickFocusStateLike, DiagnoseStateLike, HypothesisItem, MetricValue, MetricComparisonItem, MetricComparisonResult, StatePersistenceOptions } from "./models";
 
-export type RequirementStatus =
-  | "pending"
-  | "implemented"
-  | "passed"
-  | "blocked"
-  | "not_verified";
-
-export type ValidationStatus =
-  | "passed"
-  | "failed"
-  | "skipped"
-  | "not_available"
-  | "not_run";
-
-export type FlagStage =
-  | "documented"
-  | "parsed"
-  | "implemented"
-  | "routable"
-  | "stable";
-
-export type FlagKind =
-  | "pipeline"
-  | "legacy"
-  | "mode"
-  | "input"
-  | "session"
-  | "compat"
-  | "dispatch"
-  | "skill"
-  | "other";
-
-export interface FlagInfo {
-  stage: FlagStage;
-  kind: FlagKind;
-  stable: boolean;
-  stability?: "not_stable" | "experimental" | "stable";
-  help?: string;
-  aliases?: string[];
-}
-
-export interface FlagIssue {
-  flag: string;
-  reason: string;
-}
-
-export interface FlagValidationResult {
-  ok: boolean;
-  issues: FlagIssue[];
-}
-
-export interface PipelineFocus {
-  type?: string;
-  req_id?: string | null;
-  reqId?: string | null;
-  summary?: string;
-  raw?: string;
-}
-
-export interface PickFocusStateLike extends PipelineStateLike {
-  baseline?: Record<string, unknown>;
-  currentState?: Record<string, unknown>;
-  diagnose?: Record<string, unknown>;
-  phaseGate?: Record<string, unknown>;
-  postChange?: Record<string, unknown>;
-}
-
-export interface RequirementItem {
-  id: string;
-  summary?: string;
-  type?: string;
-  status?: RequirementStatus;
-  relatedFiles?: string[];
-  evidence?: string;
-  blockedReason?: string;
-  nextStep?: string;
-}
-
-export interface WorkerRequirementPatch {
-  id?: string;
-  summary?: string;
-  type?: string;
-  status?: RequirementStatus;
-  relatedFiles?: string[];
-  evidence?: string;
-  blockedReason?: string;
-  nextStep?: string;
-  [key: string]: unknown;
-}
+export type { PipelineFocus, RequirementItem, WorkerRequirementPatch, PipelineBudgets, PipelineStateLike, PickFocusStateLike, DiagnoseStateLike, HypothesisItem, MetricValue, MetricComparisonItem, MetricComparisonResult, StatePersistenceOptions };
 
 export interface ValidationCommandResult {
   command: string;
@@ -144,13 +45,6 @@ export interface ValidationHistoryEntry {
   [key: string]: unknown;
 }
 
-export type PostChangeStatus =
-  | "passed"
-  | "failed"
-  | "skipped_with_reason"
-  | "not_available"
-  | "not_run";
-
 export interface ValidationPerCommandItem {
   command: string;
   executable?: string;
@@ -174,31 +68,16 @@ export interface ValidationResult {
   results?: ValidationCommandResult[];
 }
 
+export interface EffectiveValidationResult extends ValidationResult {
+  status: ValidationStatus;
+  command: string | null;
+  exitCode?: number | null;
+  summary?: string;
+}
+
 export interface PipelineValidationOptions {
   timeoutMs?: number;
   logFileName?: string;
-}
-
-export interface PipelineMarkdownIssue {
-  severity: "warning";
-  code: string;
-  message: string;
-  [key: string]: unknown;
-}
-
-export interface StateValidationIssue {
-  severity: "error" | "warning" | string;
-  code?: string;
-  message?: string;
-  [key: string]: unknown;
-}
-
-export interface StatePersistenceOptions extends ProgressOptions {
-  validateStateModel?: (
-    state: PipelineStateLike,
-    context: { session?: string },
-  ) => StateValidationIssue[];
-  [key: string]: unknown;
 }
 
 export interface PipelineFailureInput {
@@ -262,61 +141,9 @@ export interface MergeIterationContext {
   };
 }
 
-export interface BuildIterationPromptContext {
-  session: string;
-  iteration: number;
-  mode: AutoIterateMode | string;
-  focus: PipelineFocus;
-  resultPath: string;
-  lastValidation?: ValidationResult | null;
-  writeScope?: unknown;
-  scope?: unknown;
-  sourceChecklist?: unknown;
-  allowModify?: boolean;
-  autopilotRun?: boolean;
-  language?: LanguageInfo | LanguageCode | string;
-}
-
 export interface MergeIterationResult {
   state: PipelineStateLike;
   issues: string[];
-}
-
-export interface MetricValue {
-  name: string;
-  value: unknown;
-  unit: string;
-  direction: string;
-  source: string;
-}
-
-export interface MetricComparisonItem {
-  name: string;
-  baseline: unknown;
-  post: unknown;
-  unit: string;
-  direction: string;
-  status: "not_comparable" | "unchanged" | "improved" | "regression";
-}
-
-export interface MetricComparisonResult {
-  status: "regression" | "improved" | "unchanged" | "unknown";
-  comparisons: MetricComparisonItem[];
-}
-
-export interface HypothesisItem {
-  id: string;
-  summary: string;
-  priority: number;
-  status: string;
-  evidence: unknown;
-  [key: string]: unknown;
-}
-
-export interface DiagnoseStateLike {
-  hypotheses?: unknown;
-  hypothesisQueue?: unknown;
-  [key: string]: unknown;
 }
 
 export interface MergeRequirementsContext {
@@ -338,13 +165,6 @@ export interface BudgetProgressContext {
   focus?: PipelineFocus | null;
 }
 
-export interface EffectiveValidationResult extends ValidationResult {
-  status: ValidationStatus;
-  command: string | null;
-  exitCode?: number | null;
-  summary?: string;
-}
-
 export interface ApplyIterationProjectionInput {
   state: PipelineStateLike;
   report: WorkerIterationResult;
@@ -353,12 +173,6 @@ export interface ApplyIterationProjectionInput {
   ctx: MergeIterationContext;
   text: Record<string, unknown>;
 }
-
-export type WriteGuardIssueReason =
-  | "invalid_path"
-  | "mode_write_forbidden"
-  | "scope_violation"
-  | "agent_state_write_forbidden";
 
 export interface WriteGuardIssue {
   reason: WriteGuardIssueReason;
@@ -382,73 +196,11 @@ export interface WriteGuardResult {
   filesChanged: string[];
 }
 
-export interface PipelineBudgets {
-  remainingOptimizationIterations?: number;
-  remainingImplementationIterations?: number;
-  remainingValidationHardeningIterations?: number;
-  autopilotMaxIterations?: number;
-  implementationIterationsUsed?: number;
-  validationHardeningIterationsUsed?: number;
-  minimumValidationHardeningIterations?: number;
-  totalCycles?: number;
-}
-
-export interface PipelineStateLike {
-  updatedAt?: string;
-  session?: Record<string, unknown>;
-  task?: Record<string, unknown>;
-  language?: Record<string, unknown>;
-  sourceChecklist?: Record<string, unknown>;
-  budgets?: PipelineBudgets;
-  requirements?: unknown[];
-  baseline?: Record<string, unknown>;
-  optimization?: {
-    status?: string;
-    [key: string]: unknown;
-  };
-  traceability?: Record<string, unknown>;
-  documentation?: Record<string, unknown>;
-  notes?: unknown[];
-  deliveryEvidence?: Record<string, unknown>;
-  validation?: Record<string, unknown>;
-  watchdog?: Record<string, unknown>;
-  postChange?: Record<string, unknown>;
-  postAgentValidationGate?: Record<string, unknown>;
-  decisionRequest?: Record<string, unknown>;
-  implementationContract?: Record<string, unknown>;
-  phaseGate?: Record<string, unknown>;
-  isolate?: Record<string, unknown>;
-  cleanup?: Record<string, unknown>;
-  currentState?: Record<string, unknown>;
-  deltaAssessment?: Record<string, unknown>;
-  iterationPolicy?: Record<string, unknown>;
-  diagnose?: Record<string, unknown>;
-  styleConsolidation?: Record<string, unknown>;
-  contextResetReview?: Record<string, unknown>;
-  skillCapture?: Record<string, unknown>;
-  mode?: {
-    mode?: AutoIterateMode | string;
-    [key: string]: unknown;
-  };
-}
-
 export interface ShouldStopContext {
   once?: boolean;
   runCyclesCompleted?: number;
   stopOnValidationFailure?: boolean;
 }
-
-export type StopReason =
-  | "need_decision"
-  | "watchdog_stop"
-  | "no_progress_streak"
-  | "once_completed"
-  | "plan_once_completed"
-  | "requirements_blocked"
-  | "delivery_ready"
-  | "budget_exhausted"
-  | "validation_failed"
-  | "continue";
 
 export interface ShouldStopResult {
   stop: boolean;
@@ -486,8 +238,6 @@ export interface LoopPolicyResult {
   maxSteps: number;
 }
 
-export type WatchdogAction = "ask_user" | "stop" | "continue";
-
 export interface WatchdogContext {
   validation?: ValidationResult | null;
 }
@@ -496,10 +246,6 @@ export interface WatchdogResult {
   triggered: boolean;
   requiredAction: WatchdogAction;
   reason: "need_decision" | "watchdog_stop" | "validation_failed" | "no_progress_streak" | "clear";
-}
-
-export interface ProgressOptions {
-  jsonProgress?: boolean;
 }
 
 export interface ProgressPayload {
@@ -537,25 +283,6 @@ export interface IterationPaths {
   resultPath: string;
   workerLogPath: string;
   validationLogPath: string;
-}
-
-export type LanguageCode = "zh" | "en";
-
-export interface LanguageInfo {
-  code: LanguageCode;
-  source: "text" | "default" | "state" | string;
-  confidence: "high" | "medium" | "low" | string;
-}
-
-export interface LanguageAnswersLike {
-  goal?: unknown;
-  sourceChecklist?: unknown;
-  successCriteria?: unknown;
-  nonGoals?: unknown;
-  allowedScope?: unknown;
-  compatibility?: unknown;
-  constraints?: unknown;
-  deliveryFormat?: unknown;
 }
 
 export interface WorkerDecisionRequest {
@@ -627,4 +354,19 @@ export interface DeliveryDocsResult {
   path: string;
   files: string[];
   generatedAt: string;
+}
+
+export interface BuildIterationPromptContext {
+  session: string;
+  iteration: number;
+  mode: AutoIterateMode | string;
+  focus: PipelineFocus;
+  resultPath: string;
+  lastValidation?: ValidationResult | null;
+  writeScope?: unknown;
+  scope?: unknown;
+  sourceChecklist?: unknown;
+  allowModify?: boolean;
+  autopilotRun?: boolean;
+  language?: LanguageInfo | LanguageCode | string;
 }

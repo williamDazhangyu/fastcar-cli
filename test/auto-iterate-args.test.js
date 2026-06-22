@@ -1,5 +1,5 @@
 ﻿const assert = require("assert");
-const { parseArgs } = require("../dist/auto-iterate/args");
+const { collectDeprecatedFlags, parseArgs } = require("../dist/auto-iterate/args");
 
 const cases = [];
 
@@ -30,66 +30,57 @@ test("parseArgs handles optional session flags without treating their values as 
   assert.strictEqual(options.goal, null);
 });
 
-test("parseArgs preserves pipeline run flags and repeated validate commands", () => {
+test("parseArgs handles dashboard and query values without treating them as goals", () => {
+  const dashboard = parseArgs(["--dashboard", "login-fix"]);
+  assert.strictEqual(dashboard.dashboardSession, "login-fix");
+  assert.strictEqual(dashboard.goal, null);
+
+  const query = parseArgs(["--examples", "protocol", "--query", "dashboard"]);
+  assert.strictEqual(query.examples, true);
+  assert.strictEqual(query.query, "dashboard");
+  assert.strictEqual(query.goal, null);
+});
+
+test("parseArgs collects deprecated worker and pipeline flags without inferring goals", () => {
   const options = parseArgs([
+    "--dispatch",
+    "demo",
+    "--agent",
+    "codex",
+    "--task",
+    "x",
+    "--verify-cmd=npm test",
     "--run",
-    "--once",
+  ]);
+
+  assert.deepStrictEqual(options.deprecatedFlags, [
+    "--agent",
+    "--dispatch",
+    "--run",
+    "--task",
+    "--verify-cmd",
+  ]);
+  assert.strictEqual(options.goal, null);
+  assert.deepStrictEqual(collectDeprecatedFlags(["--check", "--json-progress"]), [
+    "--check",
     "--json-progress",
-    "--validate-cmd",
-    "npm run typecheck",
-    "--validate-cmd=node test/pipeline.test.js",
-    "--step-timeout=0",
-    "--inactivity-timeout",
-    "0",
-    "--autopilot-max=3",
   ]);
-
-  assert.strictEqual(options.run, true);
-  assert.strictEqual(options.once, true);
-  assert.strictEqual(options.jsonProgress, true);
-  assert.deepStrictEqual(options.validateCommand, [
-    "npm run typecheck",
-    "node test/pipeline.test.js",
-  ]);
-  assert.strictEqual(options.stepTimeoutSeconds, 0);
-  assert.strictEqual(options.inactivityTimeoutSeconds, 0);
-  assert.strictEqual(options.autopilotMaxIterations, 3);
-  assert.strictEqual(options.help, false);
 });
 
-test("parseArgs preserves explicit zero run budget flags", () => {
-  const options = parseArgs([
-    "--run",
-    "--max-steps=0",
-    "--autopilot-max-iterations",
-    "0",
-  ]);
-
-  assert.strictEqual(options.maxSteps, 0);
-  assert.strictEqual(options.autopilotMaxIterations, 0);
-});
-
-test("parseArgs initializes help and parses dispatch verify aliases", () => {
+test("parseArgs initializes help and parses mode shortcuts", () => {
   const defaults = parseArgs([]);
   assert.strictEqual(defaults.help, false);
 
   const help = parseArgs(["--help"]);
   assert.strictEqual(help.help, true);
-
-  const verifyCommand = parseArgs(["--dispatch", "s", "--verify-command", "npm test"]);
-  assert.strictEqual(verifyCommand.verifyCommand, "npm test");
-
-  const verifyCmd = parseArgs(["--dispatch", "s", "--verify-cmd=npm run test:unit"]);
-  assert.strictEqual(verifyCmd.verifyCommand, "npm run test:unit");
 });
 
-test("parseArgs does not treat option values or unknown flags as inferred goals", () => {
+test("parseArgs does not treat unknown flags as inferred goals", () => {
   const missingValue = parseArgs(["--session"]);
   assert.strictEqual(missingValue.session, null);
   assert.strictEqual(missingValue.goal, null);
 
-  const unknownFlag = parseArgs(["--unknown-flag", "--run"]);
-  assert.strictEqual(unknownFlag.run, true);
+  const unknownFlag = parseArgs(["--unknown-flag"]);
   assert.strictEqual(unknownFlag.goal, null);
 });
 

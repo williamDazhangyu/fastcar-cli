@@ -56,16 +56,9 @@ Commands:
                            --max-iterations <n> 普通迭代预算
                            --autopilot-max-iterations <n> Autopilot 迭代预算
                            --list / --switch <name> / --resume <name>
-                           --dispatch <session> --agent codex|claude|gemini|kimi|cursor|windsurf|copilot|jules|devin|openhands|replit --task <text> --files <glob[,glob]> [--dry-run] legacy/deprecated dispatch prompt 兼容
-                           --verify-command <cmd> legacy dispatch worker 的验证命令
-                           --run --once [--json-progress] legacy/deprecated CLI pipeline 兼容
-                           --run --autopilot --json-progress legacy/deprecated CLI pipeline 兼容
-                           --check [--json-progress] legacy/deprecated Worker CLI 环境检查
-                           --validate-cmd <cmd> legacy pipeline 的 CLI 独立验证命令
-                           --scope <glob[,glob]> legacy pipeline Worker 可修改范围
-                           --progress-interval <seconds> legacy Worker 运行中进度统计输出间隔
-                           --isolate legacy pipeline 每轮在临时 git worktree 中运行 Worker
-                           --allow-modify Verify 模式下允许 legacy Worker 写文件
+                           --validate-state [session] 校验 session 状态
+                           --finalize [session] 汇总并交付已验证 session
+                           --capture-skills <session> 提取可复用 skill
                            --yes, -y 非交互生成，适合手动/fallback
                            --examples [关键词] 输出可复制的自然语言触发示例
                            -f, --from    从本地清单文档导入长需求

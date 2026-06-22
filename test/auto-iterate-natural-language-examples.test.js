@@ -16,7 +16,6 @@ test("example data keeps expected major scenarios", () => {
 
   assert(titles.includes("快速启动开发任务"));
   assert(titles.includes("严格按文档完整实现"));
-  assert(titles.includes("Agent skill 发现、goal 与 worker dispatch"));
   assert(titles.includes("Protocol-only / LLM-only"));
   assert(titles.includes("session 管理"));
   assert(NATURAL_LANGUAGE_EXAMPLES.every((section) => section.keywords.length > 0));
@@ -29,7 +28,7 @@ test("query filtering matches title, keywords, and examples", () => {
   const autoIterateGoal = getNaturalLanguageExampleSections("auto-iterate goal");
   const payment = getNaturalLanguageExampleSections("支付回调");
 
-  assert.deepStrictEqual(codex.map((section) => section.title), ["Agent skill 发现、goal 与 worker dispatch"]);
+  assert.deepStrictEqual(codex.map((section) => section.title), []);
   assert(autoIterateGoal.some((section) => section.title === "快速启动开发任务"));
   assert(payment.some((section) => section.examples.some((example) => example.includes("支付回调"))));
 });
@@ -42,12 +41,10 @@ test("few-shot route samples cover commands and constraints", () => {
   );
   const automaticShots = shots.filter((shot) => shot.route.includes("主 Agent 原生 subagent 工作流"));
 
-  assert(shots.length >= 10);
+  assert(shots.length >= 8);
   assert(shots.every((shot) => shot.user && shot.route && Array.isArray(shot.notes) && shot.notes.length > 0));
   assert(shots.some((shot) => shot.route.includes("--no-run")));
-  assert(shots.some((shot) => shot.route.includes("legacy/deprecated") && shot.route.includes("--dispatch") && shot.route.includes("--dry-run")));
   assert(shots.some((shot) => shot.route.includes("--strict") && shot.route.includes("--from docs/prd.md")));
-  assert(shots.some((shot) => shot.notes.some((note) => note.includes("旧 --run Worker pipeline"))));
   assert(automaticShots.length > 0);
   assert(automaticShots.every((shot) => shot.route.includes("--yes")));
   assert(automaticShots.every((shot) => !shot.route.includes("--no-run")));
@@ -64,7 +61,6 @@ test("renderNaturalLanguageExamples renders all sections without query", () => {
   assert(output.includes("Few-shot 样本中的 Route 是路由目标形态"));
   assert(output.includes("Few-shot 路由样本"));
   assert(output.includes("## 快速启动开发任务"));
-  assert(output.includes("## Agent skill 发现、goal 与 worker dispatch"));
   assert(output.includes("主 Agent + coder subagent 原生工作流"));
   assert(output.includes("Route: 主 Agent 原生 subagent 工作流"));
   assert(output.includes("用户明确 protocol-only / 手动模式 / 不启动 subagent 时才追加 --no-run"));

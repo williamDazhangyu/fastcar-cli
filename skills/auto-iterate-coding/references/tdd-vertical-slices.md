@@ -4,12 +4,12 @@
 
 ## 核心循环
 
-新功能优先使用 tracer-bullet TDD：
+新功能优先使用 Red-Green-Refactor TDD：
 
 ```text
-RED: 写一个外部行为测试 -> 确认失败
-GREEN: 写最小实现 -> 确认通过
-NEXT: 基于刚学到的内容选择下一个行为
+RED: 写一个最小失败测试 → 确认失败（且失败原因符合预期）
+GREEN: 写最小实现 → 确认通过（只让当前测试通过，不写多余代码）
+REFACTOR: 在 GREEN 状态下做低风险整理 → 确认测试仍然通过
 ```
 
 规则：
@@ -18,6 +18,54 @@ NEXT: 基于刚学到的内容选择下一个行为
 - 测试 public interface 和可观察行为，不测试私有实现细节。
 - 不预先实现未来需求。
 - RED 状态下不要重构；先到 GREEN。
+- REFACTOR 只做与当前修改相关的低风险整理，不做大范围抽象。
+
+## 好测试 vs 坏测试
+
+好测试通过 public interface 验证调用方关心的行为，能承受内部重构。坏测试耦合内部结构，行为没变但重构就失败。
+
+### 好测试的特征
+
+- 测试用户、调用方或外部系统关心的行为。
+- 只使用 public interface。
+- 名称像规格，而不是实现步骤。
+- 一个测试聚焦一个逻辑行为。
+- 断言可观察结果、错误模式、状态变化或返回值。
+
+示例：
+
+```typescript
+test("user can checkout with valid cart", async () => {
+  const cart = createCart();
+  cart.add(product);
+
+  const result = await checkout(cart, paymentMethod);
+
+  expect(result.status).toBe("confirmed");
+});
+```
+
+### 坏测试的红旗
+
+- mock 自己的内部 module。
+- 测试 private 方法。
+- 断言内部调用次数或调用顺序。
+- 通过数据库查询绕过 interface 验证。
+- 测试名称描述 HOW 而不是 WHAT。
+
+示例：
+
+```typescript
+test("checkout calls paymentService.process", async () => {
+  const mockPayment = jest.mock(paymentService);
+
+  await checkout(cart, payment);
+
+  expect(mockPayment.process).toHaveBeenCalledWith(cart.total);
+});
+```
+
+详细判断标准见 [references/test-quality.md](test-quality.md)。
 
 ## 禁止横向切片
 
@@ -44,6 +92,15 @@ RED -> GREEN: test3 -> impl3
 - 测试数据结构、函数形状或调用顺序，而不是用户可观察能力。
 - 测试对真实行为变化不敏感，重构时却容易失败。
 - 在不了解实现前过早承诺测试结构。
+
+### 横切 vs 纵切对比
+
+| 维度 | 横切（错误） | 纵切（正确） |
+|------|------------|------------|
+| 方式 | 先写完所有 Model → 再写所有 Service → 再写所有 Controller | 每个功能从 Controller → Service → Model → 测试一条龙 |
+| 测试 | 批量测试想象中的行为 | 每轮测试刚学到的真实行为 |
+| 反馈 | 写到最后一层才发现第一层就错了 | 每片切下来都能跑，错误立即发现 |
+| 风险 | 测试对真实行为变化不敏感 | 测试只验证当前行为，能承受后续重构 |
 
 ## 每轮检查
 

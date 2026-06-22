@@ -26,17 +26,14 @@ function test(name, fn) {
   tests.push({ name, fn });
 }
 
-test("WORKER.md 覆盖 pipeline focus 类型", () => {
-  const worker = read("skills/auto-iterate-coding/worker.md");
-  const pickFocus = read("src/pipeline/pickFocus.ts");
-  const focusTypes = Array.from(pickFocus.matchAll(/type:\s*"([^"]+)"/g)).map((match) => match[1]);
-  for (const focus of focusTypes) {
-    assert.ok(worker.includes(focus), `WORKER.md should mention focus ${focus}`);
-  }
+test("worker.md 已删除（旧 CLI Worker 路径废弃）", () => {
+  const fs = require("fs");
+  const path = require("path");
+  assert.ok(!fs.existsSync(path.join(__dirname, "..", "skills", "auto-iterate-coding", "worker.md")), "worker.md should be deleted");
 });
 
-test("ORCHESTRATOR.md 覆盖当前裁判核心模块且旧 runtime 已删除", () => {
-  const orchestrator = read("skills/auto-iterate-coding/orchestrator.md");
+test("judge-runbook.md 覆盖当前裁判核心模块且旧 runtime 已删除", () => {
+  const runbook = read("skills/auto-iterate-coding/references/judge-runbook.md");
   [
     "iterationPrompt.ts",
     "pickFocus.ts",
@@ -49,7 +46,7 @@ test("ORCHESTRATOR.md 覆盖当前裁判核心模块且旧 runtime 已删除", (
     "pipelineValidationRunner.ts",
     "pipelineStateIO.ts",
   ].forEach((name) => {
-    assert.ok(orchestrator.includes(name), `ORCHESTRATOR.md should mention ${name}`);
+    assert.ok(runbook.includes(name), `judge-runbook.md should mention ${name}`);
   });
   [
     "src/adapters",
@@ -64,7 +61,7 @@ test("ORCHESTRATOR.md 覆盖当前裁判核心模块且旧 runtime 已删除", (
   ].forEach((relativePath) => {
     assert.ok(!fs.existsSync(path.join(repoRoot, relativePath)), `${relativePath} should not exist`);
   });
-    assert.ok(orchestrator.includes("已删除") || orchestrator.includes("不再维护"));
+    assert.ok(runbook.includes("已删除") || runbook.includes("不再维护"));
 });
 
 test("SKILL.md 声明主 Agent 原生 subagent 路径和 protocol-only 边界", () => {
@@ -264,7 +261,8 @@ test("基础 state schema validators 已拆分到独立模块", () => {
 });
 
 test("pipeline 测试已按 focus、schema 和 validation 职责拆分", () => {
-  const pipeline = read("test/pipeline.test.js");
+  const mergeState = read("test/pipeline-merge-state.test.js");
+  const iterationPrompt = read("test/pipeline-iteration-prompt.test.js");
   const focusLoop = read("test/pipeline-focus-loop.test.js");
   const resultSchema = read("test/pipeline-result-schema.test.js");
   const validation = read("test/pipeline-validation.test.js");
@@ -272,26 +270,31 @@ test("pipeline 测试已按 focus、schema 和 validation 职责拆分", () => {
 
   assert.ok(focusLoop.includes("../dist/pipeline/pickFocus"));
   assert.ok(focusLoop.includes("../dist/pipeline/shouldStop"));
-  assert.ok(focusLoop.includes("../dist/pipeline/loopPolicy"));
   assert.ok(resultSchema.includes("../dist/pipeline/resultSchema"));
   assert.ok(validation.includes("../dist/pipeline/pipelineValidationRunner"));
-  assert.ok(pipeline.includes("../dist/pipeline/mergeState"));
-  assert.ok(pipeline.includes("../dist/pipeline/workerCapabilityPolicy"));
-  assert.ok(!pipeline.includes("../dist/pipeline/runPipeline"));
-  assert.ok(!pipeline.includes("../dist/pipeline/pipelineIsolateWorktree"));
-  assert.ok(!pipeline.includes("loopPolicy 集中解析 once/plan/autopilot/maxSteps 语义"));
-  assert.ok(!pipeline.includes("pickFocus 支持 fix/harden/optimize 和 mode-specific focus"));
-  assert.ok(!pipeline.includes("normalizeRelativePath 统一过滤非法路径"));
-  assert.ok(!pipeline.includes("runValidationCommands 依次执行全部命令并在失败时停止"));
+  assert.ok(mergeState.includes("../dist/pipeline/mergeState"));
+  assert.ok(iterationPrompt.includes("../dist/pipeline/workerCapabilityPolicy"));
+  assert.ok(!mergeState.includes("../dist/pipeline/runPipeline"));
+  assert.ok(!mergeState.includes("../dist/pipeline/pipelineIsolateWorktree"));
+  assert.ok(!mergeState.includes("loopPolicy 集中解析 once/plan/autopilot/maxSteps 语义"));
+  assert.ok(!mergeState.includes("pickFocus 支持 fix/harden/optimize 和 mode-specific focus"));
+  assert.ok(!mergeState.includes("normalizeRelativePath 统一过滤非法路径"));
+  assert.ok(!mergeState.includes("runValidationCommands 依次执行全部命令并在失败时停止"));
   assert.ok(packageJson.includes("node test/pipeline-focus-loop.test.js"));
   assert.ok(packageJson.includes("node test/pipeline-result-schema.test.js"));
   assert.ok(packageJson.includes("node test/pipeline-validation.test.js"));
+  assert.ok(packageJson.includes("node test/pipeline-pick-focus.test.js"));
+  assert.ok(packageJson.includes("node test/pipeline-merge-state.test.js"));
+  assert.ok(packageJson.includes("node test/pipeline-delivery-gates.test.js"));
+  assert.ok(packageJson.includes("node test/pipeline-watchdog.test.js"));
+  assert.ok(packageJson.includes("node test/pipeline-iteration-prompt.test.js"));
+  assert.ok(packageJson.includes("node test/pipeline-progress.test.js"));
 });
 
 test("PipelineStateLike 不使用顶层泛索引签名", () => {
-  const types = read("src/pipeline/types.ts");
+  const types = read("src/pipeline/types/models.ts");
   const start = types.indexOf("export interface PipelineStateLike {");
-  const end = types.indexOf("\nexport interface ShouldStopContext", start);
+  const end = types.indexOf("\nexport interface PickFocusStateLike", start);
   assert.ok(start >= 0 && end > start, "PipelineStateLike interface should exist");
   const body = types.slice(start, end);
   assert.ok(!/\n\s{2}\[key: string\]: unknown;/.test(body), "PipelineStateLike should model known state fields explicitly");

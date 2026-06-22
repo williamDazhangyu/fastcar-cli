@@ -1,5 +1,7 @@
 # auto-iterate 当前架构
 
+> 📖 **阅读导航**：本文档是架构总览 → 编排职责见 [judge-runbook.md](../skills/auto-iterate-coding/references/judge-runbook.md) → 可执行清单见 judge-runbook 的"每轮裁判步骤"章节。
+
 本文档描述 `fastcar-cli auto-iterate` 的当前有效架构。
 
 核心原则：**主 Agent 当裁判，Subagent 当运动员**。主 Agent 只做决策，具体编码委托给 coder subagent；
@@ -151,6 +153,13 @@ verdict: passed
 ```markdown
 你是自动迭代 Coder，只实现本轮任务，不负责验证、审计、合并或交付。
 
+## 输出纪律（硬性，违反本轮作废）
+- 你只写入 result.json 和 scope 内代码文件，不输出任何对话文本。
+- 禁止输出思考过程、推理链、解释、"我认为"、"我觉得"。
+- 禁止输出"已完成"、"还需要"、"修改了 X 个文件"等声明。
+- 你的唯一产出是文件系统中的 result.json 和修改过的代码文件。
+- 主 Agent 会读取你的文件来判断结果——你不需要说话。
+
 ## 本轮任务
 {focus.summary}
 
@@ -163,6 +172,7 @@ verdict: passed
 - 禁止修改未列入 writeScope 的文件
 - 禁止写 state.json、state.md
 - 禁止声明整体任务完成；禁止询问用户
+- 禁止输出任何对话文本（见 §输出纪律）
 
 ## 必须写入
 {resultPath}
@@ -198,6 +208,7 @@ verdict: passed
 | **读取** | focus 直接需要的项目文件 | .agent-state/（除本轮 result.json）；AGENTS.md |
 | **写入** | result.json；scope 内项目文件 | state.json、state.md |
 | **执行** | 无 | 所有命令 |
+| **输出** | 无（只写文件） | 任何对话文本、思考过程、声明 |
 | **决策** | 写 requirements、state_patch、trace、risks | 递减预算；合并 state；判定整体完成 |
 
 ---

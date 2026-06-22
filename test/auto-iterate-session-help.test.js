@@ -1,9 +1,8 @@
-﻿const assert = require("assert");
+const assert = require("assert");
 const { spawnSync } = require("child_process");
 const path = require("path");
 const {
   buildAutoIterateHelp,
-  LEGACY_DISPATCH_AGENTS,
   showAutoIterateHelp,
 } = require("../dist/auto-iterate/sessionHelp");
 const { FLAG_REGISTRY } = require("../dist/pipeline/flags");
@@ -32,9 +31,12 @@ test("buildAutoIterateHelp renders major command groups and flags", () => {
   const help = buildAutoIterateHelp();
 
   assert(help.startsWith("Usage: fastcar-cli auto-iterate [options]"));
-  for (const section of ["Modes:", "Session:", "Legacy dispatch (deprecated):", "Legacy CLI pipeline (deprecated):", "Skill Capture:", "Other:"]) {
+  for (const section of ["Modes:", "Session:", "Skill Capture:", "Other:"]) {
     assert(help.includes(section), `missing ${section}`);
   }
+  // Legacy sections are no longer rendered
+  assert(!help.includes("Legacy dispatch (deprecated):"));
+  assert(!help.includes("Legacy CLI pipeline (deprecated):"));
   for (const flag of [
     "Native sub-agent flow (default):",
     'Main Agent reads the auto-iterate skill/state, dispatches Agent(subagent_type="coder"),',
@@ -50,14 +52,7 @@ test("buildAutoIterateHelp renders major command groups and flags", () => {
     "--prototype|--proto",
     "--validate-state [session|state.md|state.json]",
     "--strict-state|--strict-validate|--strict-validation",
-    "--dispatch <session>",
-    "--verify-command|--verify-cmd <cmd>",
-    "--run --once [--json-progress] (legacy compatibility only)",
-    "--inactivity-timeout <seconds>",
-    "--validation-timeout <seconds>",
-    "--scope <glob[,glob]>",
-    "--validate-cmd <cmd>  legacy/deprecated pipeline 独立验证命令，可重复传入；不同于 dispatch 的 --verify-command/--verify-cmd",
-    "--no-run  protocol-only LLM execution; do not dispatch native subagent or legacy Worker pipeline",
+    "--no-run  protocol-only LLM execution; do not dispatch native subagent",
     "--capture-skills <session> [--yes]",
     "-f, --from <file>",
     "--max-iterations|--max <n>",
@@ -68,15 +63,6 @@ test("buildAutoIterateHelp renders major command groups and flags", () => {
   ]) {
     assert(help.includes(flag), `missing ${flag}`);
   }
-});
-
-test("buildAutoIterateHelp reflects supported dispatch agents", () => {
-  const help = buildAutoIterateHelp();
-  const supportedAgents = LEGACY_DISPATCH_AGENTS.join("|");
-
-  assert(help.includes(`--agent <${supportedAgents}>`));
-  assert(help.includes("codex|claude|gemini"));
-  assert(help.includes("openhands|replit"));
 });
 
 test("buildAutoIterateHelp includes registry-backed flag help", () => {

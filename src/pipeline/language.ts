@@ -96,7 +96,7 @@ export function languageCode(value: unknown): LanguageCode {
   return "zh";
 }
 
-const stateSnapshotNoticeZh = (file: unknown): string => `> 本节由 fastcar-cli auto-iterate --run 从 ${file} 派生刷新；机器权威仍是 state.json。`;
+const stateSnapshotNoticeZh = (file: unknown): string => `> 本节由 fastcar-cli auto-iterate 从 ${file} 派生刷新；机器权威仍是 state.json。`;
 const skillAutoDescriptionZh = (session: unknown): string => `从自动迭代 session ${session || "unknown"} 自动捕获的实战技能点`;
 const generatedAtZh = (time: unknown): string => `> 生成时间: ${time}`;
 const skillsIndexNoticeZh = (time: unknown): string => `> 本索引由 fastcar-cli auto-iterate --capture-skills 自动维护。\n> 最后更新: ${time}`;
@@ -104,7 +104,7 @@ const capturedSummaryZh = (time: unknown, count: unknown, names: unknown): strin
 const noHighValueSummaryZh = (time: unknown): string => `自动捕获于 ${time}：未发现高价值技能候选`;
 const userSkippedSkillCaptureSummaryZh = (time: unknown): string => `自动捕获于 ${time}：用户选择跳过`;
 
-const stateSnapshotNoticeEn = (file: unknown): string => `> This section is refreshed by fastcar-cli auto-iterate --run from ${file}; state.json remains the machine source of truth.`;
+const stateSnapshotNoticeEn = (file: unknown): string => `> This section is refreshed by fastcar-cli auto-iterate from ${file}; state.json remains the machine source of truth.`;
 const skillAutoDescriptionEn = (session: unknown): string => `Practical skill notes captured from auto-iterate session ${session || "unknown"}`;
 const generatedAtEn = (time: unknown): string => `> Generated at: ${time}`;
 const skillsIndexNoticeEn = (time: unknown): string => `> This index is maintained by fastcar-cli auto-iterate --capture-skills.\n> Last updated: ${time}`;

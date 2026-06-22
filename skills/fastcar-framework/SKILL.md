@@ -15,6 +15,7 @@ FastCar 是基于 TypeScript 的 Node.js 企业级应用开发框架，采用 Io
 - 适合处理 IoC、`@Component`、`@Service`、`@Controller`、`@Autowired`、Koa Web、配置、生命周期和项目模板。
 - 生成 Koa Controller 时，不要使用 `@Body`、`@Param`、`@Query`。
 - 路由装饰器必须写成 `@GET()` / `@POST()`，不能省略括号。
+- Koa Controller 路由优先使用三段式动作命名，例如 `/api/items/detail/:id`、`/api/items/update/:id`，避免在同一层级混用 `/list`、`/create` 和 `/:id`。
 - 使用 `@ValidForm` + `@Rule()` 后，Controller 参数已经被 FastCar 按规则校验并格式化，不要再写 `DTO.from(body).toInput()` 之类的二次转换。
 - 示例代码必须保留关键 import，尤其是 `Context` 从 `koa` 导入。
 - `@fastcar/*` 模块必须使用 TypeScript 静态 `import`，不要使用 CommonJS `require()`。
@@ -105,8 +106,8 @@ class ItemController {
     return { data: [] };
   }
 
-  // GET 请求 - 有路径参数
-  @GET("/:id")
+  // GET 请求 - 有路径参数。使用三段式动作路由，避免 /list 被 /:id 误匹配。
+  @GET("/detail/:id")
   async getById(id: string, ctx: Context) {
     return { id };
   }
@@ -125,6 +126,46 @@ class ItemController {
 - 第一个参数为请求数据（GET 的 query / POST 的 body / 路径参数）
 - 第二个参数为 Koa 上下文 `ctx: Context`，**可省略**
 - `Context` 需从 `koa` 导入：`import { Context } from "koa"`
+
+**路由命名规范：**
+
+- Controller base 下不要直接暴露 `/:id`，尤其不要和 `/list`、`/create`、`/import-preview` 等动作路由混用。
+- 单资源接口使用三段式动作路径：`GET /api/items/detail/:id`、`PATCH /api/items/update/:id`、`POST /api/items/archive/:id`。
+- FastCar Koa 的路由适配会继续执行后续匹配层；过宽的 `/:id` 可能把 `list`、`create` 等动作名当成 id，覆盖前一个路由的响应。
+
+❌ **错误：**
+```typescript
+@Controller
+@REQUEST("/api/items")
+class ItemController {
+  @GET()
+  async list() {
+    return this.service.list();
+  }
+
+  @GET("/:id")
+  async get(body: { id: string }) {
+    return this.service.get(body.id);
+  }
+}
+```
+
+✅ **正确：**
+```typescript
+@Controller
+@REQUEST("/api/items")
+class ItemController {
+  @GET()
+  async list() {
+    return this.service.list();
+  }
+
+  @GET("/detail/:id")
+  async get(body: { id: string }) {
+    return this.service.get(body.id);
+  }
+}
+```
 
 **权限声明边界：**
 

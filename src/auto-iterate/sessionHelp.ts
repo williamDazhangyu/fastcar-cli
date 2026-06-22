@@ -1,20 +1,6 @@
 import { listFlagHelpByKind } from "../pipeline/flags";
 import { writeLine } from "../cliOutput";
 
-export const LEGACY_DISPATCH_AGENTS = [
-  "codex",
-  "claude",
-  "gemini",
-  "kimi",
-  "cursor",
-  "windsurf",
-  "copilot",
-  "jules",
-  "devin",
-  "openhands",
-  "replit",
-];
-
 function renderFlagLines(kind: Parameters<typeof listFlagHelpByKind>[0]): string {
   return listFlagHelpByKind(kind)
     .map((line) => `  ${line}`)
@@ -22,14 +8,10 @@ function renderFlagLines(kind: Parameters<typeof listFlagHelpByKind>[0]): string
 }
 
 export function buildAutoIterateHelp(): string {
-  const supportedAgents = LEGACY_DISPATCH_AGENTS.join("|");
   const modeFlags = renderFlagLines("mode").replace(/\n/g, " |").replace(/ \|  /g, " | ");
   const sessionFlags = renderFlagLines("session");
-  const pipelineFlags = renderFlagLines("pipeline");
   const skillFlags = renderFlagLines("skill");
   const inputFlags = renderFlagLines("input");
-  const legacyFlags = renderFlagLines("legacy");
-  const compatFlags = renderFlagLines("compat");
   const otherFlags = renderFlagLines("other");
   return `Usage: fastcar-cli auto-iterate [options]
 
@@ -48,20 +30,11 @@ ${modeFlags}
 Session:
 ${sessionFlags}
 
-Legacy dispatch (deprecated):
-  --dispatch <session> --agent <${supportedAgents}> --task <text> --files <glob[,glob]> [--verify-command|--verify-cmd <cmd>] [--timeout <seconds>] [--dry-run]
-
-Legacy CLI pipeline (deprecated):
-  --run --once [--json-progress] (legacy compatibility only)
-${pipelineFlags}
-
 Skill Capture:
 ${skillFlags}
 
 Other:
 ${inputFlags}
-${legacyFlags}
-${compatFlags}
 ${otherFlags}
 `;
 }

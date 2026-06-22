@@ -9,39 +9,53 @@ export interface AutoIterateArgs {
   validateState: string | null;
   strictState: boolean;
   finalizeSession: string | null;
-  dispatchSession: string | null;
-  agent: string;
-  task: string | null;
-  files: string | null;
-  verifyCommand: string | null;
-  validateCommand: string[];
-  timeoutSeconds: number;
-  stepTimeoutSeconds: number;
-  inactivityTimeoutSeconds: number;
-  validationTimeoutSeconds: number;
-  progressIntervalSeconds: number;
-  dryRun: boolean;
-  run: boolean;
-  once: boolean;
-  autopilotRun: boolean;
-  jsonProgress: boolean;
+  dashboardSession: string | null;
   noRun: boolean;
-  noValidate: boolean;
-  check: boolean;
-  isolate: boolean;
-  allowModify: boolean;
-  maxSteps: number | null;
-  focus: string | null;
-  scope: string | null;
-  answer: string | null;
   maxIterations: number | null;
   autopilotMaxIterations: number | null;
   yes: boolean;
   examples: boolean;
   query: string | null;
   help: boolean;
+  deprecatedFlags: string[];
   captureSkillsSession?: string;
 }
+
+const DEPRECATED_FLAGS_WITH_VALUES = new Set([
+  "--agent",
+  "--task",
+  "--files",
+  "--verify-command",
+  "--verify-cmd",
+  "--validate-cmd",
+  "--timeout",
+  "--step-timeout",
+  "--inactivity-timeout",
+  "--validation-timeout",
+  "--progress-interval",
+  "--max-steps",
+  "--focus",
+  "--scope",
+  "--answer",
+]);
+
+const DEPRECATED_FLAGS_WITHOUT_VALUES = new Set([
+  "--run",
+  "--once",
+  "--json-progress",
+  "--check",
+  "--dry-run",
+  "--autopilot",
+  "--isolate",
+  "--allow-modify",
+  "--no-validate",
+]);
+
+const DEPRECATED_FLAGS = new Set([
+  "--dispatch",
+  ...DEPRECATED_FLAGS_WITH_VALUES,
+  ...DEPRECATED_FLAGS_WITHOUT_VALUES,
+]);
 
 const MODE_ALIASES: Record<string, string> = {
   strict: "strict",
@@ -70,30 +84,18 @@ const OPTIONS_WITH_REQUIRED_VALUE = new Set([
   "--switch",
   "--resume",
   "--mode",
+  "--query",
+  "--dashboard",
   "--max-iterations",
   "--autopilot-max-iterations",
-  "--agent",
-  "--task",
-  "--files",
-  "--verify-command",
-  "--verify-cmd",
-  "--validate-cmd",
-  "--timeout",
-  "--step-timeout",
-  "--inactivity-timeout",
-  "--validation-timeout",
-  "--max-steps",
-  "--focus",
-  "--scope",
-  "--answer",
   "--capture-skills",
 ]);
 
 const OPTIONS_WITH_OPTIONAL_VALUE = new Set([
-  "--dispatch",
   "--examples",
   "--validate-state",
   "--finalize",
+  "--dashboard",
 ]);
 
 function normalizeMode(value: string | number | null | undefined): string | null {
@@ -133,6 +135,25 @@ function isConsumedOptionValue(args: string[], index: number): boolean {
   return OPTIONS_WITH_REQUIRED_VALUE.has(previous) || OPTIONS_WITH_OPTIONAL_VALUE.has(previous);
 }
 
+function normalizeFlagToken(value: string): string {
+  const eqIndex = value.indexOf("=");
+  return eqIndex >= 0 ? value.slice(0, eqIndex) : value;
+}
+
+export function collectDeprecatedFlags(args: string[]): string[] {
+  const found = new Set<string>();
+  for (const arg of args) {
+    if (!arg.startsWith("-")) {
+      continue;
+    }
+    const flag = normalizeFlagToken(arg);
+    if (DEPRECATED_FLAGS.has(flag)) {
+      found.add(flag);
+    }
+  }
+  return [...found].sort();
+}
+
 export function normalizeGoalText(value: string | null | undefined): string {
   return String(value || "")
     .trim()
@@ -161,37 +182,15 @@ export function parseArgs(args: string[] = []): AutoIterateArgs {
     validateState: null,
     strictState: false,
     finalizeSession: null,
-    dispatchSession: null,
-    agent: "codex",
-    task: null,
-    files: null,
-    verifyCommand: null,
-    validateCommand: [],
-    timeoutSeconds: 300,
-    stepTimeoutSeconds: 300,
-    inactivityTimeoutSeconds: 120,
-    validationTimeoutSeconds: 600,
-    progressIntervalSeconds: 15,
-    dryRun: false,
-    run: false,
-    once: false,
-    autopilotRun: false,
-    jsonProgress: false,
+    dashboardSession: null,
     noRun: false,
-    noValidate: false,
-    check: false,
-    isolate: false,
-    allowModify: false,
-    maxSteps: null,
-    focus: null,
-    scope: null,
-    answer: null,
     maxIterations: null,
     autopilotMaxIterations: null,
     yes: false,
     examples: false,
     query: null,
     help: false,
+    deprecatedFlags: collectDeprecatedFlags(args),
   };
 
   args.forEach((arg, index) => {
@@ -289,15 +288,15 @@ export function parseArgs(args: string[] = []): AutoIterateArgs {
       return;
     }
 
-    if (arg === "--dispatch") {
-      options.dispatchSession = args[index + 1] && !args[index + 1].startsWith("-")
+    if (arg === "--dashboard") {
+      options.dashboardSession = args[index + 1] && !args[index + 1].startsWith("-")
         ? args[index + 1]
         : "__current__";
       return;
     }
 
-    if (arg.startsWith("--dispatch=")) {
-      options.dispatchSession = arg.slice("--dispatch=".length) || "__current__";
+    if (arg.startsWith("--dashboard=")) {
+      options.dashboardSession = arg.slice("--dashboard=".length) || "__current__";
       return;
     }
 
@@ -311,198 +310,8 @@ export function parseArgs(args: string[] = []): AutoIterateArgs {
       return;
     }
 
-    if (arg === "--agent" && args[index + 1]) {
-      options.agent = args[index + 1];
-      return;
-    }
-
-    if (arg.startsWith("--agent=")) {
-      options.agent = arg.slice("--agent=".length);
-      return;
-    }
-
-    if (arg === "--task" && args[index + 1]) {
-      options.task = args[index + 1];
-      return;
-    }
-
-    if (arg.startsWith("--task=")) {
-      options.task = arg.slice("--task=".length);
-      return;
-    }
-
-    if (arg === "--files" && args[index + 1]) {
-      options.files = args[index + 1];
-      return;
-    }
-
-    if (arg.startsWith("--files=")) {
-      options.files = arg.slice("--files=".length);
-      return;
-    }
-
-    if ((arg === "--verify-command" || arg === "--verify-cmd") && args[index + 1]) {
-      options.verifyCommand = args[index + 1];
-      return;
-    }
-
-    if (arg.startsWith("--verify-command=")) {
-      options.verifyCommand = arg.slice("--verify-command=".length);
-      return;
-    }
-
-    if (arg.startsWith("--verify-cmd=")) {
-      options.verifyCommand = arg.slice("--verify-cmd=".length);
-      return;
-    }
-
-    if (arg === "--validate-cmd" && args[index + 1]) {
-      options.validateCommand.push(args[index + 1]);
-      return;
-    }
-
-    if (arg.startsWith("--validate-cmd=")) {
-      options.validateCommand.push(arg.slice("--validate-cmd=".length));
-      return;
-    }
-
-    if (arg === "--timeout" && args[index + 1]) {
-      options.timeoutSeconds = formatNumber(args[index + 1], 300);
-      return;
-    }
-
-    if (arg.startsWith("--timeout=")) {
-      options.timeoutSeconds = formatNumber(arg.slice("--timeout=".length), 300);
-      return;
-    }
-
-    if (arg === "--step-timeout" && args[index + 1]) {
-      options.stepTimeoutSeconds = formatNonNegativeNumber(args[index + 1], 300);
-      return;
-    }
-
-    if (arg.startsWith("--step-timeout=")) {
-      options.stepTimeoutSeconds = formatNonNegativeNumber(arg.slice("--step-timeout=".length), 300);
-      return;
-    }
-
-    if (arg === "--inactivity-timeout" && args[index + 1]) {
-      options.inactivityTimeoutSeconds = formatNonNegativeNumber(args[index + 1], 120);
-      return;
-    }
-
-    if (arg.startsWith("--inactivity-timeout=")) {
-      options.inactivityTimeoutSeconds = formatNonNegativeNumber(arg.slice("--inactivity-timeout=".length), 120);
-      return;
-    }
-
-    if (arg === "--validation-timeout" && args[index + 1]) {
-      options.validationTimeoutSeconds = formatNonNegativeNumber(args[index + 1], 600);
-      return;
-    }
-
-    if (arg.startsWith("--validation-timeout=")) {
-      options.validationTimeoutSeconds = formatNonNegativeNumber(arg.slice("--validation-timeout=".length), 600);
-      return;
-    }
-
-    if (arg === "--progress-interval" && args[index + 1]) {
-      options.progressIntervalSeconds = formatNumber(args[index + 1], 15);
-      return;
-    }
-
-    if (arg.startsWith("--progress-interval=")) {
-      options.progressIntervalSeconds = formatNumber(arg.slice("--progress-interval=".length), 15);
-      return;
-    }
-
-    if (arg === "--max-steps" && args[index + 1]) {
-      options.maxSteps = formatNonNegativeNumber(args[index + 1], 0);
-      return;
-    }
-
-    if (arg.startsWith("--max-steps=")) {
-      options.maxSteps = formatNonNegativeNumber(arg.slice("--max-steps=".length), 0);
-      return;
-    }
-
-    if (arg === "--focus" && args[index + 1]) {
-      options.focus = args[index + 1];
-      return;
-    }
-
-    if (arg.startsWith("--focus=")) {
-      options.focus = arg.slice("--focus=".length);
-      return;
-    }
-
-    if (arg === "--scope" && args[index + 1]) {
-      options.scope = args[index + 1];
-      return;
-    }
-
-    if (arg.startsWith("--scope=")) {
-      options.scope = arg.slice("--scope=".length);
-      return;
-    }
-
-    if (arg === "--answer" && args[index + 1]) {
-      options.answer = args[index + 1];
-      return;
-    }
-
-    if (arg.startsWith("--answer=")) {
-      options.answer = arg.slice("--answer=".length);
-      return;
-    }
-
-    if (arg === "--dry-run") {
-      options.dryRun = true;
-      return;
-    }
-
-    if (arg === "--run") {
-      options.run = true;
-      return;
-    }
-
-    if (arg === "--once") {
-      options.once = true;
-      return;
-    }
-
-    if (arg === "--autopilot") {
-      options.autopilotRun = true;
-      return;
-    }
-
-    if (arg === "--json-progress") {
-      options.jsonProgress = true;
-      return;
-    }
-
     if (arg === "--no-run") {
       options.noRun = true;
-      return;
-    }
-
-    if (arg === "--no-validate") {
-      options.noValidate = true;
-      return;
-    }
-
-    if (arg === "--check") {
-      options.check = true;
-      return;
-    }
-
-    if (arg === "--isolate") {
-      options.isolate = true;
-      return;
-    }
-
-    if (arg === "--allow-modify") {
-      options.allowModify = true;
       return;
     }
 
@@ -614,7 +423,7 @@ export function parseArgs(args: string[] = []): AutoIterateArgs {
     }
   });
 
-  if (!options.goal) {
+  if (!options.goal && options.deprecatedFlags.length === 0) {
     options.goal = inferGoalFromPositionals(args);
   }
 

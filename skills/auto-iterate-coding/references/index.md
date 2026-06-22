@@ -2,6 +2,18 @@
 
 只读取当前阶段需要的文件；不要一次性加载全部 references。
 
+## 契约（Contracts）
+
+契约文档定义机器可检查的硬约束，不使用解释性散文。
+
+| 文件 | 触发条件 | 优先级 | 用途 |
+| --- | --- | --- | --- |
+| `../contracts/output-discipline-contract.md` | 每轮输出前、交付前、看门狗检查 | 必读 | 输出纪律硬性规则：角色输出规则、中间进展模板、禁止输出清单、违规检测 |
+| `../contracts/delivery-gate-contract.md` | 交付前 | 必读 | 交付门禁决策表：成功交付/有限成功/提前停止条件 |
+| `../contracts/session-contract.md` | 创建、恢复或校验 session | 必读 | 目录结构、state.json 必填字段、枚举白名单、一致性规则 |
+
+## 引用（References）
+
 | 文件 | 触发条件 | 优先级 | 用途 |
 | --- | --- | --- | --- |
 | `requirement-to-implementation.md` | 新功能、PRD、文档实现、严格启动 | 必读 | 需求规格化、现状探索、脚手架优先、垂直切片 |
@@ -25,7 +37,14 @@
 | `refactor-candidates.md` | GREEN 后考虑重构 | 按需 | 识别安全重构和 deep module 机会 |
 | `recursive-optimization.md` | 初版验证通过后优化 | 按需 | 有边界递归优化 |
 | `plain-optimization.md` | 低风险整理、类型/枚举/常量收敛 | 按需 | 朴素低风险优化 |
+| `skill-capture.md` | 任务交付、提前停止或阶段性验收后 | 必读 | 技能沉淀规则：正例、反例、`.agents/skills/index.md` 格式契约、与 `fastcar-cli skill install` 的关系 |
+| `quick-reference.md` | 首次使用、需要快速查阅 | 可选 | 一页纸快速参考卡：常见场景、核心概念、停止条件、预算默认值 |
 | `progress-visualization.md` | 长任务、用户询问进度、最终图示 | 可选 | Mermaid 和纯文本进度图 |
+| `grill-session.md` | 启动握手、需求不明确、需要对齐 | 必读 | Agent 主动 interview 用户，9 步 Grill 流程 |
+| `domain-language.md` | 启动握手、探索代码库、交付前 | 必读 | 提取、维护和使用项目共享术语表 |
+| `zoom-out.md` | Context Reset Review、探索不熟悉代码、交付前 | 按需 | 从系统高度理解代码，避免只见树木 |
+| `triage.md` | 多个 issue 需要排序和分配 | 按需 | Issue 优先级排序、scope 评估、session 分配 |
+| `caveman-mode.md` | 长任务、上下文紧张、需要压缩输出 | 按需 | 超压缩通信模式，token 降低 ~75% |
 
 ## 推荐读取组合
 

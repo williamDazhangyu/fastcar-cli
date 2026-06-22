@@ -109,6 +109,7 @@ FastCar Koa 没有 `@Body`、`@Param`、`@Query` 参数装饰器。
 - 第二个方法参数可选接收 `ctx?: Context`。
 - `Context` 必须从 `koa` 导入。
 - 使用 `@Rule()` 的 DTO 参数已经被 FastCar 校验和基础格式化，Controller 不要二次构造 DTO 或调用 `toInput()`。
+- Controller base 下避免直接使用 `/:id` 这类单段动态路由；单资源接口优先使用三段式动作路径，例如 `/detail/:id`、`/update/:id`、`/archive/:id`，避免 `/list`、`/create` 等动作路径被动态参数误匹配。
 
 ### 示例
 
@@ -125,7 +126,7 @@ class UserController {
     return { page: query.page ?? 1, data: [] };
   }
 
-  @GET("/:id")
+  @GET("/detail/:id")
   async get(id: string, ctx?: Context) {
     return { id };
   }

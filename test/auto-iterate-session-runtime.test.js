@@ -75,9 +75,9 @@ test("initAutoIterate routes --help through extracted help renderer", async () =
 
 test("initAutoIterate routes --examples without creating session files", async () => {
   await withTempCwd(async () => {
-    const { lines } = await captureConsole(() => initAutoIterate(["--examples", "Codex"]));
+    const { lines } = await captureConsole(() => initAutoIterate(["--examples", "protocol"]));
 
-    assert(lines.join("\n").includes("Agent skill 发现、goal 与 worker dispatch"));
+    assert(lines.join("\n").includes("Protocol-only / LLM-only"));
     assert(!fs.existsSync(".agent-state"));
   });
 });
@@ -139,71 +139,116 @@ test("initAutoIterate creates noninteractive quick session through runtime modul
   });
 });
 
-test("initAutoIterate rejects deprecated --run pipeline path", async () => {
+test("initAutoIterate creates session without deprecated flags", async () => {
   await withTempCwd(async () => {
-    const previousExitCode = process.exitCode;
-    process.exitCode = 0;
-
-    const { output } = await captureStdout(() => initAutoIterate([
-      "--run",
-      "--json-progress",
-    ]));
-
-    assert.strictEqual(process.exitCode, 1);
-    const events = output.trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
-    assert(events.some((event) =>
-      event.event === "error" &&
-      event.reason === "legacy_auto_iterate_pipeline_deprecated" &&
-      event.command === "--run"
-    ));
-    assert(!fs.existsSync(".agent-state"));
-    process.exitCode = previousExitCode;
-  });
-});
-
-test("initAutoIterate rejects deprecated --check worker environment path", async () => {
-  await withTempCwd(async () => {
-    const previousExitCode = process.exitCode;
-    process.exitCode = 0;
-
-    const { output } = await captureStdout(() => initAutoIterate([
-      "--check",
-      "--json-progress",
-    ]));
-
-    assert.strictEqual(process.exitCode, 1);
-    const events = output.trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
-    assert(events.some((event) =>
-      event.event === "error" &&
-      event.reason === "legacy_auto_iterate_pipeline_deprecated" &&
-      event.command === "--check"
-    ));
-    assert(!fs.existsSync(".agent-state"));
-    process.exitCode = previousExitCode;
-  });
-});
-
-test("initAutoIterate rejects deprecated --dispatch external worker path", async () => {
-  await withTempCwd(async () => {
-    const previousExitCode = process.exitCode;
-    process.exitCode = 0;
-
     const { lines } = await captureConsole(() => initAutoIterate([
-      "--dispatch",
-      "demo",
-      "--agent",
-      "codex",
-      "--task",
-      "处理 REQ-1",
-      "--files",
-      "src/a.ts",
-      "--dry-run",
+      "--quick",
+      "--goal",
+      "deprecated-flags-removed",
+      "--session",
+      "deprecated-test",
+      "--yes",
+      "--no-run",
     ]));
 
-    assert.strictEqual(process.exitCode, 1);
-    assert(lines.join("\n").includes("--dispatch 属于已废弃的外部 Worker/pipeline 入口"));
-    assert(!fs.existsSync(".agent-state"));
-    process.exitCode = previousExitCode;
+    const output = lines.join("\n");
+    assert(output.includes("✓ auto-iterate session 已生成"));
+    assert(fs.existsSync(".agent-state/auto-iterate/deprecated-test/state.json"));
+  });
+});
+
+test("initAutoIterate rejects deprecated worker and pipeline flags before creating session files", async () => {
+  await withTempCwd(async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = 0;
+    try {
+      const { lines } = await captureConsole(() => initAutoIterate([
+        "--dispatch",
+        "demo",
+        "--agent",
+        "codex",
+        "--task",
+        "处理 REQ-1",
+        "--run",
+      ]));
+
+      const output = lines.join("\n");
+      assert.strictEqual(process.exitCode, 1);
+      assert(output.includes("旧 CLI Worker/pipeline 入口已废弃"));
+      assert(output.includes("--dispatch"));
+      assert(output.includes("--agent"));
+      assert(output.includes("--run"));
+      assert(!fs.existsSync(".agent-state"));
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+});
+
+test("initAutoIterate generates dashboard for current or explicit session", async () => {
+  await withTempCwd(async () => {
+    await captureConsole(() => initAutoIterate([
+      "--quick",
+      "--goal",
+      "<script>dashboard</script>",
+      "--session",
+      "dash-session",
+      "--yes",
+    ]));
+
+    const statePath = ".agent-state/auto-iterate/dash-session/state.json";
+    const state = readJson(statePath);
+    state.requirements = [
+      { id: "REQ-1", status: "passed", summary: "<b>safe</b>", evidence: "npm test" },
+    ];
+    state.traceability = {
+      iterations: [
+        {
+          status: "passed",
+          summary: "<i>iteration</i>",
+          files_changed: ["src/a.ts"],
+          validationResult: "passed",
+          durationMs: 1500,
+        },
+      ],
+    };
+    state.validation = {
+      entries: [
+        { durationMs: 1500 },
+      ],
+    };
+    state.watchdog = {
+      deliveryVerifiability: "verifiable",
+      noProgressStreak: 2,
+      maxNoProgressIterations: 5,
+    };
+    fs.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+
+    const { lines } = await captureConsole(() => initAutoIterate(["--dashboard"]));
+    const output = lines.join("\n");
+    assert(output.includes("已生成仪表盘"));
+
+    const dashboard = fs.readFileSync(".agent-state/auto-iterate/dash-session/dashboard.html", "utf8");
+    assert(dashboard.includes("REQ-1"));
+    assert(dashboard.includes("&lt;script&gt;dashboard&lt;/script&gt;"));
+    assert(dashboard.includes("&lt;b&gt;safe&lt;/b&gt;"));
+    assert(dashboard.includes("2 / 5"));
+    assert(dashboard.includes("1.5s"));
+  });
+});
+
+test("initAutoIterate reports dashboard state errors", async () => {
+  await withTempCwd(async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = 0;
+    try {
+      const { lines } = await captureConsole(() => initAutoIterate(["--dashboard", "missing-session"]));
+
+      assert.strictEqual(process.exitCode, 1);
+      assert(lines.join("\n").includes("未找到 session state"));
+    } finally {
+      process.exitCode = previousExitCode;
+    }
   });
 });
 

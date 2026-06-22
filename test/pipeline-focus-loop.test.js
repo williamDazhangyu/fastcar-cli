@@ -1,7 +1,6 @@
 const assert = require("assert");
 const { isFocusAllowedForMode, pickNextFocus } = require("../dist/pipeline/pickFocus");
 const { shouldStop } = require("../dist/pipeline/shouldStop");
-const { resolveLoopPolicy } = require("../dist/pipeline/loopPolicy");
 
 const tests = [];
 
@@ -57,33 +56,6 @@ test("shouldStop 在 runtime autopilot 下用 totalCycles 限制所有迭代类�
     requirements: [{ id: "REQ-1", summary: "open", status: "pending" }],
   };
   assert.strictEqual(shouldStop(state, null, {}, "diagnose").reason, "budget_exhausted");
-});
-
-test("loopPolicy 集中解析 once/plan/autopilot/maxSteps 语义", () => {
-  assert.deepStrictEqual(resolveLoopPolicy({ once: true, autopilotRun: true }, { mode: { mode: "quick" } }), {
-    mode: "quick",
-    runtimeAutopilot: true,
-    loopShape: "autopilot",
-    maxSteps: 1,
-  });
-  assert.deepStrictEqual(resolveLoopPolicy({ autopilotRun: true, maxSteps: 7 }, { mode: { mode: "plan" } }), {
-    mode: "plan",
-    runtimeAutopilot: true,
-    loopShape: "plan_once",
-    maxSteps: 1,
-  });
-  assert.deepStrictEqual(resolveLoopPolicy({ autopilotRun: true, autopilotMaxIterations: 9 }, { mode: { mode: "diagnose" } }), {
-    mode: "diagnose",
-    runtimeAutopilot: true,
-    loopShape: "autopilot",
-    maxSteps: 9,
-  });
-  assert.deepStrictEqual(resolveLoopPolicy({ maxSteps: 3 }, { mode: { mode: "optimize" } }), {
-    mode: "optimize",
-    runtimeAutopilot: false,
-    loopShape: "default",
-    maxSteps: 3,
-  });
 });
 
 test("pickFocus 支持 fix/harden/optimize 和 mode-specific focus", () => {
@@ -208,23 +180,6 @@ test("--focus override 必须符合当前 mode 允许集合", () => {
     req_id: null,
     summary: "reproduce",
   });
-});
-
-test("resolveLoopPolicy 保留显式 0 上限", () => {
-  const disabledAutopilot = resolveLoopPolicy({
-    mode: "quick",
-    autopilotRun: true,
-    autopilotMaxIterations: 0,
-    maxSteps: 0,
-  }, {});
-  assert.strictEqual(disabledAutopilot.maxSteps, 0);
-
-  const explicitMaxSteps = resolveLoopPolicy({
-    mode: "strict",
-    once: false,
-    maxSteps: 0,
-  }, {});
-  assert.strictEqual(explicitMaxSteps.maxSteps, 0);
 });
 
 async function main() {

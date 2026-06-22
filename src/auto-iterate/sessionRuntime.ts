@@ -1,4 +1,3 @@
-import { emitProgress } from "../pipeline/progress";
 import { isValidationHistoryEntry } from "../pipeline/validationCommands";
 import { parseArgs } from "./args";
 import { STATE_SCHEMA_VERSION } from "./sessionStateModel";
@@ -11,6 +10,7 @@ import {
 import { validateStateJsonModelCore } from "./stateSchemaCoreValidators";
 import { validateState as validateStateRunner } from "./stateValidationRunner";
 import { finalizeAutoIterateSession } from "./sessionFinalize";
+import { generateDashboard } from "./sessionDashboard";
 import { showAutoIterateHelp } from "./sessionHelp";
 import {
   activateSession as activateSessionCore,
@@ -20,8 +20,6 @@ import { captureSkills } from "./skillCapture";
 import { showNaturalLanguageExamples } from "./naturalLanguageExamples";
 
 type StateObject = Record<string, any>;
-
-const LEGACY_AUTOMATION_DETAIL = "旧 CLI Worker/pipeline 路径已废弃。当前架构默认由主 Agent 直接管理 coder subagent；CLI 仅保留 session 管理、state 校验、finalize 和 protocol-only session 生成。";
 
 export async function validateState(target: string, options: StateObject = {}) {
   return validateStateRunner(target, options, validateStateJsonModel);
@@ -43,26 +41,17 @@ export async function activateSession(
   await activateSessionCore(sessionName, action, validateState);
 }
 
-function emitDeprecatedAutomationPath(
-  options: { jsonProgress?: boolean },
-  command: "--run" | "--check" | "--dispatch",
-): void {
-  const detail = `${command} 属于已废弃的外部 Worker/pipeline 入口。${LEGACY_AUTOMATION_DETAIL}`;
-  if (options.jsonProgress) {
-    emitProgress({
-      event: "error",
-      reason: "legacy_auto_iterate_pipeline_deprecated",
-      command,
-      detail,
-    }, { jsonProgress: true });
-  } else {
-    console.log(`❌ ${detail}`);
-  }
-  process.exitCode = 1;
-}
-
 export async function initAutoIterate(args: string[] = []): Promise<void> {
   const options = parseArgs(args);
+
+  if (options.deprecatedFlags.length > 0) {
+    console.log("❌ 旧 CLI Worker/pipeline 入口已废弃，当前不会执行这些参数。");
+    console.log(`   废弃参数: ${options.deprecatedFlags.join(", ")}`);
+    console.log("   当前 CLI 仅保留 session 管理、state 校验、finalize、dashboard 和 protocol-only session 生成。");
+    console.log("   默认自动模式应由主 Agent 直接管理 coder subagent；手动模式请使用 --no-run。");
+    process.exitCode = 1;
+    return;
+  }
 
   if (options.help) {
     showAutoIterateHelp();
@@ -71,11 +60,6 @@ export async function initAutoIterate(args: string[] = []): Promise<void> {
 
   if (options.examples) {
     showNaturalLanguageExamples(options.query);
-    return;
-  }
-
-  if (options.check) {
-    emitDeprecatedAutomationPath(options, "--check");
     return;
   }
 
@@ -89,13 +73,8 @@ export async function initAutoIterate(args: string[] = []): Promise<void> {
     return;
   }
 
-  if (options.resumeSession && (!options.run || options.noRun)) {
+  if (options.resumeSession) {
     await activateSession(options.resumeSession, "resume");
-    return;
-  }
-
-  if (options.run && !options.noRun) {
-    emitDeprecatedAutomationPath(options, "--run");
     return;
   }
 
@@ -111,8 +90,8 @@ export async function initAutoIterate(args: string[] = []): Promise<void> {
     return;
   }
 
-  if (options.dispatchSession) {
-    emitDeprecatedAutomationPath(options, "--dispatch");
+  if (options.dashboardSession) {
+    await generateDashboard(options.dashboardSession);
     return;
   }
 

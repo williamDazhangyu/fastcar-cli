@@ -29,6 +29,13 @@
 
 ## 精简说明
 
-- 旧版 feedback / optimization / compatibility / adapters 文档层已移除。
-- 平台运行时适配只保留在 `src/adapters/*` 代码中，不在 skill 内维护第二套 adapter 文档。
+- 旧版 feedback / optimization / compatibility / adapters 文档层已移除。旧 `src/adapters/*` 运行时适配代码已删除，不在 skill 内维护第二套 adapter 文档。
 - 新内容以 `SKILL.md`、`contracts/`、`examples/` 和 `references/` 为准。
+
+## 历史 / 废弃文档
+
+以下文件已不再维护，仅供历史参考：
+
+| 文件 | 状态 | 替代方案 |
+| --- | --- | --- |
+| `orchestrator.md` | ⚠️ 已合并 | 内容已合并到 [judge-runbook.md](references/judge-runbook.md) |
