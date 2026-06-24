@@ -28,6 +28,7 @@ import {
   applyDecisionAnswer,
   writeCurrentFile,
 } from "./sessionManager";
+import { captureBloatBaseline } from "./bloatCheck";
 
 type StateObject = Record<string, any>;
 
@@ -97,6 +98,7 @@ export function withSessionDefaults(
     sessionStateFile: toRelative(sessionPaths.sessionStatePath),
     sessionPromptFile: toRelative(sessionPaths.sessionPromptPath),
     currentFile: toRelative(sessionPaths.currentPath),
+    bloatBaseline: answers.bloatBaseline || captureBloatBaseline(process.cwd()),
   };
 }
 
@@ -208,68 +210,4 @@ export async function resolveMode(
   }
 
   return String(await promptMode("strict"));
-}
-
-export async function ensurePipelineSession(
-  options: AutoIterateSessionOptions,
-  dependencies: SessionCreationDependencies,
-): Promise<SessionPaths | null> {
-  if (options.resumeSession) {
-    const sessionPaths = getSessionPaths(options.resumeSession);
-    if (!(await pathExists(sessionPaths.sessionStateJsonPath))) {
-      throw new Error(`未找到可恢复的 pipeline session: ${sessionPaths.session}`);
-    }
-    const answerResult = await applyDecisionAnswer(
-      sessionPaths,
-      options.answer,
-      dependencies.validateStateJsonModel,
-    );
-    if (answerResult && answerResult.ok === false) {
-      const error = new Error(answerResult.message || "无效的 --answer") as Error & {
-        reason?: string;
-      };
-      error.reason = answerResult.reason || "invalid_decision_answer";
-      throw error;
-    }
-    const previousExitCode = process.exitCode;
-    process.exitCode = 0;
-    const validationResult = await dependencies.validateState(sessionPaths.session, {
-      strict: true,
-      silent: true,
-    });
-    if (!validationResult || !validationResult.ok) {
-      process.exitCode = previousExitCode;
-      const issueSummary = validationResult && Array.isArray(validationResult.issues)
-        ? validationResult.issues
-          .filter((issue) => issue.severity === "error")
-          .slice(0, 3)
-          .map((issue) => issue.message)
-          .join("; ")
-        : "";
-      throw new Error(`resume 已被 strict state 门禁阻止。请先修正 state.json/state.md 后再恢复。${issueSummary ? ` ${issueSummary}` : ""}`);
-    }
-    process.exitCode = previousExitCode;
-    const stateJson = await readJsonFile(sessionPaths.sessionStateJsonPath) as StateObject | null;
-    await writeCurrentFile(sessionPaths, {
-      mode: stateJson && stateJson.mode ? stateJson.mode.mode : "unknown",
-      modeLabel: stateJson && stateJson.mode ? stateJson.mode.label : "unknown",
-    });
-    return sessionPaths;
-  }
-
-  const mode = await resolveMode(options);
-  if (!mode || !MODE_CONFIGS[mode]) {
-    throw new Error("无效启动模式，请使用 strict / quick / diagnose / verify / plan / optimize / prototype");
-  }
-  const source = options.from ? await readChecklistFile(options.from) : null;
-  const created = await createAutoIterateSession(
-    options,
-    mode,
-    source,
-    dependencies,
-  );
-  if (!created) {
-    return null;
-  }
-  return created.sessionPaths;
 }

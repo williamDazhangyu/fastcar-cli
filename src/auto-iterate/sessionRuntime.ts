@@ -18,11 +18,12 @@ import {
 } from "./sessionManager";
 import { captureSkills } from "./skillCapture";
 import { showNaturalLanguageExamples } from "./naturalLanguageExamples";
+import { buildBloatReport, renderBloatReport } from "./bloatCheck";
 
 type StateObject = Record<string, any>;
 
 export async function validateState(target: string, options: StateObject = {}) {
-  return validateStateRunner(target, options, validateStateJsonModel);
+  return validateStateRunner(target, options, validateStateJsonModel, process.cwd());
 }
 
 export function validateStateJsonModel(state: StateObject, expected: StateObject = {}) {
@@ -43,15 +44,6 @@ export async function activateSession(
 
 export async function initAutoIterate(args: string[] = []): Promise<void> {
   const options = parseArgs(args);
-
-  if (options.deprecatedFlags.length > 0) {
-    console.log("❌ 旧 CLI Worker/pipeline 入口已废弃，当前不会执行这些参数。");
-    console.log(`   废弃参数: ${options.deprecatedFlags.join(", ")}`);
-    console.log("   当前 CLI 仅保留 session 管理、state 校验、finalize、dashboard 和 protocol-only session 生成。");
-    console.log("   默认自动模式应由主 Agent 直接管理 coder subagent；手动模式请使用 --no-run。");
-    process.exitCode = 1;
-    return;
-  }
 
   if (options.help) {
     showAutoIterateHelp();
@@ -97,6 +89,34 @@ export async function initAutoIterate(args: string[] = []): Promise<void> {
 
   if (options.captureSkillsSession) {
     await captureSkills(options.captureSkillsSession, { yes: options.yes });
+    return;
+  }
+
+  if (options.checkBloat) {
+    const report = buildBloatReport(process.cwd());
+    console.log(renderBloatReport(report));
+    if (report.hasErrors) {
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (options.deprecatedFlag) {
+    console.log(`❌ ${options.deprecatedFlag} 已废弃：auto-iterate 不再运行旧外部 Worker 主循环。`);
+    console.log("   请使用主 Agent + coder subagent 工作流；CLI 仅保留 --next、--merge、--validate-state、--finalize 等辅助命令。");
+    process.exitCode = 1;
+    return;
+  }
+
+  if (options.nextSession) {
+    const { runNextCheck } = await import("./loopCommands.js");
+    await runNextCheck(options.nextSession);
+    return;
+  }
+
+  if (options.mergeSession) {
+    const { runMerge } = await import("./loopCommands.js");
+    await runMerge(options.mergeSession, options.mergeRound);
     return;
   }
 

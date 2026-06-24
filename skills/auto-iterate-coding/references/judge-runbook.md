@@ -31,6 +31,18 @@
 6. 回到 1
 ```
 
+CLI 辅助命令形态：
+
+```text
+fastcar-cli auto-iterate --next <session>
+→ 派发 coder
+→ 主 Agent 运行验证并写 iterations/<n>/validation.log
+→ fastcar-cli auto-iterate --merge <session> --round <n>
+→ fastcar-cli auto-iterate --next <session>
+```
+
+`--next` 只做下一轮前检查和 focus 建议；`--merge` 只合并本轮 `result.json` 与 `validation.log` 到 `state.json` 并刷新 `state.md`。二者都不创建 session、不派发 coder、不替代主 Agent 的真实验证。
+
 ## 为什么校验不由 subagent 做
 
 校验环节依赖的是工具返回的事实，不是推理：

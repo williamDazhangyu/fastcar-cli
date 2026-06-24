@@ -128,6 +128,7 @@ export function buildStateModel(rawAnswers: StateObject): StateObject {
       failureCategory: "unknown",
       allowsCoding: false,
     },
+    bloatBaseline: answers.bloatBaseline || null,
     iterationPolicy: {
       currentIterationGoal: "提取完整 RCM 并补齐门禁实体",
       maxGoalsPerIteration: 1,

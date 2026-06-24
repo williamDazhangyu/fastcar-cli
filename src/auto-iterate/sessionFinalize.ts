@@ -4,6 +4,7 @@ import { getSessionPaths } from "./sessionPaths";
 import { readJsonFile, writeJsonFileAtomic } from "./stateIO";
 import { resolveStateFileForValidation } from "./sessionStateValidation";
 import { captureSkills } from "./skillCapture";
+import * as path from "path";
 import type { ValidateState } from "./sessionCreation";
 
 type StateObject = Record<string, any>;
@@ -73,7 +74,15 @@ export async function finalizeAutoIterateSession(
 
   const postDocsValidation = await dependencies.validateState(session, { strict: true });
   if (!postDocsValidation || !postDocsValidation.ok) {
-    console.log("❌ finalize 未通过：strict state 门禁失败。");
+    // 清理已生成的不完整交付文档
+    const docsDir = path.join(sessionPaths.sessionDir, "docs");
+    try {
+      const { promises: fsPromises } = await import("fs");
+      await fsPromises.rm(docsDir, { recursive: true, force: true });
+    } catch {
+      // cleanup failure is non-fatal
+    }
+    console.log("❌ finalize 未通过：strict state 门禁失败。已清理不完整交付文档。");
     process.exitCode = 1;
     return;
   }

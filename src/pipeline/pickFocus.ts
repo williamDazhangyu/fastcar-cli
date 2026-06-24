@@ -360,12 +360,31 @@ export function pickNextFocus(
   }
 
   if (lastCliValidationFailed(state)) {
+    // 读取失败分类，路由到不同动作
+    const deltaAssessment = state && (state as Record<string, unknown>).deltaAssessment as Record<string, unknown> | undefined;
+    const failReason = deltaAssessment && deltaAssessment.reason as string | undefined;
+
+    if (failReason === "environment") {
+      return null; // 环境失败，agent 无法自动修复，应由用户处理
+    }
+
+    if (failReason === "missing_test") {
+      const failedByValidation = firstRequirementWithStatus(state, ["implemented", "not_verified", "pending"]);
+      return {
+        type: "implement_req",
+        req_id: failedByValidation ? failedByValidation.id : null,
+        summary: failedByValidation ? `为 ${failedByValidation.id} 补充验证测试` : "补充缺失的验证命令或测试",
+      };
+    }
+
     const failedByValidation = firstRequirementWithStatus(state, ["implemented", "not_verified", "pending"]);
     if (failedByValidation) {
       return {
-        type: "fix_bug",
+        type: failReason === "regression" ? "fix_bug" : "fix_bug",
         req_id: failedByValidation.id,
-        summary: failedByValidation.summary || "修复 CLI 验证失败信号",
+        summary: failReason === "regression"
+          ? `修复回归: ${failedByValidation.summary || "CLI 验证失败信号"}`
+          : failedByValidation.summary || "修复 CLI 验证失败信号",
       };
     }
   }
@@ -381,6 +400,24 @@ export function pickNextFocus(
 
   const requirement = firstOpenRequirement(state);
   if (requirement) {
+    // budget 感知：剩余预算 ≤2 且有 3+ 个 pending 需求时收窄
+    const budgets = (state && state.budgets) ? state.budgets as Record<string, unknown> : {};
+    const remaining = Number(budgets.remainingImplementationIterations ?? budgets.autopilotMaxIterations ?? 99);
+    if (remaining <= 2) {
+      const pendingCount = (state && Array.isArray(state.requirements)
+        ? state.requirements.filter((r) => {
+            const rec = r as Record<string, unknown> | null;
+            return rec && (rec.status === "pending" || rec.status === "not_verified");
+          }).length
+        : 0);
+      if (pendingCount > 2) {
+        return {
+          type: requirement.id === "REQ-BOOTSTRAP" ? "extract_requirements" : "implement_req",
+          req_id: requirement.id,
+          summary: `[预算紧张: 剩余${remaining}轮/${pendingCount}个待处理需求] ${requirement.summary}`,
+        };
+      }
+    }
     return {
       type: requirement.id === "REQ-BOOTSTRAP" ? "extract_requirements" : "implement_req",
       req_id: requirement.id,
@@ -405,6 +442,20 @@ export function pickNextFocus(
   }
 
   if (allRequirementsPassed(state) && hardeningDone(state) && !optimizeDone(state)) {
+    // small 任务自动跳过优化
+    const taskProfile = state && (state as Record<string, unknown>).taskProfile as Record<string, unknown> | undefined;
+    if (taskProfile && (taskProfile.complexity === "small" || taskProfile.size === "small")) {
+      return null; // 小任务无需优化
+    }
+    // 优化早停：无改善或预算耗尽
+    const optimize = state && (state as Record<string, unknown>).optimization as Record<string, unknown> | undefined;
+    if (optimize) {
+      const noImpStreak = Number(optimize.noImprovementStreak || 0);
+      const maxNoImp = Number(optimize.maxNoImprovementIterations || 3);
+      if (noImpStreak >= maxNoImp) return null;
+      const budgets = state && (state as Record<string, unknown>).budgets as Record<string, unknown> | undefined;
+      if (budgets && Number(budgets.remainingOptimizationIterations || 0) <= 0) return null;
+    }
     return {
       type: "optimize",
       req_id: null,
@@ -414,4 +465,3 @@ export function pickNextFocus(
 
   return null;
 }
-

@@ -7,6 +7,7 @@ import { validateSessionStateBaseline } from "./sessionBaselineValidation";
 import { validateNativeSubAgentWorkflowArtifacts } from "./nativeSubAgentWorkflowValidation";
 import { pathExists } from "../fsUtils";
 import { setExitCode, writeLine } from "../cliOutput";
+import { buildBloatReport, buildIncrementalBloatIssues } from "./bloatCheck";
 
 type ValidationIssue = {
   severity: "error" | "warning";
@@ -93,7 +94,9 @@ function applyStrictWarningEscalation(issues: ValidationIssue[]): void {
       !issue.message.includes("当前活动 session 是") &&
       !issue.message.includes("按旧 state.md-only session 降级恢复") &&
       !issue.message.includes("delivery_verifiability=unknown") &&
-      !issue.message.includes("DoD.交付可验证性=unknown")) {
+      !issue.message.includes("DoD.交付可验证性=unknown") &&
+      !issue.message.includes("历史膨胀债务未恶化") &&
+      !issue.message.includes("缺少 bloatBaseline")) {
       issue.severity = "error";
       issue.message = `strict: ${issue.message}`;
     }
@@ -104,6 +107,7 @@ export async function validateState(
   target: string | null | undefined,
   options: ValidateStateOptions = {},
   validateStateJsonModel: ValidateStateJsonModel,
+  projectDir?: string,
 ): Promise<ValidateStateResult> {
   const silent = options.silent === true;
   let stateInfo;
@@ -156,11 +160,19 @@ export async function validateState(
   const sessionValidation = await validateSessionStateBaseline(content, stateInfo);
   const nativeWorkflowValidation = await validateNativeSubAgentWorkflowArtifacts(stateInfo.stateJsonFile);
   const validationLogEvidence = await validateValidationLogEvidence(stateInfo.stateJsonFile);
+  const bloatIssues: ValidationIssue[] = [];
+  if (options.strict && projectDir) {
+    const bloatReport = buildBloatReport(projectDir);
+    for (const issue of buildIncrementalBloatIssues(bloatReport, stateJson ? stateJson.bloatBaseline : null)) {
+      bloatIssues.push({ severity: issue.severity === "error" ? "error" : "warning", message: issue.message });
+    }
+  }
   const issues = [
     ...stateJsonIssues,
     ...sessionValidation.issues,
     ...nativeWorkflowValidation.issues,
     ...validationLogEvidence,
+    ...bloatIssues,
   ];
   if (options.strict) {
     applyStrictWarningEscalation(issues);

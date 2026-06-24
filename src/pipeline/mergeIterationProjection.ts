@@ -117,26 +117,41 @@ export function applyIterationProjection(input: ApplyIterationProjectionInput): 
 
   if (effectiveValidation.status === "failed") {
     const deltaAssessment = asRecord(next.deltaAssessment);
+    // 失败分类：根据 exit code 和上下文判断失败类型
+    let failReason = "impl_failure";
+    const exitCode = effectiveValidation.exitCode;
+    if (exitCode === 127 || exitCode === 126 || exitCode === undefined) {
+      failReason = "environment";
+    } else if ((effectiveValidation.summary || "").includes("no test") || (effectiveValidation.summary || "").includes("missing")) {
+      failReason = "missing_test";
+    } else if (deltaAssessment.status === "passed" || deltaAssessment.previousStatus === "passed") {
+      failReason = "regression";
+    }
     next.deltaAssessment = {
       ...deltaAssessment,
-      status: "regression",
+      status: failReason === "regression" ? "regression" : failReason as string,
+      reason: failReason,
       summary: effectiveValidation.summary || report.summary || textValue(text, "validationFailed"),
       baselineRef: deltaAssessment.baselineRef || "baseline",
       postChangeRef: "postChange",
-      decision: "retry_new_direction",
+      decision: failReason === "environment" ? "ask_user" : failReason === "missing_test" ? "write_test" : failReason === "regression" ? "revert_or_retry" : "retry_new_direction",
     };
     next.iterationPolicy = {
       ...asRecord(next.iterationPolicy),
-      lastDecision: "replan",
+      lastDecision: failReason === "environment" ? "ask_user" : "replan",
     };
   }
 
   const watchdog = asRecord(next.watchdog);
+  const failedReason = effectiveValidation.status === "failed"
+    ? String(asRecord(next.deltaAssessment).reason || asRecord(next.deltaAssessment).status || "impl_failure")
+    : "";
+  const validationFailedAction = failedReason === "environment" ? "ask_user" : "narrow_scope";
   next.watchdog = {
     ...watchdog,
     enabled: true,
-    triggered: status === "need_decision" || status === "blocked",
-    requiredAction: status === "need_decision" ? "ask_user" : status === "blocked" ? "stop" : "continue",
+    triggered: status === "need_decision" || status === "blocked" || effectiveValidation.status === "failed",
+    requiredAction: status === "need_decision" ? "ask_user" : status === "blocked" ? "stop" : effectiveValidation.status === "failed" ? validationFailedAction : "continue",
     deliveryVerifiability: effectiveValidation.status === "passed"
       ? "partially_verifiable"
       : effectiveValidation.status === "failed" ? "unknown" : (watchdog.deliveryVerifiability || "unknown"),
@@ -159,4 +174,3 @@ export function applyIterationProjection(input: ApplyIterationProjectionInput): 
 
   return next;
 }
-

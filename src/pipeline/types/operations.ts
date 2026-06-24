@@ -240,12 +240,14 @@ export interface LoopPolicyResult {
 
 export interface WatchdogContext {
   validation?: ValidationResult | null;
+  reconcileStatus?: string;
+  allRequirementsPassed?: boolean;
 }
 
 export interface WatchdogResult {
   triggered: boolean;
   requiredAction: WatchdogAction;
-  reason: "need_decision" | "watchdog_stop" | "validation_failed" | "no_progress_streak" | "clear";
+  reason: "need_decision" | "watchdog_stop" | "validation_failed" | "no_progress_streak" | "state_drift" | "fresh_eyes_required" | "hardening_gap" | "clear";
 }
 
 export interface ProgressPayload {

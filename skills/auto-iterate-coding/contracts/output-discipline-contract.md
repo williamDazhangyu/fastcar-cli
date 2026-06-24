@@ -10,8 +10,11 @@ Coder 不说话 → 只写 result.json + 代码
 进展按模板 → 每轮中间报告使用固定格式
 决策结构化 → need_decision 输出问题 + 选项
 交付按模板 → 最终输出使用 final-delivery.md 模板
+语言跟随 session → 最终对话回复和交付总结使用 state.language 或用户当前语言
 推理只入 trace → 解释"为什么"时写入 trace.rationaleSummary，不输出到对话
 ```
+
+语言硬约束：主 Agent 的所有人类可读输出必须跟随用户当前提示语言；已有 session 时优先跟随 `state.language.code`。当 `state.language.code=zh` 或用户当前消息为中文时，最终对话回复、本次任务交付总结、阶段验收摘要和风险说明必须使用中文；命令、路径、JSON key、API 名称和 `passed` / `blocked` / `not_verified` 等机器枚举值保持英文。
 
 ## 2. 角色输出规则
 
@@ -33,8 +36,11 @@ Coder 不说话 → 只写 result.json + 代码
 | **中间进展（caveman）** | 轮次、动作、结果、下一步 | 1 行电报格式 |
 | **need_decision** | 问题背景、选项列表（含推荐） | 按 §4 模板 |
 | **blocked** | 阻塞原因、需要用户的决策/资源 | 按 §4 模板 |
+| **技能/测试维护** | 技能维护和测试维护的检查结果 | 格式：`skills: N files, M KB; tests: N files, M lines; stale: N candidates` |
 | **交付总结** | 按 final-delivery.md 模板 | 按 §5 模板 |
 | **禁止输出** | 私有思考链、"我认为"、"我觉得"、"让我想想"、冗长推理、代码阅读心得、推测性分析 | — |
+
+主 Agent 在交付总结、提前停止、blocked 和 need_decision 场景中都必须执行语言硬约束。中文 session 不得使用英文开头或英文收尾，例如 `Done`、`Summary`、`Tests`、`Next steps`，除非这些词是命令、路径或用户明确要求保留的术语。
 
 ### 2.3 Protocol-only LLM
 
@@ -106,8 +112,10 @@ C. <选项> — <理由>
 交付输出必须使用 `references/final-delivery.md` 中定义的模板，不得自由发挥：
 
 - 成功交付：§成功交付模板
-- 有限成功：§有限成功交付条件（在 `contracts/delivery-gate-contract.md`）
+- 有限成功：§有限成功交付条件（在 `references/final-delivery.md`）
 - 提前停止：§提前停止模板
+
+模板语言必须跟随 `state.language.code` 或用户当前语言。中文 session 使用中文字段标签和中文说明；英文只保留命令、路径、JSON key、API 名称和机器枚举值。
 
 ## 6. 禁止输出清单（通用）
 
@@ -157,4 +165,4 @@ C. <选项> — <理由>
 | §4 need_decision | `SKILL.md` §全自动迭代模式 §Autopilot 必须停止并汇报 |
 | §5 交付输出 | `references/final-delivery.md` |
 | §6 禁止输出清单 | `SKILL.md` §可追溯规则 |
-| §7 违规检测 | `references/judge-runbook.md`、`references/caveman-mode.md` |
+| §7 违规检测 | `references/judge-runbook.md`、`references/iteration-policy.md` §Caveman Mode |

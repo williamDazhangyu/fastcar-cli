@@ -81,6 +81,7 @@ current 指针：${answers.currentFile || ".agent-state/auto-iterate-current.jso
 激活声明：Agent 开始执行前必须在对话中明确声明“auto-iterate 已激活”，并列出 mode、session、state 文件、current 指针和下一步最小动作
 恢复优先级：当前消息显式 session > session state > current 指针 > 对话推断
 语言规则：输出、状态记录和交付总结必须与用户当前提示语言保持一致；用户使用中文时不要突然切换为英文，除非术语、命令、代码或用户明确要求保留英文
+最终回复语言规则：中文 session 的最终对话回复、本次任务交付总结、阶段验收摘要、Skill Capture 人类可读内容和生成文档必须使用中文；命令、文件名、JSON key、API 名称和机器枚举值保持英文
 language：${lang}
 status_display_rule：机器枚举保持英文；人类摘要和原因文案跟随用户语言
 

@@ -49,7 +49,7 @@ export type StopReason =
   | "validation_failed"
   | "continue";
 
-export type WatchdogAction = "ask_user" | "stop" | "continue";
+export type WatchdogAction = "ask_user" | "stop" | "continue" | "reconcile" | "context_compress_and_review" | "run_validation" | "narrow_scope";
 
 export type WriteGuardIssueReason =
   | "invalid_path"

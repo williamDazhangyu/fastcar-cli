@@ -152,12 +152,14 @@ ${answers.modeInstructions}
 
 上下文与状态管理：
 请始终使用与用户当前提示一致的语言输出、记录状态和交付总结；用户使用中文时不要突然切换为英文，除非术语、命令、代码或用户明确要求保留英文。
+本 session 的最终对话回复、本次任务交付总结、阶段验收摘要、Skill Capture 人类可读内容和生成文档必须使用中文；只保留命令、文件名、JSON key、API 名称和 pending / passed / blocked / not_verified 等机器枚举值为英文。
 本 skill 是面向 AI Coding Agent 的自动迭代开发协议，不是独立 CLI 工具，也不依赖特定 Agent 平台。
 请先探测当前 Agent 环境可用能力，包括读写文件、运行命令、真实测试、状态持久化、coder subagent、只读探索辅助、网络、数据库/密钥和 git diff。
 如果某项能力不可用，请按降级规则标记 not_verified 或 blocked，不要伪造完成或验证。
 默认自动模式固定为“主 Agent（裁判）-> 单个 coder subagent（运动员）-> 主 Agent（裁判）”。每轮只派发一个 coder；coder 是唯一允许修改业务代码的角色，写入 result.json 后停止。
 请按 references/judge-runbook.md 执行裁判步骤：主 Agent 亲自做 result schema、Node runner 验证、git diff/scope 审计、validation.log、state merge、预算、Watchdog 和交付门禁。
 不要使用 CLI --dispatch、外部 Worker、validator subagent、orchestrator subagent 或 coder 并发写入作为默认路径。只读探索辅助可以并行，但不得写业务代码、不得写 state、不得替代主 Agent 的裁判校验。
+每轮迭代前运行 CLI 命令获取辅助：\`fastcar-cli auto-iterate --next ${answers.session || "default"}\` 会检查停止条件、推荐下一步 focus、验证上一轮 validation.log 证据（防偷懒）。每轮迭代后运行 \`fastcar-cli auto-iterate --merge ${answers.session || "default"}\` 自动合并 result.json+validation.log → state.json+state.md。膨胀诊断用 \`fastcar-cli auto-iterate --check-bloat\`。交付前运行 \`fastcar-cli auto-iterate --validate-state ${answers.session || "default"} --strict-state\` 和 \`fastcar-cli auto-iterate --finalize ${answers.session || "default"} --yes\`。
 检测到 state.json 或 state.md 在 coder 运行期间被外部修改时，先进入 reconcile，不得继续派发下一轮 coder。
 请不要依赖历史对话作为唯一上下文。
 如果存在 ${answers.sessionStateJsonFile || ".agent-state/auto-iterate/default/state.json"}，请先读取它作为本 session 的机器权威恢复状态；缺少 state.json 的旧 session 才降级读取 ${answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"}。

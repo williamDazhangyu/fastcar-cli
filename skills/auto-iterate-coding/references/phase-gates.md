@@ -27,3 +27,26 @@ Hard Gate 执行口径：
 - `ERROR` 必须阻断交付；strict 模式下大部分 `WARN` 也升级为 `ERROR`。
 - 如果 strict 校验失败，Agent 必须进入 `postAgentValidationGate.nextAction=context_reset_and_repair`，生成 Context Handoff Summary，只保留 `state.json`、当前代码和首个阻断项继续修补。
 - `gate_repair_cycles_used` 不计入普通实现迭代；但如果发现功能缺口或关键 REQ 未实现，必须回到 implementation iteration 消耗实现预算。
+
+## 事件→字段映射表
+
+当以下事件发生时，`--merge` 命令会自动写入对应字段。Agent 手动维护状态时也应遵守此映射。
+
+| 事件 | 写入字段 | 写入者 |
+|---|---|---|
+| 验证失败（环境） | `postChange.status=failed`, `deltaAssessment.reason=environment`, `deltaAssessment.decision=ask_user`, `watchdog.requiredAction=run_validation` | `--merge` |
+| 验证失败（缺测试） | `postChange.status=failed`, `deltaAssessment.reason=missing_test`, `deltaAssessment.decision=write_test` | `--merge` |
+| 验证失败（回归） | `postChange.status=failed`, `deltaAssessment.reason=regression`, `deltaAssessment.decision=revert_or_retry`, `postChange.regressionDetected=true` | `--merge` |
+| 验证失败（实现错误） | `postChange.status=failed`, `deltaAssessment.reason=impl_failure`, `deltaAssessment.decision=retry_new_direction` | `--merge` |
+| 需求实现 | `requirements[i].status=implemented`, `traceability.iterations+=entry` | `--merge` |
+| 需求验证通过 | `requirements[i].status=passed`, `watchdog.freshEyesRequired=true` | `--merge` |
+| scope violation | `deltaAssessment.scopeViolation=true`, `iterationPolicy.lastDecision=replan` | `--merge` |
+| 预算耗尽 | `watchdog.requiredAction=stop`, `phaseGate.blockingReasons+=budget` | `--merge` |
+| 连续无进展 | `watchdog.requiredAction=stop` | `--merge` |
+| 所有 REQ passed | `watchdog.freshEyesRequired=true`, `watchdog.validationHardeningStatus=pending` | `--merge` |
+| 加固完成 | `watchdog.validationHardeningStatus=passed`, `watchdog.validationHardeningDimensionsDone=[boundary,negative,regression]` | `--merge` |
+| 上下文清空复核通过 | `contextResetReview.status=passed`, `contextResetReview.decision=pass` | Agent 手动 |
+| 风格整理完成 | `styleConsolidation.status=completed`, `styleConsolidation.appliedRules+=...` | Agent 手动 |
+| 技能沉淀完成 | `skillCapture.status=captured`, `skillCapture.capturedFiles+=...` | `--finalize` |
+
+> 上表中 `--merge` 标记的字段由 `fastcar-cli auto-iterate --merge <session>` 自动写入。Agent 手动维护时应至少填写同一行的所有字段，否则 `--validate-state --strict-state` 会报跨字段不一致。

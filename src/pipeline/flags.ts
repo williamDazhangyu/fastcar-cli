@@ -45,6 +45,9 @@ export const FLAG_REGISTRY: Record<string, FlagInfo> = {
 
   // Skill flags
   "--capture-skills": { stage: "stable", kind: "skill", stable: true, help: "--capture-skills <session> [--yes]" },
+  "--check-bloat": { stage: "stable", kind: "other", stable: true, help: "--check-bloat  检查技能/测试膨胀，输出诊断报告" },
+  "--next": { stage: "stable", kind: "other", stable: true, help: "--next <session>  下一轮前检查：shouldStop+pickFocus+validation.log防偷懒" },
+  "--merge": { stage: "stable", kind: "other", stable: true, help: "--merge <session> [--round <N>]  合并本轮result+validation到state" },
 
   // Other flags
   "--no-run": {

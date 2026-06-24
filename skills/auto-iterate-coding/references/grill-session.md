@@ -114,7 +114,7 @@ Agent 提问：
 请确认这些定义是否正确，有没有遗漏的关键术语？"
 ```
 
-**记录**：写入 `state.json` 的 `domainGlossary`，详见 `domain-language.md`。
+**记录**：写入 `state.json` 的 `domainGlossary`，详见 [quick-reference.md](quick-reference.md) §领域语言。
 
 ### 步骤 8：架构决策
 

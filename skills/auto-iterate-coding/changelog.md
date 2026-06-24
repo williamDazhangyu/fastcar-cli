@@ -14,10 +14,10 @@
 
 - 参考 [mattpocock/skills](https://github.com/mattpocock/skills) 新增 5 个 reference 文档：
   - `references/grill-session.md`：Agent 主动 Grilling 流程，替代被动等待用户提供清单的启动握手。
-  - `references/domain-language.md`：项目共享术语表，提取、维护和使用领域语言。
-  - `references/zoom-out.md`：系统视角，在 Context Reset Review 和代码探索时从系统高度理解代码。
-  - `references/triage.md`：Issue 分流工作流，优先级排序、scope 评估、session 分配。
-  - `references/caveman-mode.md`：超压缩通信模式，token 降低 ~75%。
+  - `references/domain-language.md`：项目共享术语表，提取、维护和使用领域语言。（后合并到 `quick-reference.md` §领域语言）
+  - `references/zoom-out.md`：系统视角，在 Context Reset Review 和代码探索时从系统高度理解代码。（后合并到 `feedback-loop.md` §Zoom Out）
+  - `references/triage.md`：Issue 分流工作流，优先级排序、scope 评估、session 分配。（后合并到 `feedback-loop.md` §Triage）
+  - `references/caveman-mode.md`：超压缩通信模式，token 降低 ~75%。（后合并到 `iteration-policy.md` §Caveman Mode）
 - 强化已有文档：
   - `references/tdd-vertical-slices.md`：增加 Red-Green-Refactor 命名循环、好测试 vs 坏测试对比、横切 vs 纵切对比表。
   - `references/feedback-loop.md`：增加显式 Diagnose 六步循环（reproduce → minimise → hypothesise → instrument → fix → regression-test）。

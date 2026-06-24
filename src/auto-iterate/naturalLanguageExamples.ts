@@ -229,6 +229,56 @@ export const NATURAL_LANGUAGE_EXAMPLES: NaturalLanguageExampleSection[] = [
     ],
   },
   {
+    title: "循环辅助命令：next / merge",
+    keywords: ["loop", "next", "merge", "round", "下一轮", "合并", "validation.log", "循环辅助"],
+    examples: [
+      "检查 login-bugfix 下一轮应该做什么",
+      "进入 login-bugfix 的下一轮前先检查 validation.log 和 watchdog",
+      "合并 login-bugfix 第 1 轮 result.json 和 validation.log",
+      "把当前 session 的上一轮结果 merge 到 state.json，然后告诉我下一步",
+      "上一轮验证完成了，帮我执行 auto-iterate merge，round 是 2",
+    ],
+    fewShots: [
+      {
+        user: "检查 login-bugfix 下一轮应该做什么",
+        route: "fastcar-cli auto-iterate --next login-bugfix",
+        notes: [
+          "--next 是只读循环辅助命令，不创建新 session，不追加 --yes。",
+          "它会检查 shouldStop、Watchdog、上一轮 validation.log 证据，并输出下一轮 focus。",
+        ],
+      },
+      {
+        user: "合并 login-bugfix 第 1 轮 result.json 和 validation.log",
+        route: "fastcar-cli auto-iterate --merge login-bugfix --round 1",
+        notes: [
+          "--merge 会读取 iterations/<round>/result.json 和 validation.log，合并到 state.json 并刷新 state.md。",
+          "用户明确轮次时追加 --round；未明确时使用最新迭代目录。",
+        ],
+      },
+    ],
+  },
+  {
+    title: "膨胀诊断：check-bloat",
+    keywords: ["bloat", "check-bloat", "膨胀", "测试膨胀", "文档膨胀", "技能膨胀", "测试占比"],
+    examples: [
+      "检查当前仓库有没有测试膨胀",
+      "诊断 skills 和 test 目录是否膨胀",
+      "运行 auto-iterate bloat 检查",
+      "检查测试占比是否超过 src 的 50%",
+      "交付前帮我跑一次 check-bloat",
+    ],
+    fewShots: [
+      {
+        user: "检查当前仓库有没有测试膨胀",
+        route: "fastcar-cli auto-iterate --check-bloat",
+        notes: [
+          "--check-bloat 是全仓诊断命令，不创建 session，不追加 --yes。",
+          "它会输出 skill/test 膨胀状态；当前历史债务可能导致命令以非 0 退出，应把输出作为诊断证据。",
+        ],
+      },
+    ],
+  },
+  {
     title: "Protocol-only / LLM-only",
     keywords: ["few-shot", "protocol-only", "协议", "手动模式", "fallback", "no-run", "不按固定流程"],
     examples: [
@@ -245,6 +295,35 @@ export const NATURAL_LANGUAGE_EXAMPLES: NaturalLanguageExampleSection[] = [
         notes: [
           "协议优先、手动模式、不走固定流程、不 spawn worker 都映射为 protocol-only 并追加 --no-run。",
           "当前 LLM 随后在当前会话里维护 state、RCM、DoD、验证和停止条件，不启动 subagent。",
+        ],
+      },
+    ],
+  },
+  {
+    title: "旧 Worker 路径已废弃",
+    keywords: ["worker", "dispatch", "run", "--run", "--dispatch", "旧路径", "外部 Worker", "Codex worker"],
+    examples: [
+      "用旧 --run 路径跑这个自动迭代任务",
+      "用 --dispatch 派给 Codex worker 处理当前 session",
+      "确认 prompt 后，让本地 Codex 真实执行这个 worker",
+      "让 Kimi worker 接手当前自动迭代任务",
+      "按旧 CLI Worker pipeline 执行",
+    ],
+    fewShots: [
+      {
+        user: "用旧 --run 路径跑这个自动迭代任务",
+        route: "旧 --run 外部 Worker 主循环已废弃；默认由主 Agent 直接派发原生 coder subagent。用户明确要求不启动 subagent 时，使用对应 mode 命令追加 --no-run。",
+        notes: [
+          "不要生成 fastcar-cli auto-iterate --run。",
+          "不要把废弃 Worker pipeline 当作 fallback。",
+        ],
+      },
+      {
+        user: "用 --dispatch 派给 Codex worker 处理当前 session",
+        route: "旧 --dispatch 外部 Worker 路径已废弃；先读取 .agent-state/auto-iterate-current.json 确认当前 session，再由主 Agent 直接派发原生 coder subagent。",
+        notes: [
+          "不要生成 fastcar-cli auto-iterate --dispatch。",
+          "当前 session 不明确时先 --list 匹配或询问。",
         ],
       },
     ],
@@ -295,7 +374,7 @@ export function renderNaturalLanguageExamples(query?: unknown): string {
   if (sections.length === 0) {
     return [
       `未找到匹配的自然语言场景: ${query}`,
-      "可尝试关键词：快速、文档、验收、诊断、原型、规划、优化、测试、Codex、worker、dispatch、session、预算",
+      "可尝试关键词：快速、文档、验收、诊断、原型、规划、优化、测试、loop、next、merge、bloat、check-bloat、validation.log、Codex、worker、dispatch、session、预算",
       "",
     ].join("\n");
   }

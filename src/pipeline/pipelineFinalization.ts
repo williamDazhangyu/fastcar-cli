@@ -114,12 +114,22 @@ export function canFinalizeDelivery(state: PipelineStateLike): boolean {
     return false;
   }
   const contextResetReview = asRecord(state.contextResetReview);
-  if (contextResetReview.status !== "passed" && contextResetReview.status !== "user_accepted_limited") {
+  const taskProfile = asRecord((state as Record<string, unknown>).taskProfile);
+  const taskSize = String(taskProfile.complexity || taskProfile.size || "medium");
+  // small 任务跳过 contextResetReview
+  if (taskSize !== "small" && contextResetReview.status !== "passed" && contextResetReview.status !== "user_accepted_limited") {
     return false;
   }
   const skillCapture = asRecord(state.skillCapture);
-  if (skillCapture.status === "pending" || !skillCapture.status) {
-    return false;
+  // small 任务允许 skipped_no_high_value 等同于完成
+  if (taskSize === "small") {
+    if (skillCapture.status === "pending") {
+      return false;
+    }
+  } else {
+    if (skillCapture.status === "pending" || !skillCapture.status) {
+      return false;
+    }
   }
   const cleanup = asRecord(state.cleanup);
   if (cleanup.status !== "completed") {
@@ -265,4 +275,3 @@ export function finalizeDeliveryState(
     ready: true,
   };
 }
-

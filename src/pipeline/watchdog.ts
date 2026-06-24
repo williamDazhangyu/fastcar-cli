@@ -41,6 +41,34 @@ export function evaluateWatchdog(
       reason: "no_progress_streak",
     };
   }
+
+  // 新增：state drift 检查
+  if (ctx.reconcileStatus && ctx.reconcileStatus !== "clear") {
+    return {
+      triggered: true,
+      requiredAction: "reconcile",
+      reason: "state_drift",
+    };
+  }
+
+  // 新增：fresh eyes 检查
+  if (watchdog.freshEyesRequired === true) {
+    return {
+      triggered: true,
+      requiredAction: "context_compress_and_review",
+      reason: "fresh_eyes_required",
+    };
+  }
+
+  // 新增：验证加固缺口检查
+  if (ctx.allRequirementsPassed && watchdog.validationHardeningStatus !== "passed") {
+    return {
+      triggered: true,
+      requiredAction: "run_validation",
+      reason: "hardening_gap",
+    };
+  }
+
   return {
     triggered: false,
     requiredAction: "continue",

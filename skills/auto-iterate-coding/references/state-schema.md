@@ -1,5 +1,7 @@
 # State Schema
 
+> 机器可检查的硬约束（目录结构、必填字段、枚举白名单、一致性规则）见 [contracts/session-contract.md](../contracts/session-contract.md)。本文档是详细解释和字段说明。
+
 本文件冻结 session-only 状态结构，作为 Agent 状态维护、CLI 生成状态和 `fastcar-cli auto-iterate --validate-state` 的校验基线。
 
 状态文件路径固定为 `.agent-state/auto-iterate/<session>/state.json`。`state.json` 是机器权威状态源；`.agent-state/auto-iterate/<session>/state.md` 是由 CLI / Agent 从 JSON 渲染出的只读人类视图，必须标注 `GENERATED FILE, DO NOT EDIT`。旧版 `.agent-state/auto-iterate-coding.md` 不属于当前 schema。

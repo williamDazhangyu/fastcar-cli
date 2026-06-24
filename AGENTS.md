@@ -2,21 +2,13 @@
 
 本文件会被 `fastcar-cli skill install` 同步到目标 Agent 或项目根目录，用于指导 Codex、Claude Code、Cursor、Kimi Code、Gemini CLI 等主流 AI Agent 编写 FastCar 相关代码。
 
-## Subagent 驱动迁移公告
+## Subagent 驱动架构
 
-本项目已迁移到主 Agent 直接管理 Subagent 架构。当 `Agent(subagent_type="coder")` 工具可用时，主 Agent 必须直接使用它派发 coder subagent 作为运动员，自身担任裁判：选取 focus、构建 prompt、派发 coder、校验 result、运行 CLI 验证、合并 state、管理看门狗/预算/交付门禁。
+本项目使用主 Agent 直接管理 Subagent 架构。当 `Agent(subagent_type="coder")` 工具可用时，主 Agent 作为裁判派发 coder subagent 作为运动员。旧 CLI 驱动外部 Worker 路径（`fastcar-cli auto-iterate --run`、`src/adapters/`）已完全移除。
 
-旧 CLI 驱动外部 Worker 路径（`fastcar-cli auto-iterate --run`、`src/adapters/`）已废弃，待代码清理。用户显式要求 `--no-run` 或无 `Agent` 工具时，进入 protocol-only / LLM-only 路径：生成 state 骨架后由当前 LLM 遵循自动迭代技巧执行，不启动 subagent。
+用户显式要求 `--no-run` 或无 `Agent` 工具时，进入 protocol-only / LLM-only 路径：生成 state 骨架后由当前 LLM 遵循自动迭代技巧执行，不启动 subagent。
 
-### 主 Agent / Subagent 硬边界
-
-- 主 Agent（裁判）负责选取 focus、构建 prompt、派发 coder subagent、读取 result.json 做 schema 检查、Node 确定性 runner 跑验证命令、git diff 审计 scope、合并 state、推进预算、看门狗、交付门禁、need_decision 时询问用户。
-- 主 Agent 不得亲自修改业务代码。
-- protocol-only / LLM-only 模式不使用主 Agent / Coder Subagent 角色边界；当前 LLM 可直接修改业务代码，但必须继续维护 RCM、真实验证、state.json/state.md、Watchdog、预算和交付门禁。
-- 自动模式与 protocol-only 模式是 session 级执行风格，启动后不得静默互相切换；subagent 不可用时必须 need_decision 或 blocked。
-- 校验靠工具事实（Node runner exit code、git diff、JSON 内容），不存在幻觉窗口。真正要防的是偷懒：每轮校验写 validation.log，交付前逐条确认命令真实执行过。
-- Coder Subagent（运动员）只执行单轮编码：读取 focus 相关文件、修改 scope 内代码、写入 result.json 后停止。不得运行任何命令，不得写 state.json/state.md。
-- 主 Agent 是 state merge、预算推进、交付门禁的唯一权威执行者。
+详细架构说明见 [docs/auto-iterate-current-architecture.md](docs/auto-iterate-current-architecture.md)，完整协议见 [skills/auto-iterate-coding/SKILL.md](skills/auto-iterate-coding/SKILL.md)。
 
 ## 适用范围
 
@@ -47,6 +39,8 @@
 - 只规划、先规划不要写代码、Plan-only。
 - 优化模块、优化性能、提升可维护性但别改行为。
 - 恢复任务、切换 session、列出自动迭代任务、resume session、switch session、list session。
+- 下一轮、next focus、进入下一轮前检查、validation.log、合并 result、merge state、合并上一轮结果。
+- 测试膨胀、技能膨胀、文档膨胀、测试占比、check-bloat、bloat 诊断。
 
 用户不需要记住 `fastcar-cli auto-iterate` 参数。Agent 应按 `auto-iterate-coding` 的自然语言命令路由规则，将用户意图映射为对应命令；只有缺少会影响安全、兼容性或外部资源的关键信息时才追问。
 

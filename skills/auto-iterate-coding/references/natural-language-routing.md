@@ -9,8 +9,10 @@
 - 只有缺少会影响安全、兼容性或外部资源的关键信息时，才向用户提问。
 - 目标 Agent 只有在当前会话可用 skills 或 `AGENTS.md` 能检索到 `auto-iterate-coding` 时，才会稳定触发本路由；仅全局存在 `fastcar-cli` 命令不足以触发。触发失败时先同步 skill：`fastcar-cli skill install auto-iterate-coding --global --target <agent>`，项目内则使用 `fastcar-cli skill install auto-iterate-coding --local --target <agent>`。`<agent>` 以 `fastcar-cli skill targets` 输出为准。
 - 默认自动模式不再调用旧 `--check` / `--run` Worker pipeline；主 Agent 读取 skill/state 后直接派发 coder subagent。需要 native-subagent session 骨架时，使用对应 mode 命令并追加 `--yes`。`--list`、`--switch`、`--resume`、`--validate-state` 不追加 `--yes`。
+- `--next`、`--merge`、`--check-bloat` 是 CLI 辅助/诊断命令，不创建新 session，不追加 `--yes`，也不启动旧 Worker。用户要求“下一轮前检查 / 合并本轮结果 / 检查测试或技能膨胀”时应稳定映射到这些命令。
 - 每次自然语言路由启动新任务时都必须显式传入 `--session <name>`；用户未指定时，Agent 生成英文小写、数字和连字符组成的默认 session 名。`--validate-state` 复用已有 session 或 state 文件，不创建新 session。
 - 自动模式下，主 Agent 自己执行裁判职责：pick focus、派发 coder、校验 result、运行验证命令、审计 diff、合并 state，并在 `need_decision` 时询问用户。
+- 用户说“当前 session / 上一轮 / 刚才那个任务 / 当前自动迭代任务”且未给 session 名时，先读取 `.agent-state/auto-iterate-current.json` 获取当前 session；读不到或指针无效时运行 `fastcar-cli auto-iterate --list` 匹配；仍不确定才询问用户。不要为 `--next`、`--merge`、`--validate-state` 自动创建新 session。
 - protocol-only / LLM-only 模式下，调用带 `--no-run` 的启动命令后，才把 CLI 输出的启动提示词作为后续执行依据；当前 LLM 遵循自动迭代技巧执行，不启动 subagent。
 - 调用命令或无 CLI fallback 创建状态后，必须先在对话中输出 auto-iterate 激活声明，列出 mode、session、state 文件、current 指针、状态持久化能力和下一步最小动作。
 - 如果没有 session state、start-prompt 或 current 指针，不得把当前会话内的多轮修改称为完整 auto-iterate session；必须标记为 degraded / not_available。
@@ -63,6 +65,9 @@
 | “自动迭代三十次，完善 docs/impl/brand-kits.md 至可开工协议版本” | `fastcar-cli auto-iterate --optimize --goal "<目标>" --scope docs/impl/brand-kits.md --session <session> --autopilot-max-iterations 30 --yes`；这里的文档是修改范围，不是 PRD 来源 | `fastcar-cli auto-iterate --optimize --goal "<目标>" --scope docs/impl/brand-kits.md --session <session> --autopilot-max-iterations 30 --yes --no-run` |
 | “校验自动迭代 state” / “检查 session 是否一致” / “检查 sub-agent 协议一致性” | 不启动自动流水线；能确定 session 或 state 路径时调用 `fastcar-cli auto-iterate --validate-state <session|state.md|state.json>`，不能确定时先运行 `--list` 或询问 | 同自动模式；这是只读管理命令，不属于 fallback 执行循环 |
 | “校验当前自动迭代 state” / “检查当前 session 状态” | `fastcar-cli auto-iterate --validate-state` | 同自动模式 |
+| “检查下一轮该做什么” / “进入下一轮前检查 validation.log 和 watchdog” / “next focus 是什么” | `fastcar-cli auto-iterate --next <session>`；session 不明确时先 `--list` 匹配或询问 | 同自动模式；这是只读循环辅助命令 |
+| “合并第 N 轮 result.json 和 validation.log” / “merge 上一轮结果到 state” | `fastcar-cli auto-iterate --merge <session> --round <N>`；未指定轮次时可省略 `--round` 使用最新迭代目录 | 同自动模式；这是状态合并辅助命令，不派发 coder |
+| “检查测试膨胀 / 技能膨胀 / bloat / 测试占比是否超限” | `fastcar-cli auto-iterate --check-bloat` | 同自动模式；这是全仓诊断命令，不创建 session |
 | “让 Codex goal 处理 REQ-001” / “派发给 Codex worker” | 旧 `--dispatch` 外部 Worker 路径已废弃；默认由主 Agent 直接派发原生 coder subagent | 同自动模式；不再使用 `--dispatch` |
 | “让 Claude Code 处理 REQ-001” / “派发给 Gemini/Kimi/Cursor worker” | 旧 `--dispatch` 外部 Worker 路径已废弃；默认由主 Agent 直接派发原生 coder subagent | 同自动模式；不再使用 `--dispatch` |
 | “列出自动迭代任务” | `fastcar-cli auto-iterate --list` | 同自动模式；session 管理命令不追加 `--yes` |
@@ -111,7 +116,7 @@
 0. 明确要求手动模式 / protocol-only / LLM-only / 不走 CLI 驱动 / 不要 spawn worker：在后续推断出的命令中追加 --no-run
 1. state 校验：validate-state
 2. session 管理：列出 / 切换 / 恢复
-3. 明确派发给 Codex / worker / goal：dispatch；这里的 goal 多数是口语，不等于当前会话 Codex goal 模型
+3. 明确循环辅助：下一轮检查 / next focus -> `--next`；合并 result+validation -> `--merge`；测试/技能膨胀诊断 -> `--check-bloat`
 4. 明确禁止修改：verify 或 plan-only
 5. 明确要求诊断、debug、复现、flaky、性能回归：diagnose
 6. 明确要求原型、试方案、验证状态机、验证数据模型：prototype
@@ -189,6 +194,21 @@ Agent：fastcar-cli auto-iterate --validate-state login-bugfix
 用户：检查当前自动迭代 state 是否一致
 Agent：fastcar-cli auto-iterate --validate-state
 
+用户：检查 login-bugfix 下一轮应该做什么
+Agent：fastcar-cli auto-iterate --next login-bugfix
+
+用户：进入 login-bugfix 下一轮前先检查 validation.log 和 watchdog
+Agent：fastcar-cli auto-iterate --next login-bugfix
+
+用户：合并 login-bugfix 第 1 轮 result.json 和 validation.log
+Agent：fastcar-cli auto-iterate --merge login-bugfix --round 1
+
+用户：上一轮验证完成了，帮我把结果 merge 到当前 session 的 state
+Agent：如果当前 session 可确定，运行 fastcar-cli auto-iterate --merge <session>；不能确定时先 fastcar-cli auto-iterate --list
+
+用户：检查当前仓库有没有测试膨胀或技能膨胀
+Agent：fastcar-cli auto-iterate --check-bloat
+
 用户：校验 login-bugfix 整个自动迭代 session 是否一致
 Agent：fastcar-cli auto-iterate --validate-state login-bugfix
 
@@ -196,10 +216,10 @@ Agent：fastcar-cli auto-iterate --validate-state login-bugfix
 Agent：旧 `--dispatch` 外部 Worker 路径已废弃；默认由主 Agent 直接派发原生 coder subagent 处理该子任务。
 
 用户：派发给 Codex worker：session 是 login-bugfix，任务是修复登录 token 过期问题，只允许改 src/auth.js,test/auth.test.js，跑 npm test
-Agent：fastcar-cli auto-iterate --dispatch login-bugfix --agent codex --task "修复登录 token 过期问题" --files "src/auth.js,test/auth.test.js" --verify-command "npm test" --dry-run
+Agent：（以下为旧 --dispatch 模板，已废弃）fastcar-cli auto-iterate --dispatch login-bugfix --agent codex --task "修复登录 token 过期问题" --files "src/auth.js,test/auth.test.js" --verify-command "npm test" --dry-run
 
 用户：让 Codex goal 接手当前自动迭代任务的 REQ-002，文件白名单是 src/auto-iterate.js 和 test/auto-iterate-doc-reliability.test.js，先生成 worker prompt 不实际执行
-Agent：fastcar-cli auto-iterate --dispatch --agent codex --task "处理 REQ-002" --files "src/auto-iterate.js,test/auto-iterate-doc-reliability.test.js" --verify-command "npm test" --dry-run
+Agent：（以下为旧 --dispatch 模板，已废弃）fastcar-cli auto-iterate --dispatch --agent codex --task "处理 REQ-002" --files "src/auto-iterate.js,test/auto-iterate-doc-reliability.test.js" --verify-command "npm test" --dry-run
 
 用户：用 Codex worker 处理 dispatch-codex 这个 session 的“补充 resume 降级测试”，只能改 test/auto-iterate-doc-reliability.test.js，验证命令 npm test
 Agent：旧 `--dispatch` 外部 Worker 路径已废弃；默认由主 Agent 直接派发原生 coder subagent 处理该子任务。
@@ -209,6 +229,12 @@ Agent：旧 `--run` / `--dispatch` 外部 Worker 路径已废弃；默认由主 
 
 用户：确认 prompt 后，让本地 Kimi 真实执行这个 worker
 Agent：旧 `--run` / `--dispatch` 外部 Worker 路径已废弃；默认由主 Agent直接派发原生 coder subagent。
+
+用户：用旧 --run 路径跑这个自动迭代任务
+Agent：旧 `--run` 外部 Worker 主循环已废弃；默认由主 Agent 直接派发原生 coder subagent。若用户明确要求不启动 subagent，则使用 protocol-only：对应 mode 命令追加 `--no-run`。
+
+用户：用 --dispatch 派给 Codex worker 处理当前 session
+Agent：旧 `--dispatch` 外部 Worker 路径已废弃；先读取 `.agent-state/auto-iterate-current.json` 确认当前 session，然后由主 Agent 直接派发原生 coder subagent，不生成 `--dispatch` 命令。
 
 旧 `--dispatch` 模板形式（已废弃，保留供参考）：
 - 通用命令模板：`fastcar-cli auto-iterate --dispatch <session> --agent codex`

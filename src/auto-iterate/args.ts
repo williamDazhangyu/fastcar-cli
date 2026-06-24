@@ -17,45 +17,13 @@ export interface AutoIterateArgs {
   examples: boolean;
   query: string | null;
   help: boolean;
-  deprecatedFlags: string[];
   captureSkillsSession?: string;
+  checkBloat?: boolean;
+  nextSession?: string;
+  mergeSession?: string;
+  mergeRound?: number;
+  deprecatedFlag?: string | null;
 }
-
-const DEPRECATED_FLAGS_WITH_VALUES = new Set([
-  "--agent",
-  "--task",
-  "--files",
-  "--verify-command",
-  "--verify-cmd",
-  "--validate-cmd",
-  "--timeout",
-  "--step-timeout",
-  "--inactivity-timeout",
-  "--validation-timeout",
-  "--progress-interval",
-  "--max-steps",
-  "--focus",
-  "--scope",
-  "--answer",
-]);
-
-const DEPRECATED_FLAGS_WITHOUT_VALUES = new Set([
-  "--run",
-  "--once",
-  "--json-progress",
-  "--check",
-  "--dry-run",
-  "--autopilot",
-  "--isolate",
-  "--allow-modify",
-  "--no-validate",
-]);
-
-const DEPRECATED_FLAGS = new Set([
-  "--dispatch",
-  ...DEPRECATED_FLAGS_WITH_VALUES,
-  ...DEPRECATED_FLAGS_WITHOUT_VALUES,
-]);
 
 const MODE_ALIASES: Record<string, string> = {
   strict: "strict",
@@ -89,6 +57,15 @@ const OPTIONS_WITH_REQUIRED_VALUE = new Set([
   "--max-iterations",
   "--autopilot-max-iterations",
   "--capture-skills",
+  "--next",
+  "--merge",
+  "--round",
+]);
+
+const DEPRECATED_LOOP_FLAGS = new Set([
+  "--run",
+  "--check",
+  "--dispatch",
 ]);
 
 const OPTIONS_WITH_OPTIONAL_VALUE = new Set([
@@ -140,19 +117,6 @@ function normalizeFlagToken(value: string): string {
   return eqIndex >= 0 ? value.slice(0, eqIndex) : value;
 }
 
-export function collectDeprecatedFlags(args: string[]): string[] {
-  const found = new Set<string>();
-  for (const arg of args) {
-    if (!arg.startsWith("-")) {
-      continue;
-    }
-    const flag = normalizeFlagToken(arg);
-    if (DEPRECATED_FLAGS.has(flag)) {
-      found.add(flag);
-    }
-  }
-  return [...found].sort();
-}
 
 export function normalizeGoalText(value: string | null | undefined): string {
   return String(value || "")
@@ -190,12 +154,22 @@ export function parseArgs(args: string[] = []): AutoIterateArgs {
     examples: false,
     query: null,
     help: false,
-    deprecatedFlags: collectDeprecatedFlags(args),
   };
 
   args.forEach((arg, index) => {
     if (arg === "--help" || arg === "-h") {
       options.help = true;
+      return;
+    }
+
+    if (arg === "--check-bloat") {
+      options.checkBloat = true;
+      return;
+    }
+
+    const flagToken = normalizeFlagToken(arg);
+    if (DEPRECATED_LOOP_FLAGS.has(flagToken)) {
+      options.deprecatedFlag = flagToken;
       return;
     }
 
@@ -307,6 +281,42 @@ export function parseArgs(args: string[] = []): AutoIterateArgs {
 
     if (arg.startsWith("--capture-skills=")) {
       options.captureSkillsSession = arg.slice("--capture-skills=".length);
+      return;
+    }
+
+    if (arg === "--next" && args[index + 1] && !args[index + 1].startsWith("-")) {
+      options.nextSession = args[index + 1];
+      return;
+    }
+
+    if (arg.startsWith("--next=")) {
+      options.nextSession = arg.slice("--next=".length);
+      return;
+    }
+
+    if (arg === "--merge" && args[index + 1] && !args[index + 1].startsWith("-")) {
+      options.mergeSession = args[index + 1];
+      return;
+    }
+
+    if (arg.startsWith("--merge=")) {
+      options.mergeSession = arg.slice("--merge=".length);
+      return;
+    }
+
+    if (arg === "--round" && args[index + 1]) {
+      const n = Number(args[index + 1]);
+      if (Number.isInteger(n) && n > 0) {
+        options.mergeRound = n;
+      }
+      return;
+    }
+
+    if (arg.startsWith("--round=")) {
+      const n = Number(arg.slice("--round=".length));
+      if (Number.isInteger(n) && n > 0) {
+        options.mergeRound = n;
+      }
       return;
     }
 
@@ -423,7 +433,7 @@ export function parseArgs(args: string[] = []): AutoIterateArgs {
     }
   });
 
-  if (!options.goal && options.deprecatedFlags.length === 0) {
+  if (!options.goal) {
     options.goal = inferGoalFromPositionals(args);
   }
 

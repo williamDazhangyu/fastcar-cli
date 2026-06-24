@@ -163,6 +163,25 @@ export async function activateSession(
     if (validationResult.degraded) {
       console.log("⚠️  当前 session 缺少 state.json，已按旧 state.md-only session 降级恢复；建议恢复后生成 state.json。");
     }
+
+    // git diff reconcile 检查
+    try {
+      const { execSync } = await import("child_process");
+      const diffOutput = execSync("git diff --stat", { encoding: "utf-8", timeout: 5000 }).trim();
+      if (diffOutput) {
+        console.log("⚠️  工作区存在未提交修改，可能与 state 不一致：");
+        const lines = diffOutput.split("\n");
+        for (const line of lines.slice(0, 5)) {
+          console.log(`    ${line}`);
+        }
+        if (lines.length > 5) {
+          console.log(`    ... 还有 ${lines.length - 5} 行`);
+        }
+        console.log("  请确认这些修改是本次 session 的预期产物后再继续。");
+      }
+    } catch {
+      // git 不可用或不是 git 仓库，跳过
+    }
   }
 
   const stateContent = await fsPromises.readFile(
