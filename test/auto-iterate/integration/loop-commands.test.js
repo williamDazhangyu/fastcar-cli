@@ -161,10 +161,43 @@ test("runMerge updates state, refreshes markdown, and next selects remaining foc
     assert(stateMd.includes("post_change_status：passed"));
     assert(!stateMd.includes("old snapshot"));
 
+    const traceJsonl = fs.readFileSync(path.join(".agent-state", "auto-iterate", "loop-session", "trace.jsonl"), "utf8");
+    const traceEntry = JSON.parse(traceJsonl.trim());
+    assert.strictEqual(traceEntry.iteration, 1);
+    assert.strictEqual(traceEntry.focus.reqId, "REQ-1");
+    assert.strictEqual(traceEntry.validation.status, "passed");
+    assert.strictEqual(traceEntry.rationaleSummary, "scoped change");
+
+    const decisions = fs.readFileSync(path.join(".agent-state", "auto-iterate", "loop-session", "decisions.md"), "utf8");
+    assert(decisions.includes("Round 1"));
+    assert(decisions.includes("scoped change"));
+
+    const handoff = fs.readFileSync(path.join(".agent-state", "auto-iterate", "loop-session", "handoff.md"), "utf8");
+    assert(handoff.includes("Requirement Status"));
+    assert(handoff.includes("pending 1"));
+    assert(handoff.includes("passed 1"));
+
     const next = await captureConsole(() => runNextCheck("loop-session"));
     const output = next.lines.join("\n");
     assert.strictEqual(next.exitCode, 0);
     assert(output.includes("Next focus:  implement_req (REQ-2)"));
+  });
+});
+
+test("runMerge rejects invalid result schema before writing state or trace artifacts", async () => {
+  await withTempCwd(async () => {
+    const statePath = writeSession("loop-session");
+    writeResult("loop-session", 1, {
+      files_changed: ["../outside.ts"],
+    });
+    writeValidation("loop-session", 1, 0);
+
+    const merge = await captureConsole(() => runMerge("loop-session", 1));
+    const output = merge.lines.join("\n");
+    assert.strictEqual(merge.exitCode, 1);
+    assert(output.includes("result.json 未通过 schema 校验"));
+    assert.strictEqual(readJson(statePath).requirements[0].status, "pending");
+    assert(!fs.existsSync(path.join(".agent-state", "auto-iterate", "loop-session", "trace.jsonl")));
   });
 });
 

@@ -2,7 +2,7 @@
  * CLI 辅助循环命令 — Loop Commands
  *
  * `--next <session>` — 每轮开始前检查：shouldStop + pickNextFocus + validation.log 防偷懒
- * `--merge <session> [--round <N>]` — 每轮结束后合并：mergeState + 写 state.json/state.md
+ * `--merge <session> [--round <N>]` — 每轮结束后合并：mergeState + 写 state.json/state.md，并派生可重建 trace artifacts
  */
 import * as fs from "fs";
 import * as path from "path";
@@ -13,10 +13,11 @@ import { pickNextFocus } from "../pipeline/pickFocus";
 import { mergeIterationIntoState } from "../pipeline/mergeState";
 import { evaluateWatchdog } from "../pipeline/watchdog";
 import { refreshStateMarkdownView } from "../pipeline/pipelineStateIO";
+import { parseAndValidateIterationResult } from "../pipeline/resultSchema";
+import { refreshTraceArtifactsSafely } from "../pipeline/traceArtifacts";
 import type {
   PipelineStateLike,
   PickFocusStateLike,
-  WorkerIterationResult,
   ValidationResult,
   MergeIterationContext,
 } from "../pipeline/types";
@@ -350,7 +351,16 @@ export async function runMerge(sessionName: string, roundOverride?: number): Pro
     process.exitCode = 1;
     return;
   }
-  const report = reportRaw as unknown as WorkerIterationResult;
+  const parsedReport = parseAndValidateIterationResult(reportRaw);
+  if (!parsedReport.valid || !parsedReport.result) {
+    console.log(`❌ result.json 未通过 schema 校验: ${resultPath}`);
+    for (const error of parsedReport.errors.slice(0, 5)) {
+      console.log(`   - ${error}`);
+    }
+    process.exitCode = 1;
+    return;
+  }
+  const report = parsedReport.result;
 
   // 4. 读 validation.log + 证据检查
   if (!fs.existsSync(logPath)) {
@@ -389,10 +399,19 @@ export async function runMerge(sessionName: string, roundOverride?: number): Pro
 
   // 7. 写回
   try {
-    writeJsonFileAtomic(statePath, merged.state);
+    await writeJsonFileAtomic(statePath, merged.state);
     const refreshIssue = await refreshStateMarkdownView(statePath, merged.state);
     if (refreshIssue) {
       merged.issues.push(refreshIssue.message || "state.md refresh failed");
+    }
+    const traceIssue = await refreshTraceArtifactsSafely(merged.state, {
+      sessionDir: paths.sessionDir,
+      traceJsonlPath: paths.sessionTraceJsonlPath,
+      decisionsPath: paths.sessionDecisionsPath,
+      handoffPath: paths.sessionHandoffPath,
+    });
+    if (traceIssue) {
+      merged.issues.push(traceIssue.message);
     }
   } catch (err) {
     console.log(`❌ 无法写入 state.json: ${err instanceof Error ? err.message : String(err)}`);
@@ -424,6 +443,7 @@ export async function runMerge(sessionName: string, roundOverride?: number): Pro
   console.log(`预算: 剩余 ${newBudgets.remainingImplementationIterations ?? "?"}`);
   const newWatchdog = (merged.state.watchdog || {}) as Record<string, unknown>;
   console.log(`Watchdog: ${newWatchdog.triggered ? "triggered" : "clear"}`);
+  console.log(`轨迹: trace.jsonl / decisions.md / handoff.md（可从 state.json 重建）`);
 
   if (merged.issues && merged.issues.length > 0) {
     console.log(`\n⚠️  Issues: ${merged.issues.join("; ")}`);

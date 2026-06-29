@@ -7,6 +7,8 @@ import {
   type SessionPaths,
 } from "./sessionPaths";
 import { readJsonFile, writeJsonFileAtomic } from "./stateIO";
+import { refreshTraceArtifactsSafely } from "../pipeline/traceArtifacts";
+import type { PipelineStateLike } from "../pipeline/types";
 
 type ValidationIssue = {
   severity: "error" | "warning";
@@ -167,7 +169,11 @@ export async function activateSession(
     // git diff reconcile 检查
     try {
       const { execSync } = await import("child_process");
-      const diffOutput = execSync("git diff --stat", { encoding: "utf-8", timeout: 5000 }).trim();
+      const diffOutput = execSync("git diff --stat", {
+        encoding: "utf-8",
+        timeout: 5000,
+        stdio: ["ignore", "pipe", "pipe"],
+      }).trim();
       if (diffOutput) {
         console.log("⚠️  工作区存在未提交修改，可能与 state 不一致：");
         const lines = diffOutput.split("\n");
@@ -195,12 +201,27 @@ export async function activateSession(
 
   await fsPromises.mkdir(sessionPaths.stateDir, { recursive: true });
   await writeCurrentFile(sessionPaths, answers);
+  const stateJson = await readJsonFile(sessionPaths.sessionStateJsonPath) as PipelineStateLike | null;
+  if (stateJson) {
+    const traceIssue = await refreshTraceArtifactsSafely(stateJson, {
+      sessionDir: sessionPaths.sessionDir,
+      traceJsonlPath: sessionPaths.sessionTraceJsonlPath,
+      decisionsPath: sessionPaths.sessionDecisionsPath,
+      handoffPath: sessionPaths.sessionHandoffPath,
+    });
+    if (traceIssue) {
+      console.log(`⚠️  ${traceIssue.message}`);
+    }
+  }
 
   console.log(action === "resume" ? "✅ 已准备恢复 session:" : "✅ 已切换当前 session:");
   console.log(`   Session: ${sessionPaths.session}`);
   console.log(`   模式: ${answers.mode} / ${answers.modeLabel}`);
   console.log(`   状态文件: ${toRelative(sessionPaths.sessionStatePath)}`);
   console.log(`   启动提示: ${toRelative(sessionPaths.sessionPromptPath)}`);
+  console.log(`   执行轨迹: ${toRelative(sessionPaths.sessionTraceJsonlPath)}`);
+  console.log(`   决策记录: ${toRelative(sessionPaths.sessionDecisionsPath)}`);
+  console.log(`   交接摘要: ${toRelative(sessionPaths.sessionHandoffPath)}`);
   console.log("\n下一步:");
   console.log(`   将 ${toRelative(sessionPaths.sessionPromptPath)} 的内容发给 Agent`);
 }

@@ -109,10 +109,26 @@ test("getSessionSummaries and listSessions expose sorted session rows", async ()
 
 test("activateSession switches current pointer and resume validates first", async () => {
   await withTempCwd(async () => {
-    createSession("demo");
+    const sessionPaths = createSession("demo");
+    writeJson(sessionPaths.sessionStateJsonPath, {
+      task: { goal: "恢复 demo" },
+      currentState: {
+        currentPhase: "coding",
+        currentTask: "implement_req:REQ-1",
+        overallStatus: "in_progress",
+        nextAction: "continue",
+      },
+      requirements: [{ id: "REQ-1", status: "pending" }],
+      traceability: { policy: "public only", iterations: [] },
+      validation: { finalVerifiability: "unknown" },
+      postChange: { status: "not_run" },
+      watchdog: { triggered: false, requiredAction: "continue", deliveryVerifiability: "unknown" },
+      deliveryEvidence: { status: "pending", unfinishedItems: "REQ-1", risks: "unknown" },
+      budgets: { remainingImplementationIterations: 1, totalCycles: 0 },
+    });
     let validateCalls = 0;
 
-    await captureConsole(() => activateSession("demo", "resume", async (session, options) => {
+    const { lines } = await captureConsole(() => activateSession("demo", "resume", async (session, options) => {
       validateCalls += 1;
       assert.strictEqual(session, "demo");
       assert.deepStrictEqual(options, { strict: true, allowMissingStateJson: true });
@@ -121,6 +137,11 @@ test("activateSession switches current pointer and resume validates first", asyn
 
     assert.strictEqual(validateCalls, 1);
     assert.strictEqual(readJson(".agent-state/auto-iterate-current.json").session, "demo");
+    assert(fs.existsSync(".agent-state/auto-iterate/demo/trace.jsonl"));
+    assert(fs.existsSync(".agent-state/auto-iterate/demo/decisions.md"));
+    assert(fs.existsSync(".agent-state/auto-iterate/demo/handoff.md"));
+    assert(lines.some((line) => line.includes("执行轨迹: .agent-state/auto-iterate/demo/trace.jsonl")));
+    assert(lines.some((line) => line.includes("交接摘要: .agent-state/auto-iterate/demo/handoff.md")));
   });
 });
 

@@ -1,5 +1,6 @@
 import { generateDeliveryDocs } from "../pipeline/deliveryDocs";
 import { finalizeDeliveryState } from "../pipeline/pipelineFinalization";
+import { refreshTraceArtifactsSafely } from "../pipeline/traceArtifacts";
 import { getSessionPaths } from "./sessionPaths";
 import { readJsonFile, writeJsonFileAtomic } from "./stateIO";
 import { resolveStateFileForValidation } from "./sessionStateValidation";
@@ -8,6 +9,18 @@ import * as path from "path";
 import type { ValidateState } from "./sessionCreation";
 
 type StateObject = Record<string, any>;
+
+async function refreshFinalizeTraceArtifacts(state: StateObject, sessionPaths: ReturnType<typeof getSessionPaths>): Promise<void> {
+  const issue = await refreshTraceArtifactsSafely(state, {
+    sessionDir: sessionPaths.sessionDir,
+    traceJsonlPath: sessionPaths.sessionTraceJsonlPath,
+    decisionsPath: sessionPaths.sessionDecisionsPath,
+    handoffPath: sessionPaths.sessionHandoffPath,
+  });
+  if (issue) {
+    console.log(`⚠️  ${issue.message}`);
+  }
+}
 
 export interface FinalizeOptions {
   yes?: boolean;
@@ -51,6 +64,7 @@ export async function finalizeAutoIterateSession(
   const finalized = finalizeDeliveryState(stateJson, { session, mode: stateJson.mode && stateJson.mode.mode, reason: "finalize" });
   if (finalized.changed) {
     await writeJsonFileAtomic(sessionPaths.sessionStateJsonPath, finalized.state);
+    await refreshFinalizeTraceArtifacts(finalized.state, sessionPaths);
     Object.keys(stateJson).forEach((key) => delete stateJson[key]);
     Object.assign(stateJson, finalized.state);
     console.log("✅ 已收敛交付门禁状态。");
@@ -63,6 +77,7 @@ export async function finalizeAutoIterateSession(
     return;
   }
 
+  const preDocsStateSnapshot = JSON.parse(JSON.stringify(stateJson)) as StateObject;
   stateJson.deliveryDocs = await generateDeliveryDocs({
     state: stateJson,
     sessionDir: sessionPaths.sessionDir,
@@ -70,11 +85,12 @@ export async function finalizeAutoIterateSession(
   });
   stateJson.updatedAt = new Date().toISOString();
   await writeJsonFileAtomic(sessionPaths.sessionStateJsonPath, stateJson);
+  await refreshFinalizeTraceArtifacts(stateJson, sessionPaths);
   console.log(`📚 已生成交付文档: ${stateJson.deliveryDocs.files.join(", ")}`);
+  console.log(`🔎 已刷新执行轨迹: trace.jsonl, decisions.md, handoff.md（可从 state.json 重建）`);
 
   const postDocsValidation = await dependencies.validateState(session, { strict: true });
   if (!postDocsValidation || !postDocsValidation.ok) {
-    // 清理已生成的不完整交付文档
     const docsDir = path.join(sessionPaths.sessionDir, "docs");
     try {
       const { promises: fsPromises } = await import("fs");
@@ -82,6 +98,10 @@ export async function finalizeAutoIterateSession(
     } catch {
       // cleanup failure is non-fatal
     }
+    await writeJsonFileAtomic(sessionPaths.sessionStateJsonPath, preDocsStateSnapshot);
+    await refreshFinalizeTraceArtifacts(preDocsStateSnapshot, sessionPaths);
+    Object.keys(stateJson).forEach((key) => delete stateJson[key]);
+    Object.assign(stateJson, preDocsStateSnapshot);
     console.log("❌ finalize 未通过：strict state 门禁失败。已清理不完整交付文档。");
     process.exitCode = 1;
     return;

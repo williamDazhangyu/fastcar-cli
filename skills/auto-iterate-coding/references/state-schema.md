@@ -11,6 +11,9 @@
 - `state.json`：唯一可编辑状态源，包含 `schemaVersion`、language、task、session、mode、budgets、currentState、watchdog、phaseGate、implementationContract、baseline、iterationPolicy、taskProfile、decisionRequest、requirements、decisions、notes、diagnose、validation、postChange、deltaAssessment、diffBudget、cleanup、styleConsolidation、contextResetReview、deliveryEvidence、skillCapture、postAgentValidationGate 等结构化字段。
 - `state.schema.json`：独立 JSON Schema artifact，用于文档、测试和第三方 Agent 对齐机器状态字段；CLI 仍以运行时代码校验作为最终门禁。
 - `state.md`：生成视图，用于人类阅读和 legacy 兼容；不得作为机器恢复、交付门禁或并发调度的唯一依据。
+- `trace.jsonl`：从 `state.json.traceability.iterations[]` 派生的一行一 JSON 执行轨迹，用于机器检索和精确复盘；缺失时可重建。
+- `decisions.md`：从 traceability 派生的人类可读决策记录，用于审计关键判断和验证依据；不得记录私有 chain-of-thought。
+- `handoff.md`：从 state 当前状态派生的恢复交接摘要，用于下一轮 Agent 快速接续；不得作为机器权威状态。
 - `auto-iterate-current.json`：当前 session 指针，必须记录 `stateJsonFile`、`stateFile`、`promptFile` 和 `session`。
 
 ## state.md 必需章节
@@ -38,7 +41,7 @@
 | 19 | `## Decisions` | 必填；记录已确认的架构、产品、接口和用户限制 | Agent |
 | 20 | `## Traceability / 可追溯记录` | 必填；从 state.json.traceability 渲染，只记录公开可审计推理摘要、决策、证据、验证和路径，不记录私有思考链 | CLI / Agent |
 | 21 | `## Delivery Docs / 交付文档` | 必填；从 state.json.deliveryDocs 渲染，`--finalize` 生成 api.md、changelog.md、architecture.md、implementation.md | CLI |
-| 22 | `## Notes / 备注` | 必填；从 state.json.notes 渲染，记录 Worker 建议备注和 CLI 合并说明 | CLI / Agent |
+| 22 | `## Notes / 备注` | 必填；从 state.json.notes 渲染，记录 coder 建议备注和 CLI 合并说明 | CLI / Agent |
 | 23 | `## Hypotheses` | 必填；诊断、修复和优化时维护假设状态；结构化来源为 state.json.diagnose.hypotheses | Agent |
 | 24 | `## Validation` | 必填；记录通过、失败、未运行和不可用能力导致的未验证项 | Agent |
 | 25 | `## Post-Change Validation / 修改后验证` | 必填；从 state.json.postChange 渲染，记录修改后验证命令、结果和回归标记 | Agent |
@@ -59,12 +62,13 @@
 - `state.json.schemaVersion` 必须匹配当前 CLI 支持版本；不匹配时必须先迁移或停止恢复。
 - `state.json` 中的枚举、数字、布尔、数组和对象字段必须满足强类型校验；不得把 Markdown 中的自由文本作为机器权威状态。
 - `state.json.language` 可选记录用户语言推断结果，当前支持 `zh` / `en`；旧 session 缺失该字段时可从 `task.goal` 或来源文档推断，不得阻断恢复。
-- `status`、`mode`、`requiredAction`、`deliveryVerifiability` 等机器枚举必须保持英文；只允许人类可读摘要、原因、证据、`state.md` 视图、Worker prompt 和 Skill Capture 文档跟随用户语言。
+- `status`、`mode`、`requiredAction`、`deliveryVerifiability` 等机器枚举必须保持英文；只允许人类可读摘要、原因、证据、`state.md` 视图、coder prompt 和 Skill Capture 文档跟随用户语言。
 - `state.json.mode.runtimeAutopilot` 记录运行时是否启用多轮 Autopilot；`mode.loopShape` 只能是 `default`、`autopilot` 或 `plan_once`；`mode.executionMode` 只能是 `native_subagent` 或 `protocol_only`，用于锁定本 session 是否派发原生 coder subagent。执行模式不得运行中静默切换。
 - `mode.executionMode=native_subagent` 时，`subAgentDispatch.enabled` 必须为 `true` 且 `concurrencyLimit=1`；这是默认自动模式。只有 `mode.executionMode=protocol_only`（用户明确 `--no-run`、手动模式、不启动 subagent，或无原生 Agent 工具）时，`subAgentDispatch.enabled=false` 且 `concurrencyLimit=0`。
-- `state.json.notes[]`、`state.json.diagnose.hypotheses[]` 和 `state.json.diagnose.hypothesisQueue[]` 是 Worker `state_patch.notes` / `state_patch.hypotheses` 的白名单合并目标；Worker 不得通过它们覆盖预算、验证或交付门禁。CLI merge 每类最多保留最近 200 条，避免长期诊断 session 无界膨胀；`hypothesisQueue` 入队时必须保持唯一 `H<n>` ID，旧状态只有 `diagnose.hypotheses[]` 且缺少 `hypothesisQueue[]` 时必须先物化为 pending 队列，`hypothesis_test` focus 必须携带待验证假设 ID，并按 `pending -> supported/rejected/inconclusive` 推进匹配队列项，避免重复验证或误更新同一个假设。
-- `state.json.traceability.iterations[]` 是每轮公开审计记录，只能保存 `rationaleSummary`、决策、证据、文件、验证结果和 prompt/result/log 路径；不得记录或要求 Worker 输出私有 chain-of-thought；CLI merge 只保留最近 200 条，完整每轮原始证据以 `iterations/<n>/result.json`、`worker.log` 和 `validation.log` 为准。
-- `state.json.documentation` 汇总 Worker 的 `documentation.apiChanges`、`architectureNotes`、`implementationNotes` 和 `changelogEntries`，作为 `--finalize` 生成 docs 的输入；Worker 不能直接写 `deliveryDocs`；CLI merge 每类最多保留最近 200 条，避免长期 session 让 `state.json` 无界膨胀。
+- `state.json.notes[]`、`state.json.diagnose.hypotheses[]` 和 `state.json.diagnose.hypothesisQueue[]` 是 coder `state_patch.notes` / `state_patch.hypotheses` 的白名单合并目标；coder 不得通过它们覆盖预算、验证或交付门禁。CLI merge 每类最多保留最近 200 条，避免长期诊断 session 无界膨胀；`hypothesisQueue` 入队时必须保持唯一 `H<n>` ID，旧状态只有 `diagnose.hypotheses[]` 且缺少 `hypothesisQueue[]` 时必须先物化为 pending 队列，`hypothesis_test` focus 必须携带待验证假设 ID，并按 `pending -> supported/rejected/inconclusive` 推进匹配队列项，避免重复验证或误更新同一个假设。
+- `state.json.traceability.iterations[]` 是每轮公开审计记录，只能保存 `rationaleSummary`、决策、证据、文件、验证结果和 prompt/result/log 路径；不得记录或要求 coder 输出私有 chain-of-thought；CLI merge 只保留最近 200 条，完整每轮原始证据以 `iterations/<n>/result.json`、`worker.log`（历史命名，当前可作为 coder 日志路径）和 `validation.log` 为准。
+- CLI 应在 session 创建、`--merge`、`--resume` 和 `--finalize` 时从 `state.json` 刷新 `trace.jsonl`、`decisions.md` 和 `handoff.md`。这三类文件是派生 artifact，旧 session 缺失时不阻断恢复；若与 `state.json` 冲突，以 `state.json` 为准重新生成。
+- `state.json.documentation` 汇总 coder 的 `documentation.apiChanges`、`architectureNotes`、`implementationNotes` 和 `changelogEntries`，作为 `--finalize` 生成 docs 的输入；coder 不能直接写 `deliveryDocs`；CLI merge 每类最多保留最近 200 条，避免长期 session 让 `state.json` 无界膨胀。
 - `state.json.deliveryDocs` 由 CLI 在 `--finalize` 阶段生成，默认路径为 `.agent-state/auto-iterate/<session>/docs/`，固定产物为 `api.md`、`changelog.md`、`architecture.md`、`implementation.md`。
 - `state.json.optimization.baselineMetrics` / `postMetrics` / `metricComparison` 记录优化前后可比较指标；连续无改善通过 `noImprovementStreak` 与 `maxNoImprovementIterations` 控制停止，不得在没有改善证据时无限优化。
 - `state.json.validation.commands[]` 允许启动时的字符串命令、结构化 `{ executable, args }` 确定性命令和未执行配置对象，也允许运行后的对象历史；带 `iteration/result/status/phase/exitCode/summary` 的对象只作为历史证据，不会被 `parseValidationCommands` 回流为下一轮执行命令；历史对象最多保留最近 200 条。运行时由 Node 确定性 runner 使用 `shell:false` 执行，复杂 shell 字符串会被拒绝并标记为未配置可运行验证。
@@ -88,7 +92,7 @@
 - `implementationContract` 是编码前契约；`contract` 阶段通过时，`implementationContract.status` 必须为 `approved` 且 `openQuestions` 必须为空。
 - `baseline` 必须在 coding 前可判定，状态只能是 `passed`、`failed`、`skipped_with_reason` 或 `not_available`；结构化跳过必须记录原因，不得用 `unknown` 冒充验证。
 - `iterationPolicy.maxGoalsPerIteration` 必须等于 1；连续失败达到阈值时不得继续自动编码。
-- `taskProfile.complexity=large` 或 `taskProfile.risk=high` 时，必须要求用户确认；`taskProfile.needsUserConfirmation=true` 时，`decisionRequest.status` 必须为 `approved` 或 `blocked`。唯一例外是 CLI 运行中由 Worker 触发的人工决策中断：`decisionRequest.status="pending"`、`decisionRequest.triggers` 包含 `pipeline_worker`，且 `watchdog.requiredAction="ask_user"` 时可以持久化，等待 Router 用 `--resume --answer <id>` 批准后再继续。
+- `taskProfile.complexity=large` 或 `taskProfile.risk=high` 时，必须要求用户确认；`taskProfile.needsUserConfirmation=true` 时，`decisionRequest.status` 必须为 `approved` 或 `blocked`。唯一例外是 coder 结果触发的人工决策中断：`decisionRequest.status="pending"`、`decisionRequest.triggers` 包含 `pipeline_worker`（历史字段名，保留兼容）或 `coder`，且 `watchdog.requiredAction="ask_user"` 时可以持久化，等待 Router 用 `--resume --answer <id>` 批准后再继续。
 - `postChange.regressionDetected=true` 或 `deltaAssessment.status=regression` 时，`deltaAssessment.decision` 不得为 `keep`，`iterationPolicy.lastDecision` 不得为 `continue`。
 - `diffBudget.changedFiles` / `diffBudget.diffLines` 不得超过 `iterationPolicy.maxChangedFiles` / `iterationPolicy.maxDiffLines`；`diffBudget.status=over_budget` 或存在 `outOfScopeFiles` / `highRiskFiles` 时，`iterationPolicy.lastDecision` 不得为 `continue`。
 - `deliveryEvidence.status=ready / delivered` 时，关键 RCM 不得存在开放项，`validation.finalVerifiability` 不得为 `unknown`，且 `cleanup.status` 必须为 `completed`。
@@ -128,7 +132,7 @@
 - session 基线一致性：32 个章节、session 路径、`start-prompt.md`、`auto-iterate-current.json`、预算计数、最少轮次、Phase Gate、Implementation Contract、Baseline、Iteration Policy、Task Profile、Decision Request、Watchdog、RCM/DoD、Validation、Post-Change Validation、Delta Assessment、Diff Budget、临时产物清理、Style Consolidation、Context Reset Review Gate、Delivery Evidence、Skill Capture 和 Post-Agent Validation Gate。
 - sub-agent 协议一致性：`Sub-Agent Dispatch`、`Decisions` 中的并发确认、coder 文件 ownership、active/history 计数、merge 状态和 RCM 推进风险。
 
-校验结果中的 `ERROR` 表示不应继续恢复、dispatch 或按成功交付输出；`WARN` 表示有参考风险，通常应在下一轮迭代、dispatch 或交付前同步状态。
+校验结果中的 `ERROR` 表示不应继续恢复、派发 coder 或按成功交付输出；`WARN` 表示有参考风险，通常应在下一轮迭代、派发 coder 或交付前同步状态。
 
 交付门禁的交叉检查包括：
 

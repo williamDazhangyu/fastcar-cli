@@ -54,6 +54,9 @@ test("getSessionPaths uses standard auto-iterate file layout", async () => {
     assert.strictEqual(sessionPaths.sessionStateJsonPath, path.join(sessionPaths.sessionDir, "state.json"));
     assert.strictEqual(sessionPaths.sessionStatePath, path.join(sessionPaths.sessionDir, "state.md"));
     assert.strictEqual(sessionPaths.sessionPromptPath, path.join(sessionPaths.sessionDir, "start-prompt.md"));
+    assert.strictEqual(sessionPaths.sessionTraceJsonlPath, path.join(sessionPaths.sessionDir, "trace.jsonl"));
+    assert.strictEqual(sessionPaths.sessionDecisionsPath, path.join(sessionPaths.sessionDir, "decisions.md"));
+    assert.strictEqual(sessionPaths.sessionHandoffPath, path.join(sessionPaths.sessionDir, "handoff.md"));
     assert.strictEqual(toRelative(sessionPaths.sessionStatePath), ".agent-state/auto-iterate/login-fix/state.md");
   });
 });

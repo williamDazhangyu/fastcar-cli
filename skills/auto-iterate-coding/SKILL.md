@@ -81,7 +81,7 @@ Codex goal 模型、普通提示词中的 `Goal:` 前缀、以及 `fastcar-cli a
 
 语言规则：Agent 的输出、状态记录、交付总结和生成文档必须与用户当前提示语言保持一致；已创建自动迭代 session 时，优先跟随 `state.language.code`。用户使用中文或 `state.language.code=zh` 时，最终对话回复、本次任务交付总结、阶段验收摘要、Skill Capture 人类可读内容和生成文档必须使用中文；英文仅用于固定术语、命令、代码、文件名、JSON key、API 名称、机器枚举值或用户明确要求保留英文的内容。不得在任务完成时用英文收口。
 
-可追溯规则：自动迭代可以记录公开、可审计的推理摘要、决策、证据、验证命令和相关路径，但不得记录或要求输出模型私有 chain-of-thought。Worker 如需说明"为什么这样做"，只能写入 `trace.rationaleSummary`、`trace.decisions` 和 `trace.evidence`；CLI 在 merge 时清洗后写入 `state.traceability.iterations[]`。
+可追溯规则：自动迭代可以记录公开、可审计的推理摘要、决策、证据、验证命令和相关路径，但不得记录或要求输出模型私有 chain-of-thought。Coder 如需说明"为什么这样做"，只能在 `result.json` 写入 `trace.rationaleSummary`、`trace.decisions` 和 `trace.evidence`；CLI 在 merge 时清洗后写入 `state.traceability.iterations[]`，并派生刷新 `trace.jsonl`、`decisions.md` 和 `handoff.md`。这些派生文件用于复盘和恢复，缺失时可从 `state.json` 重建，不得反向覆盖机器权威状态。
 
 输出纪律：Agent 在自动迭代执行过程中必须遵守 [contracts/output-discipline-contract.md](contracts/output-discipline-contract.md) 定义的输出规则。核心原则：Coder 不说话（只写文件）、主 Agent 不思考（不输出私有推理链）、进展按模板、决策结构化、交付按模板、推理只入 trace。
 
@@ -369,7 +369,10 @@ fastcar-cli auto-iterate --resume login-bugfix
     └── <session>/
         ├── state.json                 # 机器权威状态源
         ├── state.md                   # 由 state.json 渲染的人类视图
-        └── start-prompt.md
+        ├── start-prompt.md
+        ├── trace.jsonl                # 每轮公开审计记录，一行一个 JSON
+        ├── decisions.md               # 人类可读的关键决策和依据
+        └── handoff.md                 # 下一轮恢复交接摘要
 ```
 
 Agent 判断当前模式和任务的优先级：
@@ -384,7 +387,7 @@ Agent 判断当前模式和任务的优先级：
 
 执行规则：
 
-- 启动 Autopilot、medium/large 或多轮自动迭代前，必须先确认或创建 `auto-iterate/<session>/state.json`、`auto-iterate/<session>/state.md`、`auto-iterate/<session>/start-prompt.md` 和 `auto-iterate-current.json`。
+- 启动 Autopilot、medium/large 或多轮自动迭代前，必须先确认或创建 `auto-iterate/<session>/state.json`、`auto-iterate/<session>/state.md`、`auto-iterate/<session>/start-prompt.md` 和 `auto-iterate-current.json`；`trace.jsonl`、`decisions.md`、`handoff.md` 是可重建派生视图，CLI 创建、merge、resume 和 finalize 时应刷新。
 - 如果用户未显式指定 session，Agent 必须按目标生成一个小写字母、数字和连字符组成的 session 名，并写入 current 指针。
 - 只写 legacy mirror 不算完整状态持久化；若环境只能维护 legacy mirror 或对话内状态，必须标记 `状态持久化: degraded` 并说明无法创建独立 session 的原因。
 - 每轮结束必须检查 current 指针是否指向本 session、session state 是否存在、session 名是否一致、最近验证和迭代计数是否已写入 state；不一致时先进入 `reconcile`，不得继续交付。

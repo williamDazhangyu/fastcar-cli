@@ -94,6 +94,9 @@ test("createAutoIterateSession writes state, prompt, and current files", async (
     assert(fs.existsSync(".agent-state/auto-iterate/login-fix/state.json"));
     assert(fs.existsSync(".agent-state/auto-iterate/login-fix/state.md"));
     assert(fs.existsSync(".agent-state/auto-iterate/login-fix/start-prompt.md"));
+    assert(fs.existsSync(".agent-state/auto-iterate/login-fix/trace.jsonl"));
+    assert(fs.existsSync(".agent-state/auto-iterate/login-fix/decisions.md"));
+    assert(fs.existsSync(".agent-state/auto-iterate/login-fix/handoff.md"));
     assert.strictEqual(readJson(".agent-state/auto-iterate-current.json").session, "login-fix");
 
     const state = readJson(".agent-state/auto-iterate/login-fix/state.json");
@@ -112,7 +115,15 @@ test("createAutoIterateSession writes state, prompt, and current files", async (
     assert(created.outputSummary.includes("📊 进度: session=login-fix"));
     assert(created.outputSummary.includes("🧭 执行: 读取 .agent-state/auto-iterate/login-fix/start-prompt.md 和 .agent-state/auto-iterate/login-fix/state.json 后开始"));
     assert(created.outputSummary.includes("✅ 结果: state.md=.agent-state/auto-iterate/login-fix/state.md"));
+    assert(created.outputSummary.includes("🔎 轨迹: trace=.agent-state/auto-iterate/login-fix/trace.jsonl"));
     assert(!created.outputSummary.includes("Requirement Coverage Matrix"));
+
+    const trace = fs.readFileSync(".agent-state/auto-iterate/login-fix/trace.jsonl", "utf8");
+    const decisions = fs.readFileSync(".agent-state/auto-iterate/login-fix/decisions.md", "utf8");
+    const handoff = fs.readFileSync(".agent-state/auto-iterate/login-fix/handoff.md", "utf8");
+    assert.strictEqual(trace, "");
+    assert(decisions.includes("暂无决策记录"));
+    assert(handoff.includes("修复登录"));
   });
 });
 

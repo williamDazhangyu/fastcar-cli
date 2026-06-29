@@ -224,6 +224,7 @@ export const NATURAL_LANGUAGE_EXAMPLES: NaturalLanguageExampleSection[] = [
         notes: [
           "自然名称不等于 session id 时先 list 匹配。",
           "resume、list、switch 不追加 --yes。",
+          "resume/switch 会从 state.json 派生刷新 trace.jsonl、decisions.md 和 handoff.md；缺失不阻断恢复，冲突时以 state.json 为准。",
         ],
       },
     ],
@@ -236,6 +237,7 @@ export const NATURAL_LANGUAGE_EXAMPLES: NaturalLanguageExampleSection[] = [
       "进入 login-bugfix 的下一轮前先检查 validation.log 和 watchdog",
       "合并 login-bugfix 第 1 轮 result.json 和 validation.log",
       "把当前 session 的上一轮结果 merge 到 state.json，然后告诉我下一步",
+      "把上一轮结果转换成 trace.jsonl、decisions.md 和 handoff.md 便于恢复",
       "上一轮验证完成了，帮我执行 auto-iterate merge，round 是 2",
     ],
     fewShots: [
@@ -251,7 +253,8 @@ export const NATURAL_LANGUAGE_EXAMPLES: NaturalLanguageExampleSection[] = [
         user: "合并 login-bugfix 第 1 轮 result.json 和 validation.log",
         route: "fastcar-cli auto-iterate --merge login-bugfix --round 1",
         notes: [
-          "--merge 会读取 iterations/<round>/result.json 和 validation.log，合并到 state.json 并刷新 state.md。",
+          "--merge 会读取 iterations/<round>/result.json 和 validation.log，合并到 state.json，刷新 state.md，并派生 trace.jsonl / decisions.md / handoff.md。",
+          "三个 trace artifact 是可重建转换视图，不得反向覆盖 state.json。",
           "用户明确轮次时追加 --round；未明确时使用最新迭代目录。",
         ],
       },
@@ -337,6 +340,7 @@ export const NATURAL_LANGUAGE_EXAMPLES: NaturalLanguageExampleSection[] = [
       "帮我验收 docs/login.md 是否都实现了，不要修改代码，最多跑 3 轮，session 叫 login-check",
       "只规划支付模块重构，不要写代码，session 叫 payment-plan，输出风险和验证策略",
       "优化订单查询性能，保持 API 兼容，最多跑 5 轮，session 叫 order-query-optimize",
+      "最终交付前执行 finalize，并刷新交付文档和 trace/handoff 派生文件",
     ],
     fewShots: [
       {
@@ -345,6 +349,7 @@ export const NATURAL_LANGUAGE_EXAMPLES: NaturalLanguageExampleSection[] = [
         notes: [
           "多个约束同时出现时先判定主模式，再追加预算、session 和资源限制。",
           "外部资源限制应进入后续 state 或启动提示，不要要求连接生产数据库。",
+          "交付阶段映射为 --finalize <session> --yes；finalize 生成 docs 并刷新 trace.jsonl、decisions.md、handoff.md。",
         ],
       },
     ],
@@ -387,6 +392,8 @@ export function renderNaturalLanguageExamples(query?: unknown): string {
     "Few-shot 样本中的 Route 是路由目标形态。",
     "",
     "自然语言路由必须每次生成独立 session：用户已指定时使用该 session；用户未指定时，由 Agent 根据模式和目标生成英文小写、数字和连字符组成的默认 session，并在命令中显式追加 --session <name>。",
+    "",
+    "涉及 merge、resume、switch 或 finalize 的自然语言，应转换为刷新 state.json/state.md 并派生 trace.jsonl、decisions.md、handoff.md 的新语义；派生文件只用于复盘和恢复，不作为机器权威状态。",
     "",
   ];
   for (const section of sections) {

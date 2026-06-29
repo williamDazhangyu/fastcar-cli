@@ -83,7 +83,7 @@
 5. mergeState(state, result, validation)
    └─ 需求状态推进：coder → implemented，主 Agent 验证确认 → passed
 
-6. 更新 state.json + 刷新 state.md → 回到 1
+6. 更新 state.json + 刷新 state.md / trace.jsonl / decisions.md / handoff.md → 回到 1
 ```
 
 ---
@@ -121,6 +121,18 @@ verdict: passed
 ```
 
 交付前主 Agent 必须逐条确认 `validation.log` 中每条命令都真实执行过（exit code 有值、duration > 0），不得跳过。
+
+---
+
+## 可观测性派生文件
+
+`state.json` 仍是唯一机器权威源。CLI 在 session 创建、`--merge`、`--resume` 和 `--finalize` 时从 `state.traceability.iterations[]` 派生三类文件，便于人类和下一轮 Agent 复盘：
+
+- `trace.jsonl`：每轮一行 JSON，记录 focus、公开理由摘要、决策、证据、修改文件、验证结果和 prompt/result/log 路径。
+- `decisions.md`：按轮次汇总公开决策和依据，用于人工审计。
+- `handoff.md`：压缩目标、当前状态、需求计数、最近验证、风险和下一步，用于恢复交接。
+
+这些文件不得记录私有 chain-of-thought；缺失时可由 CLI 从 `state.json` 重建，不作为旧 session 恢复的阻断条件。
 
 ---
 

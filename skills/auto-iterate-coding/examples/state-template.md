@@ -300,7 +300,7 @@ iterations：
     prompt_path：
     result_path：
     log_path：
-说明：Worker 只能提交 `trace.rationaleSummary`、`trace.decisions` 和 `trace.evidence`；CLI 清洗后合并并补充验证与路径证据。
+说明：Coder 只能在 `result.json` 提交 `trace.rationaleSummary`、`trace.decisions` 和 `trace.evidence`；CLI 清洗后合并并补充验证与路径证据。
 
 ## Delivery Docs / 交付文档
 status：pending / generated / blocked / not_available

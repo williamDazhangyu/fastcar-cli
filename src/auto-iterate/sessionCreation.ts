@@ -15,6 +15,7 @@ import { readJsonFile, writeJsonFileAtomic } from "./stateIO";
 import { buildStateModel } from "./sessionStateModel";
 import { buildStateContent } from "./sessionStateContent";
 import { buildPromptContent } from "./sessionPromptContent";
+import { refreshTraceArtifactsSafely } from "../pipeline/traceArtifacts";
 import {
   MODE_CONFIGS,
   buildNonInteractiveConfig,
@@ -110,6 +111,9 @@ export function renderCreatedSessionSummary(
   const sessionStateFile = answers.sessionStateFile || toRelative(sessionPaths.sessionStatePath);
   const sessionPromptFile = answers.sessionPromptFile || toRelative(sessionPaths.sessionPromptPath);
   const currentFile = answers.currentFile || toRelative(sessionPaths.currentPath);
+  const traceFile = toRelative(sessionPaths.sessionTraceJsonlPath);
+  const decisionsFile = toRelative(sessionPaths.sessionDecisionsPath);
+  const handoffFile = toRelative(sessionPaths.sessionHandoffPath);
   const modeLabel = answers.modeLabel ? ` / ${answers.modeLabel}` : "";
   const executionMode = answers.executionMode || "native_subagent";
   const goal = answers.goal || "未指定";
@@ -121,6 +125,7 @@ export function renderCreatedSessionSummary(
     visualLine("📊", "进度", `session=${sessionPaths.session}；mode=${answers.mode || "unknown"}${modeLabel}；execution=${executionMode}`, "blue"),
     visualLine("🧭", "执行", `读取 ${sessionPromptFile} 和 ${sessionStateJsonFile} 后开始；终端只显示关键进展`, "magenta"),
     visualLine("✅", "结果", `state.md=${sessionStateFile}；current=${currentFile}；详细证据保留在状态文件和验证日志`, "green"),
+    visualLine("🔎", "轨迹", `trace=${traceFile}；decisions=${decisionsFile}；handoff=${handoffFile}`, "cyan"),
   ].join("\n");
 }
 
@@ -174,6 +179,15 @@ export async function createAutoIterateSession(
   }
   const promptContent = buildPromptContent(answers);
   await writeJsonFileAtomic(sessionPaths.sessionStateJsonPath, stateModel);
+  const traceIssue = await refreshTraceArtifactsSafely(stateModel, {
+    sessionDir: sessionPaths.sessionDir,
+    traceJsonlPath: sessionPaths.sessionTraceJsonlPath,
+    decisionsPath: sessionPaths.sessionDecisionsPath,
+    handoffPath: sessionPaths.sessionHandoffPath,
+  });
+  if (traceIssue) {
+    console.log(`⚠️  ${traceIssue.message}`);
+  }
   await fsPromises.writeFile(
     sessionPaths.sessionStatePath,
     buildStateContent(answers),

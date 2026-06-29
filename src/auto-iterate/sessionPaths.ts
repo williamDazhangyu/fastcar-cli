@@ -9,6 +9,9 @@ const CURRENT_FILE = "auto-iterate-current.json";
 const SESSION_STATE_JSON_FILE = "state.json";
 const SESSION_STATE_FILE = "state.md";
 const SESSION_PROMPT_FILE = "start-prompt.md";
+const SESSION_TRACE_JSONL_FILE = "trace.jsonl";
+const SESSION_DECISIONS_FILE = "decisions.md";
+const SESSION_HANDOFF_FILE = "handoff.md";
 
 export interface StatePaths {
   stateDir: string;
@@ -22,6 +25,9 @@ export interface SessionPaths extends StatePaths {
   sessionStateJsonPath: string;
   sessionStatePath: string;
   sessionPromptPath: string;
+  sessionTraceJsonlPath: string;
+  sessionDecisionsPath: string;
+  sessionHandoffPath: string;
 }
 
 export function toRelative(filePath: string): string {
@@ -72,6 +78,9 @@ export function getSessionPaths(sessionName: string | null | undefined): Session
     sessionStateJsonPath: path.join(sessionDir, SESSION_STATE_JSON_FILE),
     sessionStatePath: path.join(sessionDir, SESSION_STATE_FILE),
     sessionPromptPath: path.join(sessionDir, SESSION_PROMPT_FILE),
+    sessionTraceJsonlPath: path.join(sessionDir, SESSION_TRACE_JSONL_FILE),
+    sessionDecisionsPath: path.join(sessionDir, SESSION_DECISIONS_FILE),
+    sessionHandoffPath: path.join(sessionDir, SESSION_HANDOFF_FILE),
   };
 }
 

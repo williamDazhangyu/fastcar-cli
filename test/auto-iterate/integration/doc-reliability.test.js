@@ -978,7 +978,6 @@ test("自然语言路由文档覆盖 CLI 支持的模式、预算和 session 规
     "--list",
     "--switch",
     "--resume",
-    "--dispatch",
     "--next",
     "--merge",
     "--check-bloat",
@@ -1027,22 +1026,20 @@ test("自然语言路由文档覆盖 CLI 支持的模式、预算和 session 规
   assertIncludes(routing, "让 auto-iterate goal 处理：修复登录失败", "natural-language-routing.md");
   assertIncludes(routing, "父任务启动推荐句式：让 auto-iterate goal 处理：<目标>", "natural-language-routing.md");
   assertIncludes(routing, "Codex `/goal` + auto-iterate 推荐句式：先在交互式 Codex 输入 `/goal`", "natural-language-routing.md");
-  assertIncludes(routing, "fastcar-cli auto-iterate --dispatch <session> --agent codex", "natural-language-routing.md");
-  assertIncludes(routing, "AUTO_ITERATE_CODEX_CMD", "natural-language-routing.md");
-  assertIncludes(routing, "--agent <claude|gemini|kimi|cursor|windsurf|copilot|jules|devin|openhands|replit>", "natural-language-routing.md");
-  assertIncludes(routing, "AUTO_ITERATE_<AGENT>_CMD", "natural-language-routing.md");
   assertIncludes(routing, "派发给 Codex worker：session 是 login-bugfix", "natural-language-routing.md");
   assertIncludes(routing, "让 Codex goal 接手当前自动迭代任务的 REQ-002", "natural-language-routing.md");
   assertIncludes(routing, "用 Codex worker 处理 dispatch-codex 这个 session", "natural-language-routing.md");
   assertIncludes(routing, "确认 prompt 后，让本地 Codex 真实执行这个 worker", "natural-language-routing.md");
-  assertIncludes(routing, "codex exec --cd . --sandbox workspace-write", "natural-language-routing.md");
   assertIncludes(routing, "确认 prompt 后，让本地 Kimi 真实执行这个 worker", "natural-language-routing.md");
   assertIncludes(routing, "旧 CLI 驱动路径已废弃", "natural-language-routing.md");
   assertIncludes(routing, "默认必须使用主 Agent + coder subagent 原生工作流", "natural-language-routing.md");
-  assertIncludes(routing, "子任务派发推荐句式：让 Codex worker 处理 <session> 的 <REQ 或子任务>", "natural-language-routing.md");
-  assertIncludes(routing, "兼容旧口语“让 Codex goal 处理”", "natural-language-routing.md");
-  assertIncludes(routing, "必须先判断是当前会话 goal 还是 worker dispatch", "natural-language-routing.md");
-  assertIncludes(routing, "真实执行句式：确认 prompt 后用本地 Codex/Kimi 执行", "natural-language-routing.md");
+  assertIncludes(routing, "旧 `--dispatch` 模板已经从当前路由中移除", "natural-language-routing.md");
+  assertIncludes(routing, "子任务派发推荐句式：旧 `--dispatch` 外部 Worker 路径已废弃", "natural-language-routing.md");
+  assertIncludes(routing, "真实执行句式：确认 prompt 后由当前主 Agent 派发 coder subagent", "natural-language-routing.md");
+  assertNotIncludes(routing, "fastcar-cli auto-iterate --dispatch <session>", "natural-language-routing.md");
+  assertNotIncludes(routing, "codex exec --cd . --sandbox workspace-write", "natural-language-routing.md");
+  assertNotIncludes(routing, "AUTO_ITERATE_CODEX_CMD", "natural-language-routing.md");
+  assertNotIncludes(routing, "AUTO_ITERATE_<AGENT>_CMD", "natural-language-routing.md");
   assertIncludes(routing, "Few-shot 路由优化", "natural-language-routing.md");
   assertIncludes(routing, "few-shot 样本做贴近表达的类比", "natural-language-routing.md");
   assertIncludes(routing, "只遵从协议规范执行", "natural-language-routing.md");
@@ -1153,11 +1150,19 @@ test("skills README 同步 auto-iterate goal 边界和 session 示例", () => {
 test("runtime bug analysis is marked as historical status matrix, not current P0 report", () => {
   const analysis = readRepoFile("docs/archive/runtime-bugs-and-timeout-analysis.md");
 
-  assertIncludes(analysis, "历史报告只能作为回归检查清单", "runtime-bugs-and-timeout-analysis.md");
-  assertIncludes(analysis, "当前状态", "runtime-bugs-and-timeout-analysis.md");
-  assertIncludes(analysis, "`--isolate` 新建 untracked 文件永久丢失 | 已修复", "runtime-bugs-and-timeout-analysis.md");
-  assertIncludes(analysis, "Kimi Adapter 同步阻塞心跳 | 已修复", "runtime-bugs-and-timeout-analysis.md");
+  assertIncludes(analysis, "只保留旧 `auto-iterate` 运行时风险的历史上下文", "runtime-bugs-and-timeout-analysis.md");
+  assertIncludes(analysis, "不再作为当前 Bug 清单、P0/P1 状态矩阵或实现依据", "runtime-bugs-and-timeout-analysis.md");
+  assertIncludes(analysis, "旧 CLI Worker 路径已经移除", "runtime-bugs-and-timeout-analysis.md");
+  assertIncludes(analysis, "当前默认架构是主 Agent 直接管理 `coder` subagent", "runtime-bugs-and-timeout-analysis.md");
+  assertIncludes(analysis, "## 当前权威入口", "runtime-bugs-and-timeout-analysis.md");
+  assertIncludes(analysis, "docs/auto-iterate-current-architecture.md", "runtime-bugs-and-timeout-analysis.md");
+  assertIncludes(analysis, "skills/auto-iterate-coding/references/state-schema.md", "runtime-bugs-and-timeout-analysis.md");
+  assertIncludes(analysis, "test/auto-iterate/**", "runtime-bugs-and-timeout-analysis.md");
   assertIncludes(analysis, "没有这些证据时", "runtime-bugs-and-timeout-analysis.md");
+  assertNotIncludes(analysis, "src/adapters/kimi.js", "runtime-bugs-and-timeout-analysis.md");
+  assertNotIncludes(analysis, "pipelineWorkerProgress", "runtime-bugs-and-timeout-analysis.md");
+  assertNotIncludes(analysis, "test/pipeline.test.js", "runtime-bugs-and-timeout-analysis.md");
+  assertNotIncludes(analysis, "AUTO_ITERATE_CODEX_CMD", "runtime-bugs-and-timeout-analysis.md");
   assertNotIncludes(analysis, "运行时 Bug 汇总（按严重程度排序）", "runtime-bugs-and-timeout-analysis.md");
   assertNotIncludes(analysis, "现有 125 个测试全部通过，以下问题均未被现有测试覆盖", "runtime-bugs-and-timeout-analysis.md");
 });

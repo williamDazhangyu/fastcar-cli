@@ -115,6 +115,12 @@ test("finalize runs capture, validates before docs, writes docs, and validates a
     assert(lines.some((line) => line.includes("finalize 完成")));
     assert(fs.existsSync(".agent-state/auto-iterate/finalize-ok/docs/api.md"));
     assert(fs.existsSync(".agent-state/auto-iterate/finalize-ok/docs/architecture.md"));
+    assert(fs.existsSync(".agent-state/auto-iterate/finalize-ok/trace.jsonl"));
+    assert(fs.existsSync(".agent-state/auto-iterate/finalize-ok/decisions.md"));
+    assert(fs.existsSync(".agent-state/auto-iterate/finalize-ok/handoff.md"));
+    const handoff = fs.readFileSync(".agent-state/auto-iterate/finalize-ok/handoff.md", "utf8");
+    assert(handoff.includes("验证 finalize"));
+    assert(handoff.includes("Delivery"));
     const state = readJson(".agent-state/auto-iterate/finalize-ok/state.json");
     assert.strictEqual(state.deliveryDocs.status, "generated");
     assert.strictEqual(state.skillCapture.status, "captured");
@@ -137,6 +143,34 @@ test("finalize stops before docs when pre-doc strict validation fails", async ()
     assert(!fs.existsSync(".agent-state/auto-iterate/finalize-pre-fail/docs/api.md"));
     const state = readJson(".agent-state/auto-iterate/finalize-pre-fail/state.json");
     assert.notStrictEqual(state.deliveryDocs.status, "generated");
+    process.exitCode = previousExitCode;
+  });
+});
+
+test("finalize rolls back state and artifacts when post-doc strict validation fails", async () => {
+  await withTempCwd(async () => {
+    await createReadySession("finalize-post-fail");
+    const statePath = ".agent-state/auto-iterate/finalize-post-fail/state.json";
+    const before = readJson(statePath);
+    const previousExitCode = process.exitCode;
+    process.exitCode = 0;
+    let calls = 0;
+
+    const { lines } = await captureConsole(() => finalizeAutoIterateSession("finalize-post-fail", { yes: true }, {
+      validateState: async () => {
+        calls += 1;
+        return { ok: calls === 1 };
+      },
+    }));
+
+    assert.strictEqual(process.exitCode, 1);
+    assert(lines.some((line) => line.includes("已生成交付文档")));
+    assert(lines.some((line) => line.includes("已清理不完整交付文档")));
+    assert(!fs.existsSync(".agent-state/auto-iterate/finalize-post-fail/docs/api.md"));
+    const after = readJson(statePath);
+    assert.deepStrictEqual(after.deliveryDocs, before.deliveryDocs);
+    const handoff = fs.readFileSync(".agent-state/auto-iterate/finalize-post-fail/handoff.md", "utf8");
+    assert(!handoff.includes("status: generated"));
     process.exitCode = previousExitCode;
   });
 });

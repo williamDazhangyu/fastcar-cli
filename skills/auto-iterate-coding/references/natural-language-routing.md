@@ -46,7 +46,7 @@
 - Codex goal 的 `status=complete` 只能在用户目标真实完成且无需继续工作时设置；`status=blocked` 只能在同一阻塞条件连续出现并且无用户输入或外部状态变化就无法继续时设置。
 - 如果当前环境没有 Codex goal 能力，必须说明不可用并降级为普通 prompt、`codex exec`、客户端可粘贴文本或 `fastcar-cli auto-iterate --goal`；不得声称已经创建或更新 Codex goal。
 - 如果用户只是说“让 auto-iterate goal 处理”，按父任务启动映射为 `--goal` 参数。
-- 如果用户说“让 Codex goal 处理 <session> 的 <REQ>”，通常按 Codex worker dispatch 处理，并优先 dry-run 生成 prompt；只有用户明确指当前会话的整体目标时，才使用 Codex goal 模型。
+- 如果用户说“让 Codex goal 处理 <session> 的 <REQ>”，不要映射为旧 worker dispatch。先判断是否指当前 Codex 会话整体目标；若是，使用 Codex goal 模型。若是 auto-iterate 子任务，则由主 Agent 直接派发原生 coder subagent，或在 protocol-only 模式下由当前 LLM 继续执行。
 - 不要用 `/goal` 替代 auto-iterate session；`/goal` 不创建 `.agent-state/auto-iterate/<session>/state.json`，也不记录 RCM、验证证据或恢复指针。
 
 ## 自动 / Protocol-only 模式映射表
@@ -216,10 +216,10 @@ Agent：fastcar-cli auto-iterate --validate-state login-bugfix
 Agent：旧 `--dispatch` 外部 Worker 路径已废弃；默认由主 Agent 直接派发原生 coder subagent 处理该子任务。
 
 用户：派发给 Codex worker：session 是 login-bugfix，任务是修复登录 token 过期问题，只允许改 src/auth.js,test/auth.test.js，跑 npm test
-Agent：（以下为旧 --dispatch 模板，已废弃）fastcar-cli auto-iterate --dispatch login-bugfix --agent codex --task "修复登录 token 过期问题" --files "src/auth.js,test/auth.test.js" --verify-command "npm test" --dry-run
+Agent：旧 `--dispatch` 外部 Worker 路径已废弃；读取 login-bugfix 的 state 后，由主 Agent 直接派发原生 coder subagent，并在 coder prompt 中保留文件白名单和 `npm test` 验证要求。
 
 用户：让 Codex goal 接手当前自动迭代任务的 REQ-002，文件白名单是 src/auto-iterate.js 和 test/auto-iterate-doc-reliability.test.js，先生成 worker prompt 不实际执行
-Agent：（以下为旧 --dispatch 模板，已废弃）fastcar-cli auto-iterate --dispatch --agent codex --task "处理 REQ-002" --files "src/auto-iterate.js,test/auto-iterate-doc-reliability.test.js" --verify-command "npm test" --dry-run
+Agent：不要生成旧 `--dispatch` dry-run 模板。先判断“Codex goal”是否指当前会话 `/goal`；若是子任务派发，则由主 Agent 构建 coder prompt，并把白名单和 `npm test` 写入本轮约束。
 
 用户：用 Codex worker 处理 dispatch-codex 这个 session 的“补充 resume 降级测试”，只能改 test/auto-iterate-doc-reliability.test.js，验证命令 npm test
 Agent：旧 `--dispatch` 外部 Worker 路径已废弃；默认由主 Agent 直接派发原生 coder subagent 处理该子任务。
@@ -236,12 +236,7 @@ Agent：旧 `--run` 外部 Worker 主循环已废弃；默认由主 Agent 直接
 用户：用 --dispatch 派给 Codex worker 处理当前 session
 Agent：旧 `--dispatch` 外部 Worker 路径已废弃；先读取 `.agent-state/auto-iterate-current.json` 确认当前 session，然后由主 Agent 直接派发原生 coder subagent，不生成 `--dispatch` 命令。
 
-旧 `--dispatch` 模板形式（已废弃，保留供参考）：
-- 通用命令模板：`fastcar-cli auto-iterate --dispatch <session> --agent codex`
-- 支持的 agent 参数：`--agent <claude|gemini|kimi|cursor|windsurf|copilot|jules|devin|openhands|replit>`
-- 环境变量模板：`AUTO_ITERATE_<AGENT>_CMD`（如 `AUTO_ITERATE_CODEX_CMD`）
-- 交互式 Codex 执行：`codex exec --cd . --sandbox workspace-write`
-- 子任务派发推荐句式：让 Codex worker 处理 <session> 的 <REQ 或子任务>，兼容旧口语“让 Codex goal 处理”；Agent 必须先判断是当前会话 goal 还是 worker dispatch。
+旧 `--dispatch` 模板已经从当前路由中移除；文档不再保留可复制命令，避免 Agent 误启动废弃外部 Worker 路径。
 
 父任务启动推荐句式：让 auto-iterate goal 处理：<目标>，session 叫 <session>。
 
@@ -249,5 +244,5 @@ Codex `/goal` + auto-iterate 推荐句式：先在交互式 Codex 输入 `/goal`
 
 子任务派发推荐句式：旧 `--dispatch` 外部 Worker 路径已废弃。当前默认由主 Agent 直接派发原生 coder subagent 处理子任务，无需 CLI dispatch 命令。
 
-真实执行句式：确认 prompt 后用本地 Codex/Kimi 执行；如果没有配置 `AUTO_ITERATE_CODEX_CMD` 或 `AUTO_ITERATE_KIMI_CMD`，先只生成 prompt，不要猜测交互式命令。
+真实执行句式：确认 prompt 后由当前主 Agent 派发 coder subagent；无 `Agent(subagent_type="coder")` 能力时进入 protocol-only / need_decision，不要猜测或生成外部 CLI worker 命令。
 ```

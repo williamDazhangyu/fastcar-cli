@@ -70,6 +70,8 @@ test("renderNaturalLanguageExamples renders all sections without query", () => {
 
   assert(output.startsWith("# auto-iterate 自然语言触发示例"));
   assert(output.includes("自然语言路由必须每次生成独立 session"));
+  assert(output.includes("派生 trace.jsonl、decisions.md、handoff.md"));
+  assert(output.includes("派生文件只用于复盘和恢复，不作为机器权威状态"));
   assert(output.includes("Few-shot 样本中的 Route 是路由目标形态"));
   assert(output.includes("Few-shot 路由样本"));
   assert(output.includes("## 快速启动开发任务"));
@@ -80,6 +82,7 @@ test("renderNaturalLanguageExamples renders all sections without query", () => {
   assert(output.includes("Route: 主 Agent 原生 subagent 工作流"));
   assert(output.includes("用户明确 protocol-only / 手动模式 / 不启动 subagent 时才追加 --no-run"));
   assert(output.includes("Route: fastcar-cli auto-iterate --quick --goal \"修复登录失败\" --session protocol-only-fix --yes --no-run"));
+  assert(output.includes("--merge 会读取 iterations/<round>/result.json 和 validation.log，合并到 state.json，刷新 state.md，并派生 trace.jsonl / decisions.md / handoff.md"));
   assert(!output.includes("Route: fastcar-cli auto-iterate --check --json-progress -> fastcar-cli auto-iterate --run"));
   assert(!output.includes("未找到匹配的自然语言场景"));
 });
