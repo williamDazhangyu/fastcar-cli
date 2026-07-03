@@ -164,7 +164,7 @@ remaining_implementation_iterations：${remainingImplementationIterations}
 remaining_validation_hardening_iterations：${answers.mode === "strict" ? "2" : "1"}
 remaining_optimization_iterations：${remainingOptimizationIterations}
 预算追加记录：无；如果恢复时 remaining_implementation_iterations = 0，必须先请求用户追加预算，历史计数不清零
-计数口径：实现迭代 = 修改 + 验证/记录 + 状态更新的闭环；验证加固迭代 = 所有关键 REQ passed 后主动寻找遗漏的边界/反例/回归验证；只读探索、reconcile、上下文压缩、向用户提问和纯重复验证不计入实现迭代
+计数口径：实现迭代 = 修改 + 验证/记录 + 状态更新的闭环；验证加固迭代 = 所有关键 REQ passed 后主动寻找遗漏的边界/反例/回归验证；只读探索、reconcile、交接摘要/新视角复核、向用户提问和纯重复验证不计入实现迭代
 
 ## Recovery / Reconcile / 恢复一致性检查
 当前分支：待检查
@@ -256,7 +256,7 @@ triggers：${answers.mode === "strict" ? "complexity=large；risk=high" : "无"}
 
 ## Watchdog / 看门狗
 enabled：true
-check_interval：每轮迭代前后、上下文压缩后、恢复后、最终交付前
+check_interval：每轮迭代前后、交接摘要/新视角复核后、恢复后、最终交付前
 light_check：每轮必做，检查 no_progress_count / last_validation_result / state_drift / triggered / fresh_eyes_required / new_test_count
 full_check：每个 phase、每 3 轮、恢复后和交付前执行完整字段检查
 last_progress_iteration：0
@@ -463,7 +463,7 @@ Watchdog：enabled，交付前必须从 unknown 更新为 verifiable / partially
 从“下一步最小动作”继续，并在每轮迭代后更新本文件。
 如果 Requirement Coverage Matrix 中仍存在 pending / implemented / not_verified 的关键需求，不要按成功交付输出。
 如果 Watchdog triggered 为 true，先处理 required_action；交付可验证性为 not_verifiable 或 unknown 时，不要按成功交付输出。
-如果 Watchdog.fresh_eyes_required 为 true，必须先设置 triggered=true、required_action=context_compress_and_review，并完成上下文压缩与新鲜视角复查后再继续或交付。
+如果 Watchdog.fresh_eyes_required 为 true，必须先设置 triggered=true、required_action=context_compress_and_review，并完成 Context Handoff Summary 交接摘要与新视角复核后再继续或交付；该动作不是要求触发运行时上下文压缩。
 如果所有关键 REQ 已 passed，Delivery Evidence ready 前必须完成 Context Reset Review Gate：清空对话实现细节，只依据 state.json、原始需求、当前代码/diff、真实验证结果、项目规范和相关 skills 执行 Standards / Spec 两轴复核。发现问题必须新增或重开 REQ 并回到实现循环；无发现时将 contextResetReview.status 标记为 passed。
 如果所有关键 REQ 已 passed，必须先完成 validation_hardening：至少达到 minimum_validation_hardening_iterations，并覆盖 boundary / negative / regression 维度；无法执行时标记 blocked 或 not_available，不得静默跳过。
 如果 Temporary Artifacts / Cleanup 中仍有未清理的 debug 日志、harness、原型路由或一次性文件，不要按成功交付输出，除非用户明确要求保留并已标记原因。

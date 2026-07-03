@@ -208,10 +208,13 @@ export const NATURAL_LANGUAGE_EXAMPLES: NaturalLanguageExampleSection[] = [
   },
   {
     title: "session 管理",
-    keywords: ["session", "会话", "恢复", "切换", "列出", "list", "resume", "switch"],
+    keywords: ["session", "会话", "恢复", "切换", "列出", "查看", "进度", "dashboard", "仪表盘", "list", "resume", "switch"],
     examples: [
       "列出所有自动迭代任务",
       "查看当前有哪些 auto-iterate session",
+      "查看 login-bugfix 会话的进度",
+      "打开当前自动迭代任务的 dashboard",
+      "看一下登录修复任务现在做到哪了",
       "恢复登录修复任务",
       "恢复 session login-bugfix",
       "切换到 login-verify 这个 session",
@@ -225,6 +228,15 @@ export const NATURAL_LANGUAGE_EXAMPLES: NaturalLanguageExampleSection[] = [
           "自然名称不等于 session id 时先 list 匹配。",
           "resume、list、switch 不追加 --yes。",
           "resume/switch 会从 state.json 派生刷新 trace.jsonl、decisions.md 和 handoff.md；缺失不阻断恢复，冲突时以 state.json 为准。",
+        ],
+      },
+      {
+        user: "查看 login-bugfix 会话的进度",
+        route: "fastcar-cli auto-iterate --dashboard login-bugfix",
+        notes: [
+          "--dashboard 是只读查看命令，不创建 session，不追加 --yes。",
+          "dashboard 语言优先跟随 state.language.code；旧 session 缺失语言字段时从 state 推断。",
+          "如果用户说当前 session，先读取 .agent-state/auto-iterate-current.json，再运行 --dashboard <session>。",
         ],
       },
     ],
@@ -379,7 +391,7 @@ export function renderNaturalLanguageExamples(query?: unknown): string {
   if (sections.length === 0) {
     return [
       `未找到匹配的自然语言场景: ${query}`,
-      "可尝试关键词：快速、文档、验收、诊断、原型、规划、优化、测试、loop、next、merge、bloat、check-bloat、validation.log、Codex、worker、dispatch、session、预算",
+      "可尝试关键词：快速、文档、验收、诊断、原型、规划、优化、测试、loop、next、merge、dashboard、仪表盘、bloat、check-bloat、validation.log、Codex、worker、dispatch、session、预算",
       "",
     ].join("\n");
   }

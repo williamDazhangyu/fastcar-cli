@@ -3,8 +3,115 @@ import path from "path";
 import { getSessionPaths } from "./sessionPaths";
 import { readJsonFile } from "./stateIO";
 import { resolveStateFileForValidation } from "./sessionStateValidation";
+import { inferLanguageFromState, languageCode, localizedStatusLabel } from "../pipeline/language";
 
 type StateObject = Record<string, any>;
+
+interface DashboardText {
+  htmlLang: string;
+  title: string;
+  iterations: string;
+  requirementsPassed: string;
+  remainingBudget: string;
+  totalDuration: string;
+  progress: string;
+  roundUnit: string;
+  status: string;
+  iterationHistory: string;
+  noIterations: string;
+  rcmTitle: string;
+  noRequirements: string;
+  watchdog: string;
+  noProgress: string;
+  deliveryVerifiability: string;
+  requiredAction: string;
+  plan: string;
+  changedFiles: string;
+  validation: string;
+  impacts: string;
+  risks: string;
+  none: string;
+  dashDefaultSummary: (index: number) => string;
+  started: string;
+  autoRefresh: string;
+  generated: (dashboardPath: string) => string;
+  openHint: string;
+  missingSession: string;
+  missingState: string;
+  expectedPath: (stateJsonPath: string) => string;
+}
+
+function dashboardText(language: unknown): DashboardText {
+  if (languageCode(language) === "en") {
+    return {
+      htmlLang: "en",
+      title: "auto-iterate",
+      iterations: "Iterations",
+      requirementsPassed: "Requirements passed",
+      remainingBudget: "Remaining budget",
+      totalDuration: "Total duration",
+      progress: "Progress",
+      roundUnit: "rounds",
+      status: "Status",
+      iterationHistory: "Iteration History",
+      noIterations: "No iteration records yet",
+      rcmTitle: "Requirement Coverage Matrix (RCM)",
+      noRequirements: "No requirement records yet",
+      watchdog: "Watchdog",
+      noProgress: "No-progress rounds",
+      deliveryVerifiability: "Delivery verifiability",
+      requiredAction: "Required action",
+      plan: "Plan",
+      changedFiles: "Changes",
+      validation: "Validation",
+      impacts: "Impact",
+      risks: "Risks",
+      none: "none",
+      dashDefaultSummary: (index) => `Iteration ${index + 1}`,
+      started: "Started",
+      autoRefresh: "Auto refresh every 2s",
+      generated: (dashboardPath) => `📊 Dashboard generated: ${dashboardPath}`,
+      openHint: "   Open this file in a browser to view live progress.",
+      missingSession: "❌ Unable to resolve session. Pass --dashboard <session>.",
+      missingState: "❌ Unable to read state.json. Create the session first.",
+      expectedPath: (stateJsonPath) => `   Expected path: ${stateJsonPath}`,
+    };
+  }
+
+  return {
+    htmlLang: "zh-CN",
+    title: "auto-iterate",
+    iterations: "迭代轮次",
+    requirementsPassed: "需求通过",
+    remainingBudget: "剩余预算",
+    totalDuration: "总耗时",
+    progress: "进度",
+    roundUnit: "轮",
+    status: "状态",
+    iterationHistory: "迭代历史",
+    noIterations: "暂无迭代记录",
+    rcmTitle: "需求覆盖矩阵 (RCM)",
+    noRequirements: "暂无需求记录",
+    watchdog: "Watchdog",
+    noProgress: "无进展轮次",
+    deliveryVerifiability: "交付可验证性",
+    requiredAction: "需要动作",
+    plan: "方案",
+    changedFiles: "修改",
+    validation: "验证",
+    impacts: "影响",
+    risks: "风险",
+    none: "无",
+    dashDefaultSummary: (index) => `第 ${index + 1} 轮`,
+    started: "开始",
+    autoRefresh: "每 2s 自动刷新",
+    generated: (dashboardPath) => `📊 已生成仪表盘: ${dashboardPath}`,
+    openHint: "   在浏览器中打开此文件即可查看实时进度。",
+    missingSession: "❌ 无法确定 session，请传入 --dashboard <session>",
+    missingState: "❌ 无法读取 state.json，请先创建 session。",
+    expectedPath: (stateJsonPath) => `   期望路径: ${stateJsonPath}`,
+  };
+}
 
 function escapeHtml(value: string): string {
   return String(value)
@@ -60,17 +167,17 @@ function numberField(record: StateObject, primary: string, fallback: string, def
   return Number.isFinite(Number(value)) ? Number(value) : defaultValue;
 }
 
-function renderIterationRow(iter: StateObject, index: number): string {
+function renderIterationRow(iter: StateObject, index: number, text: DashboardText): string {
   const status = iter.status || "implemented";
-  const summary = escapeHtml(iter.summary || iter.rationaleSummary || `第 ${index + 1} 轮`);
-  const files = (iter.files || iter.filesChanged || []).map((f: string) => escapeHtml(f)).join(", ");
+  const summary = escapeHtml(iter.summary || iter.rationaleSummary || text.dashDefaultSummary(index));
+  const files = (iter.files || iter.filesChanged || iter.files_changed || []).map((f: string) => escapeHtml(f)).join(", ");
   const rationale = escapeHtml(iter.rationaleSummary || iter.summary || "");
   const validationResult = iter.validationResult || iter.result || "";
   const duration = formatDuration(iter.durationMs || iter.duration_ms || 0);
   const rawRisks = iter.risks || [];
-  const risks = (Array.isArray(rawRisks) ? rawRisks.map((r: string) => escapeHtml(r)).join("; ") : escapeHtml(String(rawRisks))) || "无";
+  const risks = (Array.isArray(rawRisks) ? rawRisks.map((r: string) => escapeHtml(r)).join("; ") : escapeHtml(String(rawRisks))) || text.none;
   const rawImpacts = iter.impacts || iter.knownLimitations || [];
-  const impacts = (Array.isArray(rawImpacts) ? rawImpacts.map((i: string) => escapeHtml(i)).join("; ") : escapeHtml(String(rawImpacts))) || "无";
+  const impacts = (Array.isArray(rawImpacts) ? rawImpacts.map((i: string) => escapeHtml(i)).join("; ") : escapeHtml(String(rawImpacts))) || text.none;
 
   return `
     <div class="iteration ${statusClass(status)}" onclick="this.classList.toggle('expanded')">
@@ -81,11 +188,11 @@ function renderIterationRow(iter: StateObject, index: number): string {
         <span class="iter-duration">${duration}</span>
       </div>
       <div class="iter-detail">
-        <div class="iter-field"><strong>方案：</strong>${rationale}</div>
-        <div class="iter-field"><strong>修改：</strong>${files || "—"}</div>
-        <div class="iter-field"><strong>验证：</strong>${escapeHtml(String(validationResult))}</div>
-        <div class="iter-field"><strong>影响：</strong>${impacts}</div>
-        <div class="iter-field"><strong>风险：</strong>${risks}</div>
+        <div class="iter-field"><strong>${text.plan}：</strong>${rationale}</div>
+        <div class="iter-field"><strong>${text.changedFiles}：</strong>${files || "—"}</div>
+        <div class="iter-field"><strong>${text.validation}：</strong>${escapeHtml(String(validationResult))}</div>
+        <div class="iter-field"><strong>${text.impacts}：</strong>${impacts}</div>
+        <div class="iter-field"><strong>${text.risks}：</strong>${risks}</div>
       </div>
     </div>`;
 }
@@ -103,6 +210,8 @@ function renderRcmRow(req: StateObject): string {
 }
 
 export function buildDashboardHtml(state: StateObject): string {
+  const language = inferLanguageFromState(state);
+  const text = dashboardText(language);
   const task = state.task || {};
   const session = state.session || {};
   const mode = state.mode || {};
@@ -125,7 +234,7 @@ export function buildDashboardHtml(state: StateObject): string {
   const sessionName = escapeHtml(session.session || session.name || "unknown");
   const modeName = escapeHtml(mode.mode || mode.name || "unknown");
   const goal = escapeHtml(task.goal || "");
-  const overallStatus = currentState.overallStatus || "in_progress";
+  const overallStatus = localizedStatusLabel(currentState.overallStatus || "in_progress", language);
   const deliveryVerifiability = watchdog.deliveryVerifiability || "unknown";
   const watchdogTriggered = watchdog.triggered ? "TRIGGERED" : "clear";
   const noProgressCount = numberField(watchdog, "noProgressStreak", "no_progress_count", 0);
@@ -139,7 +248,7 @@ export function buildDashboardHtml(state: StateObject): string {
   );
 
   return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${text.htmlLang}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -210,54 +319,54 @@ export function buildDashboardHtml(state: StateObject): string {
   <div class="stats">
     <div class="stat">
       <div class="value green">${used}</div>
-      <div class="label">迭代轮次</div>
+      <div class="label">${text.iterations}</div>
     </div>
     <div class="stat">
       <div class="value green">${passedReqs}/${totalReqs}</div>
-      <div class="label">需求通过</div>
+      <div class="label">${text.requirementsPassed}</div>
     </div>
     <div class="stat">
       <div class="value ${remaining <= 0 ? "red" : "yellow"}">${remaining}</div>
-      <div class="label">剩余预算</div>
+      <div class="label">${text.remainingBudget}</div>
     </div>
     <div class="stat">
       <div class="value">${formatDuration(totalDurationMs)}</div>
-      <div class="label">总耗时</div>
+      <div class="label">${text.totalDuration}</div>
     </div>
   </div>
 
   <div class="card">
     <div class="progress-bar"><div class="progress-fill" style="width:${progressPct}%"></div></div>
-    <div class="progress-text">进度 ${progressPct}%（${used}/${totalIterations} 轮） | 状态: ${overallStatus}</div>
+    <div class="progress-text">${text.progress} ${progressPct}%（${used}/${totalIterations} ${text.roundUnit}） | ${text.status}: ${overallStatus}</div>
   </div>
 
   <div class="card">
-    <h2>📋 迭代历史</h2>
+    <h2>📋 ${text.iterationHistory}</h2>
     ${iterations.length === 0
-      ? '<div class="empty">暂无迭代记录</div>'
-      : iterations.map((iter: StateObject, i: number) => renderIterationRow(iter, i)).join("")}
+      ? `<div class="empty">${text.noIterations}</div>`
+      : iterations.map((iter: StateObject, i: number) => renderIterationRow(iter, i, text)).join("")}
   </div>
 
   <div class="card">
-    <h2>📊 需求覆盖矩阵 (RCM)</h2>
+    <h2>📊 ${text.rcmTitle}</h2>
     ${requirements.length === 0
-      ? '<div class="empty">暂无需求记录</div>'
+      ? `<div class="empty">${text.noRequirements}</div>`
       : requirements.map((req: StateObject) => renderRcmRow(req)).join("")}
   </div>
 
   <div class="card">
-    <h2>🛡️ Watchdog</h2>
-    <div class="watchdog-row"><span class="label">状态</span><span class="value ${watchdogTriggered === "clear" ? "green" : "red"}">${watchdogTriggered}</span></div>
-    <div class="watchdog-row"><span class="label">无进展轮次</span><span class="value ${noProgressCount >= maxNoProgress ? "red" : "yellow"}">${noProgressCount} / ${maxNoProgress}</span></div>
-    <div class="watchdog-row"><span class="label">交付可验证性</span><span class="value ${deliveryVerifiability === "verifiable" ? "green" : "yellow"}">${deliveryVerifiability}</span></div>
+    <h2>🛡️ ${text.watchdog}</h2>
+    <div class="watchdog-row"><span class="label">${text.status}</span><span class="value ${watchdogTriggered === "clear" ? "green" : "red"}">${watchdogTriggered}</span></div>
+    <div class="watchdog-row"><span class="label">${text.noProgress}</span><span class="value ${noProgressCount >= maxNoProgress ? "red" : "yellow"}">${noProgressCount} / ${maxNoProgress}</span></div>
+    <div class="watchdog-row"><span class="label">${text.deliveryVerifiability}</span><span class="value ${deliveryVerifiability === "verifiable" ? "green" : "yellow"}">${deliveryVerifiability}</span></div>
     ${watchdog.requiredAction && watchdog.requiredAction !== "none"
-      ? `<div class="watchdog-row"><span class="label">需要动作</span><span class="value red">${escapeHtml(watchdog.requiredAction)}</span></div>`
+      ? `<div class="watchdog-row"><span class="label">${text.requiredAction}</span><span class="value red">${escapeHtml(watchdog.requiredAction)}</span></div>`
       : ""}
   </div>
 
   <div class="footer">
-    ${startTime ? `开始: ${escapeHtml(String(startTime))} | ` : ""}session: ${sessionName} |
-    <span class="refresh">每 2s 自动刷新</span>
+    ${startTime ? `${text.started}: ${escapeHtml(String(startTime))} | ` : ""}session: ${sessionName} |
+    <span class="refresh">${text.autoRefresh}</span>
   </div>
 </div>
 <script>
@@ -298,7 +407,7 @@ export async function generateDashboard(sessionName: string): Promise<void> {
   }
   const session = stateInfo.session || (stateInfo.current && stateInfo.current.session);
   if (!session || session === "unknown") {
-    console.log("❌ 无法确定 session，请传入 --dashboard <session>");
+    console.log(dashboardText("zh").missingSession);
     process.exitCode = 1;
     return;
   }
@@ -306,17 +415,18 @@ export async function generateDashboard(sessionName: string): Promise<void> {
   const sessionPaths = getSessionPaths(session);
   const stateJson = await readJsonFile(sessionPaths.sessionStateJsonPath) as StateObject | null;
   if (!stateJson) {
-    console.log("❌ 无法读取 state.json，请先创建 session。");
-    console.log(`   期望路径: ${sessionPaths.sessionStateJsonPath}`);
+    console.log(dashboardText("zh").missingState);
+    console.log(dashboardText("zh").expectedPath(sessionPaths.sessionStateJsonPath));
     process.exitCode = 1;
     return;
   }
 
   const html = buildDashboardHtml(stateJson);
+  const text = dashboardText(inferLanguageFromState(stateJson));
   const dashboardPath = path.join(sessionPaths.sessionDir, "dashboard.html");
   await fsPromises.writeFile(dashboardPath, html, "utf8");
 
   process.exitCode = previousExitCode || 0;
-  console.log(`📊 已生成仪表盘: ${dashboardPath}`);
-  console.log("   在浏览器中打开此文件即可查看实时进度。");
+  console.log(text.generated(dashboardPath));
+  console.log(text.openHint);
 }

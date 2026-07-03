@@ -166,7 +166,7 @@ function buildWatchdogSection(state: PipelineStateLike): string {
   const postChange = asRecord(state.postChange);
   return [
     "enabled：true",
-    "check_interval：每轮迭代前后、上下文压缩后、恢复后、最终交付前",
+    "check_interval：每轮迭代前后、交接摘要/新视角复核后、恢复后、最终交付前",
     "light_check：每轮必做，检查 no_progress_count / last_validation_result / state_drift / triggered / fresh_eyes_required / new_test_count",
     "full_check：每个 phase、每 3 轮、恢复后和交付前执行完整字段检查",
     `last_progress_iteration：${asRecord(state.budgets).totalCycles ?? 0}`,

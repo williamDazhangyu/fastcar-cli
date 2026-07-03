@@ -53,7 +53,7 @@
 | 31 | `## Delivery Evidence / 交付证据` | 必填；从 state.json.deliveryEvidence 渲染，交付摘要的机器来源 | Agent |
 | 32 | `## Skill Capture / 技能沉淀` | 必填；从 state.json.skillCapture 渲染，记录任务后高价值技能点沉淀、`.agents/skills/index.md` 更新和跳过原因 | Agent |
 | 33 | `## Post-Agent Validation Gate / Agent 后置校验门禁` | 必填；从 state.json.postAgentValidationGate 渲染，记录 strict 校验和 repair cycle | Agent |
-| 34 | `## Context Handoff Summary` | 必填；上下文压缩、长任务恢复和交接时更新 | Agent |
+| 34 | `## Context Handoff Summary` | 必填；交接摘要、新视角复核、长任务恢复和跨阶段交接时更新；不是运行时 context compaction | Agent |
 | 35 | `## Resume Prompt` | 必填；说明恢复时的最小执行规则 | CLI 初始化，Agent 可补充 |
 
 ## 一致性规则
@@ -109,7 +109,7 @@
 - `skillCapture.status=captured` 时，`capturedFiles` 必须列出本次写入或更新的 `.agents/skills` 文件，且 `.agents/skills/index.md` 必须同步维护为检索入口。
 - `postAgentValidationGate` 必须启用交付前 CLI 门禁，推荐命令为 `fastcar-cli auto-iterate --finalize <session> --yes`；旧格式 `--validate-state <session> --strict-state` 仅作为兼容路径。`deliveryEvidence.status=ready / delivered` 时 `lastResult` 必须为 `passed` 且 `nextAction` 必须为 `deliver`；失败时 `nextAction` 必须为 `context_reset_and_repair` 或 `stop`。
 - `deliveryEvidence.status=ready / delivered` 时，`postChange.status` 必须为 `passed` 且 `postChange.regressionDetected` 必须为 false；最近修改后验证失败、未运行或检测到 regression 时不得交付。
-- 所有关键 REQ 均为 `passed` 且 `remaining_implementation_iterations > 0` 时，`Watchdog.fresh_eyes_required` 必须为 `true`，`Watchdog.triggered` 必须为 `true`，且 `required_action` 必须为 `context_compress_and_review`；Agent 不得在此时跳过上下文压缩直接交付。
+- 所有关键 REQ 均为 `passed` 且 `remaining_implementation_iterations > 0` 时，`Watchdog.fresh_eyes_required` 必须为 `true`，`Watchdog.triggered` 必须为 `true`，且 `required_action` 必须为 `context_compress_and_review`；Agent 不得在此时跳过 Context Handoff Summary 交接摘要和新视角复核直接交付。该枚举是兼容字段，不表示触发运行时上下文压缩。
 - 所有关键 REQ 均为 `passed` 且 fresh-eyes 已处理后，必须完成 `validation_hardening` 门禁：`validation_hardening_iterations_used >= minimum_validation_hardening_iterations`，并覆盖 `boundary / negative / regression`；无法覆盖时必须把 `validation_hardening_status` 标记为 `blocked / not_available / user_accepted_limited` 并记录原因。
 - `delivery_verifiability = not_verifiable / unknown` 时，不允许按成功交付输出。
 - `Temporary Artifacts / Cleanup` 未完成且没有用户确认保留理由时，不允许按成功交付输出。

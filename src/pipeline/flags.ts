@@ -41,7 +41,7 @@ export const FLAG_REGISTRY: Record<string, FlagInfo> = {
     help: "--strict-state|--strict-validate|--strict-validation",
   },
   "--finalize": { stage: "stable", kind: "session", stable: true, help: "--finalize [session]" },
-  "--dashboard": { stage: "stable", kind: "session", stable: true, help: "--dashboard [session]" },
+  "--dashboard": { stage: "stable", kind: "session", stable: true, help: "--dashboard [session]  生成会话进度仪表盘" },
 
   // Skill flags
   "--capture-skills": { stage: "stable", kind: "skill", stable: true, help: "--capture-skills <session> [--yes]" },

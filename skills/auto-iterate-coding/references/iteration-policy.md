@@ -177,9 +177,11 @@ Caveman Mode 下，Agent 每轮输出只包含：
 
 以下情况自动退出 Caveman Mode：need_decision / blocked（输出完整问题描述）；任务完成（输出完整交付总结）；提前停止；用户要求详细输出。
 
-### 与上下文压缩的关系
+### 与 Context Handoff Summary 的关系
 
-Caveman Mode 是通信风格的改变，上下文压缩是状态存储的改变，领域语言减少描述 token。三者叠加在长任务中可节省 80%+ token 消耗。
+Caveman Mode 是通信风格的改变，Context Handoff Summary 是 auto-iterate 状态交接摘要，领域语言减少描述 token。三者叠加在长任务中可明显降低上下文消耗。
+
+Context Handoff Summary 不等同于触发 Agent 运行时 context compaction / context compression，也不得要求输出模型私有 chain-of-thought。它只记录可审计的目标、RCM、验证证据、关键 diff、风险和下一步。
 
 ### 质量要求
 

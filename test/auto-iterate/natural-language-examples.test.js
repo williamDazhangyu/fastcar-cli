@@ -35,6 +35,8 @@ test("query filtering matches title, keywords, and examples", () => {
   assert(autoIterateGoal.some((section) => section.title === "快速启动开发任务"));
   assert(payment.some((section) => section.examples.some((example) => example.includes("支付回调"))));
   assert(getNaturalLanguageExampleSections("loop").some((section) => section.title === "循环辅助命令：next / merge"));
+  assert(getNaturalLanguageExampleSections("dashboard").some((section) => section.title === "session 管理"));
+  assert(getNaturalLanguageExampleSections("查看").some((section) => section.title === "session 管理"));
   assert(getNaturalLanguageExampleSections("膨胀").some((section) => section.title === "膨胀诊断：check-bloat"));
   assert(getNaturalLanguageExampleSections("--dispatch").some((section) => section.title === "旧 Worker 路径已废弃"));
 });
@@ -54,6 +56,7 @@ test("few-shot route samples cover commands and constraints", () => {
   assert(shots.some((shot) => shot.route.includes("--strict") && shot.route.includes("--from docs/prd.md")));
   assert(shots.some((shot) => shot.route.includes("--next login-bugfix")));
   assert(shots.some((shot) => shot.route.includes("--merge login-bugfix --round 1")));
+  assert(shots.some((shot) => shot.route.includes("--dashboard login-bugfix")));
   assert(shots.some((shot) => shot.route.includes("--check-bloat")));
   assert(shots.some((shot) => shot.route.includes("旧 --run 外部 Worker 主循环已废弃")));
   assert(shots.some((shot) => shot.route.includes(".agent-state/auto-iterate-current.json")));
@@ -78,6 +81,8 @@ test("renderNaturalLanguageExamples renders all sections without query", () => {
   assert(output.includes("## 循环辅助命令：next / merge"));
   assert(output.includes("## 膨胀诊断：check-bloat"));
   assert(output.includes("## 旧 Worker 路径已废弃"));
+  assert(output.includes("查看 login-bugfix 会话的进度"));
+  assert(output.includes("Route: fastcar-cli auto-iterate --dashboard login-bugfix"));
   assert(output.includes("主 Agent + coder subagent 原生工作流"));
   assert(output.includes("Route: 主 Agent 原生 subagent 工作流"));
   assert(output.includes("用户明确 protocol-only / 手动模式 / 不启动 subagent 时才追加 --no-run"));
@@ -92,7 +97,7 @@ test("renderNaturalLanguageExamples renders not-found guidance", () => {
 
   assert(output.includes("未找到匹配的自然语言场景: missing-keyword"));
   assert(output.includes("可尝试关键词：快速、文档、验收"));
-  assert(output.includes("loop、next、merge、bloat、check-bloat、validation.log"));
+  assert(output.includes("loop、next、merge、dashboard、仪表盘、bloat、check-bloat、validation.log"));
   assert(!output.includes("## 快速启动开发任务"));
 });
 

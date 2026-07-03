@@ -978,6 +978,7 @@ test("自然语言路由文档覆盖 CLI 支持的模式、预算和 session 规
     "--list",
     "--switch",
     "--resume",
+    "--dashboard",
     "--next",
     "--merge",
     "--check-bloat",
@@ -994,12 +995,15 @@ test("自然语言路由文档覆盖 CLI 支持的模式、预算和 session 规
   assertIncludes(routing, "auto-iterate 激活声明", "natural-language-routing.md");
   assertIncludes(routing, "不得把当前会话内的多轮修改称为完整 auto-iterate session", "natural-language-routing.md");
   assertIncludes(routing, "fastcar-cli auto-iterate --validate-state <session|state.md|state.json>", "natural-language-routing.md");
+  assertIncludes(routing, "fastcar-cli auto-iterate --dashboard <session>", "natural-language-routing.md");
   assertIncludes(routing, "fastcar-cli auto-iterate --next <session>", "natural-language-routing.md");
   assertIncludes(routing, "fastcar-cli auto-iterate --merge <session> --round <N>", "natural-language-routing.md");
   assertIncludes(routing, "fastcar-cli auto-iterate --check-bloat", "natural-language-routing.md");
   assertIncludes(routing, "fastcar-cli auto-iterate --validate-state`", "natural-language-routing.md");
   assertIncludes(routing, "state 校验：validate-state", "natural-language-routing.md");
-  assertIncludes(routing, "明确循环辅助：下一轮检查 / next focus -> `--next`", "natural-language-routing.md");
+  assertIncludes(routing, "明确查看/循环辅助：查看会话 / 查看进度 / dashboard -> `--dashboard`", "natural-language-routing.md");
+  assertIncludes(routing, "查看 login-bugfix 会话的进度", "natural-language-routing.md");
+  assertIncludes(routing, "打开当前自动迭代任务的 dashboard", "natural-language-routing.md");
   assertIncludes(routing, "检查 login-bugfix 下一轮应该做什么", "natural-language-routing.md");
   assertIncludes(routing, "合并 login-bugfix 第 1 轮 result.json 和 validation.log", "natural-language-routing.md");
   assertIncludes(routing, "检查当前仓库有没有测试膨胀或技能膨胀", "natural-language-routing.md");

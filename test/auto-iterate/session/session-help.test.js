@@ -51,6 +51,7 @@ test("buildAutoIterateHelp renders major command groups and flags", () => {
     "--optimize|--optimise",
     "--prototype|--proto",
     "--validate-state [session|state.md|state.json]",
+    "--dashboard [session]  生成会话进度仪表盘",
     "--strict-state|--strict-validate|--strict-validation",
     "--no-run  protocol-only LLM execution; do not dispatch native subagent",
     "--capture-skills <session> [--yes]",

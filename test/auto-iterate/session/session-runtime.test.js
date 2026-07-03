@@ -162,7 +162,7 @@ test("initAutoIterate generates dashboard for current or explicit session", asyn
     await captureConsole(() => initAutoIterate([
       "--quick",
       "--goal",
-      "<script>dashboard</script>",
+      "查看 <script>dashboard</script> 仪表盘",
       "--session",
       "dash-session",
       "--yes",
@@ -201,11 +201,63 @@ test("initAutoIterate generates dashboard for current or explicit session", asyn
     assert(output.includes("已生成仪表盘"));
 
     const dashboard = fs.readFileSync(".agent-state/auto-iterate/dash-session/dashboard.html", "utf8");
+    assert(dashboard.includes('lang="zh-CN"'));
+    assert(dashboard.includes("需求通过"));
+    assert(dashboard.includes("迭代历史"));
     assert(dashboard.includes("REQ-1"));
     assert(dashboard.includes("&lt;script&gt;dashboard&lt;/script&gt;"));
     assert(dashboard.includes("&lt;b&gt;safe&lt;/b&gt;"));
     assert(dashboard.includes("2 / 5"));
     assert(dashboard.includes("1.5s"));
+  });
+});
+
+test("initAutoIterate dashboard follows session language and supports legacy language inference", async () => {
+  await withTempCwd(async () => {
+    await captureConsole(() => initAutoIterate([
+      "--quick",
+      "--goal",
+      "Fix login token expiry",
+      "--session",
+      "english-dashboard",
+      "--yes",
+    ]));
+
+    const englishStatePath = ".agent-state/auto-iterate/english-dashboard/state.json";
+    const englishState = readJson(englishStatePath);
+    assert.strictEqual(englishState.language.code, "en");
+    englishState.requirements = [
+      { id: "REQ-EN", status: "passed", summary: "Token refresh works", evidence: "npm test" },
+    ];
+    fs.writeFileSync(englishStatePath, `${JSON.stringify(englishState, null, 2)}\n`, "utf8");
+
+    const englishOutput = await captureConsole(() => initAutoIterate(["--dashboard", "english-dashboard"]));
+    assert(englishOutput.lines.join("\n").includes("Dashboard generated"));
+    const englishDashboard = fs.readFileSync(".agent-state/auto-iterate/english-dashboard/dashboard.html", "utf8");
+    assert(englishDashboard.includes('lang="en"'));
+    assert(englishDashboard.includes("Requirements passed"));
+    assert(englishDashboard.includes("Iteration History"));
+    assert(!englishDashboard.includes("需求通过"));
+
+    const legacyState = {
+      task: { goal: "Fix checkout failure" },
+      session: { session: "legacy-dashboard" },
+      mode: { mode: "quick" },
+      budgets: { maxIterations: 1, implementationIterationsUsed: 0, remainingImplementationIterations: 1 },
+      currentState: { overallStatus: "in_progress" },
+      watchdog: { deliveryVerifiability: "unknown" },
+      requirements: [],
+      traceability: { iterations: [] },
+      validation: { entries: [] },
+    };
+    fs.mkdirSync(".agent-state/auto-iterate/legacy-dashboard", { recursive: true });
+    fs.writeFileSync(".agent-state/auto-iterate/legacy-dashboard/state.json", `${JSON.stringify(legacyState, null, 2)}\n`, "utf8");
+    fs.writeFileSync(".agent-state/auto-iterate/legacy-dashboard/state.md", "legacy", "utf8");
+
+    await captureConsole(() => initAutoIterate(["--dashboard", "legacy-dashboard"]));
+    const legacyDashboard = fs.readFileSync(".agent-state/auto-iterate/legacy-dashboard/dashboard.html", "utf8");
+    assert(legacyDashboard.includes('lang="en"'));
+    assert(legacyDashboard.includes("No iteration records yet"));
   });
 });
 

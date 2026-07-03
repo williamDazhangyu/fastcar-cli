@@ -9,7 +9,7 @@
 - 只有缺少会影响安全、兼容性或外部资源的关键信息时，才向用户提问。
 - 目标 Agent 只有在当前会话可用 skills 或 `AGENTS.md` 能检索到 `auto-iterate-coding` 时，才会稳定触发本路由；仅全局存在 `fastcar-cli` 命令不足以触发。触发失败时先同步 skill：`fastcar-cli skill install auto-iterate-coding --global --target <agent>`，项目内则使用 `fastcar-cli skill install auto-iterate-coding --local --target <agent>`。`<agent>` 以 `fastcar-cli skill targets` 输出为准。
 - 默认自动模式不再调用旧 `--check` / `--run` Worker pipeline；主 Agent 读取 skill/state 后直接派发 coder subagent。需要 native-subagent session 骨架时，使用对应 mode 命令并追加 `--yes`。`--list`、`--switch`、`--resume`、`--validate-state` 不追加 `--yes`。
-- `--next`、`--merge`、`--check-bloat` 是 CLI 辅助/诊断命令，不创建新 session，不追加 `--yes`，也不启动旧 Worker。用户要求“下一轮前检查 / 合并本轮结果 / 检查测试或技能膨胀”时应稳定映射到这些命令。
+- `--dashboard`、`--next`、`--merge`、`--check-bloat` 是 CLI 查看/辅助/诊断命令，不创建新 session，不追加 `--yes`，也不启动旧 Worker。用户要求“查看会话 / 查看进度 / 打开 dashboard / 下一轮前检查 / 合并本轮结果 / 检查测试或技能膨胀”时应稳定映射到这些命令。
 - 每次自然语言路由启动新任务时都必须显式传入 `--session <name>`；用户未指定时，Agent 生成英文小写、数字和连字符组成的默认 session 名。`--validate-state` 复用已有 session 或 state 文件，不创建新 session。
 - 自动模式下，主 Agent 自己执行裁判职责：pick focus、派发 coder、校验 result、运行验证命令、审计 diff、合并 state，并在 `need_decision` 时询问用户。
 - 用户说“当前 session / 上一轮 / 刚才那个任务 / 当前自动迭代任务”且未给 session 名时，先读取 `.agent-state/auto-iterate-current.json` 获取当前 session；读不到或指针无效时运行 `fastcar-cli auto-iterate --list` 匹配；仍不确定才询问用户。不要为 `--next`、`--merge`、`--validate-state` 自动创建新 session。
@@ -65,6 +65,7 @@
 | “自动迭代三十次，完善 docs/impl/brand-kits.md 至可开工协议版本” | `fastcar-cli auto-iterate --optimize --goal "<目标>" --scope docs/impl/brand-kits.md --session <session> --autopilot-max-iterations 30 --yes`；这里的文档是修改范围，不是 PRD 来源 | `fastcar-cli auto-iterate --optimize --goal "<目标>" --scope docs/impl/brand-kits.md --session <session> --autopilot-max-iterations 30 --yes --no-run` |
 | “校验自动迭代 state” / “检查 session 是否一致” / “检查 sub-agent 协议一致性” | 不启动自动流水线；能确定 session 或 state 路径时调用 `fastcar-cli auto-iterate --validate-state <session|state.md|state.json>`，不能确定时先运行 `--list` 或询问 | 同自动模式；这是只读管理命令，不属于 fallback 执行循环 |
 | “校验当前自动迭代 state” / “检查当前 session 状态” | `fastcar-cli auto-iterate --validate-state` | 同自动模式 |
+| “查看 <session> 会话” / “查看当前自动迭代任务进度” / “打开 dashboard” / “看一下这个任务做到哪了” | `fastcar-cli auto-iterate --dashboard <session>`；当前 session 不明确时先读 `.agent-state/auto-iterate-current.json`，自然名称不明确时先 `--list` 匹配或询问 | 同自动模式；这是只读查看命令，不创建 session |
 | “检查下一轮该做什么” / “进入下一轮前检查 validation.log 和 watchdog” / “next focus 是什么” | `fastcar-cli auto-iterate --next <session>`；session 不明确时先 `--list` 匹配或询问 | 同自动模式；这是只读循环辅助命令 |
 | “合并第 N 轮 result.json 和 validation.log” / “merge 上一轮结果到 state” | `fastcar-cli auto-iterate --merge <session> --round <N>`；未指定轮次时可省略 `--round` 使用最新迭代目录 | 同自动模式；这是状态合并辅助命令，不派发 coder |
 | “检查测试膨胀 / 技能膨胀 / bloat / 测试占比是否超限” | `fastcar-cli auto-iterate --check-bloat` | 同自动模式；这是全仓诊断命令，不创建 session |
@@ -116,7 +117,7 @@
 0. 明确要求手动模式 / protocol-only / LLM-only / 不走 CLI 驱动 / 不要 spawn worker：在后续推断出的命令中追加 --no-run
 1. state 校验：validate-state
 2. session 管理：列出 / 切换 / 恢复
-3. 明确循环辅助：下一轮检查 / next focus -> `--next`；合并 result+validation -> `--merge`；测试/技能膨胀诊断 -> `--check-bloat`
+3. 明确查看/循环辅助：查看会话 / 查看进度 / dashboard -> `--dashboard`；下一轮检查 / next focus -> `--next`；合并 result+validation -> `--merge`；测试/技能膨胀诊断 -> `--check-bloat`
 4. 明确禁止修改：verify 或 plan-only
 5. 明确要求诊断、debug、复现、flaky、性能回归：diagnose
 6. 明确要求原型、试方案、验证状态机、验证数据模型：prototype
@@ -193,6 +194,12 @@ Agent：fastcar-cli auto-iterate --validate-state login-bugfix
 
 用户：检查当前自动迭代 state 是否一致
 Agent：fastcar-cli auto-iterate --validate-state
+
+用户：查看 login-bugfix 会话的进度
+Agent：fastcar-cli auto-iterate --dashboard login-bugfix
+
+用户：打开当前自动迭代任务的 dashboard
+Agent：先读取 .agent-state/auto-iterate-current.json 获取当前 session；如果当前 session 为 login-bugfix，则运行 fastcar-cli auto-iterate --dashboard login-bugfix
 
 用户：检查 login-bugfix 下一轮应该做什么
 Agent：fastcar-cli auto-iterate --next login-bugfix
