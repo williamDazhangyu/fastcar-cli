@@ -283,8 +283,16 @@ heavy_validation_deferred：无
 ## Requirement Coverage Matrix / 需求覆盖矩阵
 REQ-BOOTSTRAP：
 原文摘要：启动后必须先从用户目标、成功标准、原始清单文档和当前模式提取完整 Requirement Coverage Matrix
+用户可见行为：用户目标被拆成可独立推进、验证和交付的薄需求条目
+预期行为：每条 REQ 都优先描述用户可见行为，并记录必要的预期、实际、复现、验收影响和依赖信息
+实际行为：尚未提取完整 Requirement Coverage Matrix
+复现步骤：读取用户目标；读取成功标准或来源文档；只读探索现有行为和领域语言；拆分 REQ-001...REQ-N
+验收影响：未完成 RCM 前不得进入实现或声称交付完成
 类型：验证
 状态：pending
+依赖：无
+被阻塞于：无
+可立即开始：true
 相关文件：${answers.sessionStateFile || ".agent-state/auto-iterate/default/state.md"}
 验证证据：无
 阻塞原因：无
@@ -427,7 +435,7 @@ index_file：.agents/skills/index.md
 captured_files：无
 pending_candidates：无
 skipped_reasons：无
-selection_criteria：只沉淀可复用、可验证、跨任务有价值的技能点；不要记录密钥、客户数据、一次性日志或完整源码
+selection_criteria：只沉淀可迁移、可行动、可验证的技能点；按 Trigger / Signal、Do、Verify、Avoid、Boundary、Source Evidence 结构压缩；不要记录密钥、客户数据、一次性日志、完整报错堆栈或大段源码
 last_run_summary：尚未执行任务后技能沉淀
 执行时机：每次任务交付、提前停止或阶段性验收后，先提取高价值技能点，再更新 .agents/skills/index.md；没有高价值内容时写明 skipped_no_high_value 和原因
 

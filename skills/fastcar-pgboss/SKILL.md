@@ -10,6 +10,7 @@ description: FastCar pg-boss 队列与定时任务开发指南。Use when buildi
 ## Agent Rules
 
 - Prefer `@fastcar/pgboss` when the task needs persistence, PostgreSQL-backed state, retries, distributed workers, schedule coordination, or job inspection.
+- Treat this skill as FastCar-specific guidance for the `@fastcar/pgboss` wrapper; do not generalize its wrapper conventions to raw `pg-boss`, BullMQ, Temporal, or other queue systems.
 - Do not confuse this with in-process timers. Use timer-style scheduling only for lightweight local work that does not need persistence or distributed coordination.
 - Always include imports in examples. Do not make users infer whether a symbol comes from `@fastcar/pgboss` or `@fastcar/pgboss/annotation`.
 - Treat payloads as JSON-serializable data. Do not place functions, DB connections, class instances, streams, or cyclic objects in payloads.
@@ -48,6 +49,8 @@ export default new App();
 ## Configuration
 
 Use `settings.pgboss` in FastCar application config.
+
+The connection strings below are local placeholders only. Production configuration must come from environment-specific config or secret management, not copied credentials.
 
 Single source:
 

@@ -14,7 +14,7 @@
 
 - 参考 [mattpocock/skills](https://github.com/mattpocock/skills) 新增 5 个 reference 文档：
   - `references/grill-session.md`：Agent 主动 Grilling 流程，替代被动等待用户提供清单的启动握手。
-  - `references/domain-language.md`：项目共享术语表，提取、维护和使用领域语言。（后合并到 `quick-reference.md` §领域语言）
+  - `references/domain-language.md`：项目共享术语表，提取、维护和使用领域语言。当前作为独立引用文件维护，`quick-reference.md` 只保留速查入口。
   - `references/zoom-out.md`：系统视角，在 Context Reset Review 和代码探索时从系统高度理解代码。（后合并到 `feedback-loop.md` §Zoom Out）
   - `references/triage.md`：Issue 分流工作流，优先级排序、scope 评估、session 分配。（后合并到 `feedback-loop.md` §Triage）
   - `references/caveman-mode.md`：超压缩通信模式，token 降低 ~75%。（后合并到 `iteration-policy.md` §Caveman Mode）

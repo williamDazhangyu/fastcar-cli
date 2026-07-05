@@ -114,7 +114,7 @@ Compact execution loop:
 - context_compress_and_review means an auto-iterate handoff summary plus fresh-eyes review, not a request to trigger runtime context compaction.
 
 ## Skill Capture
-After delivery, early stop, or milestone acceptance, run Skill Capture. Write reusable English skill content under .agents/skills, update .agents/skills/index.md, or set skillCapture.status=skipped_no_high_value with reasons.
+After delivery, early stop, or milestone acceptance, run Skill Capture. Compress reusable English skill content into Trigger / Signal, Do, Verify, Avoid, Boundary, and Source Evidence; write it under .agents/skills, update .agents/skills/index.md, or set skillCapture.status=skipped_no_high_value with reasons.
 
 Requirements:
 Every requirement must include ID, original summary, status, related files, validation evidence, blocking reason, and next step.
@@ -211,7 +211,7 @@ ${answers.modeInstructions}
 - 修 bug、性能回归或验证失败时，请先建立能复现目标问题的 feedback loop；无法建立时停止并说明尝试过什么、缺少什么 artifact 或环境。
 
 ## Skill Capture / 技能沉淀
-每次任务交付、提前停止或阶段性验收后，都必须执行 Skill Capture / 技能沉淀：只沉淀可复用、可验证、跨任务有价值的技能点，写入 .agents/skills 并同步维护 .agents/skills/index.md；没有高价值内容时，将 skillCapture.status 标记为 skipped_no_high_value 并记录 skippedReasons。
+每次任务交付、提前停止或阶段性验收后，都必须执行 Skill Capture / 技能沉淀：只沉淀可迁移、可行动、可验证的技能点，按 Trigger / Signal、Do、Verify、Avoid、Boundary、Source Evidence 结构压缩，写入 .agents/skills 并同步维护 .agents/skills/index.md；没有高价值内容时，将 skillCapture.status 标记为 skipped_no_high_value 并记录 skippedReasons。
 
 需求覆盖要求：
 每条需求必须包含 ID、原文摘要、状态、相关文件、验证证据、阻塞原因和下一步。

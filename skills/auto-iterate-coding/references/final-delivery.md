@@ -25,6 +25,8 @@
 
 成功交付前必须完成 Context Reset Review Gate：Agent 必须清空对话实现细节，只依据 `.agent-state/auto-iterate/<session>/state.json`、原始需求、当前代码/diff、真实验证结果、项目规范和相关 skills 重新读取事实，并按 Standards / Spec 两轴复核。发现问题时必须新增或重开 REQ 并回到实现循环；无发现时把 `contextResetReview.status=passed`、`decision=pass`、`reviewCyclesUsed>=1` 写入 state。不得用"我记得已经完成"替代该门禁。
 
+两轴复核必须分开记录：Standards 只判断是否符合项目规范、编码规范和已确认架构；Spec 只判断是否满足用户目标、PRD、issue、RCM 和非目标。不要把"代码规范通过"写成"需求验收通过"，也不要把"需求看起来满足"写成"规范通过"。
+
 成功交付前必须完成临时产物清理：
 
 - 删除或吸收一次性原型、prototype route、variant switcher、临时 TUI 外壳和 harness。
@@ -36,13 +38,13 @@
 
 > 详见 [SKILL.md](../SKILL.md) §核心流程（步骤 14）。
 
-实现需求的模式在成功交付前必须完成技巧风格整理：读取本项目 `.agents/skills` 和全局 skills 中与本次代码相关的代码风格、FastCar API 约束、TypeScript 规范、反模式和验证建议，只整理本次需求相关代码，不扩大行为范围，整理后重新运行相关验证。如果当前任务不是实现需求，标记 `not_applicable`。
+实现需求的模式在成功交付前必须完成技巧风格整理：读取本项目 `.agents/skills` 和全局 skills 中与本次代码相关的代码风格、框架/API/SDK 约束、TypeScript 规范、反模式和验证建议，只整理本次需求相关代码，不扩大行为范围，整理后重新运行相关验证。如果当前任务不是实现需求，标记 `not_applicable`。
 
 ## Skill Capture / 技能沉淀
 
 > 详见 [SKILL.md](../SKILL.md) §Skill Capture / 技能沉淀。
 
-成功交付、提前停止或阶段性验收前必须完成技能沉淀检查：只沉淀可复用、可验证、跨任务有价值的技能点，写入 `.agents/skills`，同步维护 `.agents/skills/index.md`。如果没有高价值技能点，标记 `skipped_no_high_value` 并说明原因。
+成功交付、提前停止或阶段性验收前必须完成技能沉淀检查：只沉淀可迁移、可行动、可验证的技能点，按 Trigger / Signal、Do、Verify、Avoid、Boundary、Source Evidence 结构压缩，写入 `.agents/skills`，同步维护 `.agents/skills/index.md`。如果没有高价值技能点，标记 `skipped_no_high_value` 并说明原因。
 
 ```text
 实现了什么：
@@ -184,6 +186,8 @@ Context Reset Review Gate：passed
 - 风险与限制。
 - 未完成事项。
 - 是否需要用户后续确认。
+
+handoff 和交付文档应引用已有 artifact，而不是复制大段内容。优先引用 state、validation.log、docs、测试命令、diff 摘要和关键文件路径；不要粘贴完整日志、完整源码或重复 RCM 全文。
 
 如果 strict 校验失败：
 

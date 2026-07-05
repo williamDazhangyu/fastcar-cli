@@ -71,6 +71,21 @@
 | `skillCapture.status` | `pending`, `captured`, `skipped_no_high_value`, `not_available`, `blocked` |
 | `postAgentValidationGate.status` | `pending`, `passed`, `failed` |
 
+## 3.1 requirements 可选澄清字段
+
+以下字段不是必填项，但 Agent 提取 RCM 时应优先填充，便于垂直切片排序和 QA-style 验收：
+
+| 字段 | 类型 | 约束 |
+|------|------|------|
+| `requirements[].userVisibleBehavior` | `string` | 描述用户可见行为，不写文件级实现待办 |
+| `requirements[].expectedBehavior` | `string` | 预期行为；缺失时写待确认 |
+| `requirements[].actualBehavior` | `string` | 当前实际行为；缺失时写待确认或 not_applicable |
+| `requirements[].reproSteps` | `string[]` | 最小复现、输入或验收步骤 |
+| `requirements[].acceptanceImpact` | `string` | 对成功标准或用户验收的影响 |
+| `requirements[].dependsOn` | `string[]` | 前置 REQ id 或外部条件 |
+| `requirements[].blockedBy` | `string[]` | 当前阻塞来源 |
+| `requirements[].canStartImmediately` | `boolean` | 是否可作为当前最小 focus |
+
 ## 4. auto-iterate-current.json 格式
 
 ```json

@@ -40,6 +40,9 @@ test("buildStateContent renders core quick-mode state sections", () => {
   assert(content.includes("remaining_implementation_iterations：4"));
   assert(content.includes("minimum_validation_hardening_iterations：1"));
   assert(content.includes("## Requirement Coverage Matrix / 需求覆盖矩阵"));
+  assert(content.includes("用户可见行为：用户目标被拆成可独立推进、验证和交付的薄需求条目"));
+  assert(content.includes("复现步骤：读取用户目标；读取成功标准或来源文档；只读探索现有行为和领域语言；拆分 REQ-001...REQ-N"));
+  assert(content.includes("可立即开始：true"));
   assert(content.includes("## Skill Capture / 技能沉淀"));
   assert(content.includes("## Context Reset Review Gate / 上下文清空复核门禁"));
   assert(content.includes("## Post-Agent Validation Gate / Agent 后置校验门禁"));

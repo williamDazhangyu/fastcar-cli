@@ -113,7 +113,7 @@ session：email-verify-expiry
 交付可验证性：verifiable
 修改文件：src/services/email-verification.ts, src/routes/register.ts, test/email-verification.test.ts
 状态持久化：available（.agent-state/auto-iterate/email-verify-expiry/state.json 已更新）
-Skill Capture：无高价值技能点（skipped_no_high_value：标准 JWT 过期处理，无 FastCar 特有约束）
+Skill Capture：无高价值技能点（skipped_no_high_value：标准 JWT 过期处理，无项目特有可迁移约束）
 ```
 
 ## 与有 CLI 路径的差异

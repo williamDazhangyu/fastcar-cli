@@ -15,8 +15,16 @@ export interface PipelineFocus {
 export interface RequirementItem {
   id: string;
   summary?: string;
+  userVisibleBehavior?: string;
+  expectedBehavior?: string;
+  actualBehavior?: string;
+  reproSteps?: string[];
+  acceptanceImpact?: string;
   type?: string;
   status?: RequirementStatus;
+  dependsOn?: string[];
+  blockedBy?: string[];
+  canStartImmediately?: boolean;
   relatedFiles?: string[];
   evidence?: string;
   blockedReason?: string;
@@ -27,8 +35,16 @@ export interface RequirementItem {
 export interface WorkerRequirementPatch {
   id?: string;
   summary?: string;
+  userVisibleBehavior?: string;
+  expectedBehavior?: string;
+  actualBehavior?: string;
+  reproSteps?: string[];
+  acceptanceImpact?: string;
   type?: string;
   status?: RequirementStatus;
+  dependsOn?: string[];
+  blockedBy?: string[];
+  canStartImmediately?: boolean;
   relatedFiles?: string[];
   evidence?: string;
   blockedReason?: string;

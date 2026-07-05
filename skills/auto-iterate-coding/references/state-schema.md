@@ -81,6 +81,8 @@
 - 交付前必须执行状态一致性检查：session 指针、state 文件、prompt 文件、迭代计数、最近验证命令、最近验证结果和 RCM/DoD 状态均一致；任一不一致时必须先进入 `reconcile`。
 - `At-a-Glance` 的进度、需求计数、验证状态、看门狗状态和交付可验证性必须与 `Budgets`、`Requirement Coverage Matrix`、`Watchdog`、`Validation` 一致。
 - `Definition of Done` 的成功标准状态必须引用 RCM 中对应关键 REQ 的状态和验证证据；RCM 与 DoD 不一致时，以 RCM 为准并重新派生 DoD。
+- `requirements[].summary` 必须优先描述用户可见行为；实现细节只作为 `relatedFiles`、`evidence` 或 `nextStep`。澄清型、bug 型或验收型需求应尽量记录可选字段 `userVisibleBehavior`、`expectedBehavior`、`actualBehavior`、`reproSteps`、`acceptanceImpact`。
+- `requirements[].dependsOn`、`blockedBy`、`canStartImmediately` 是可选依赖字段，用于垂直切片排序和阻塞判断；缺少这些字段时，依赖信息至少写入 `blockedReason` 或 `nextStep`。
 - `total_cycles` 必须等于 `implementation_iterations_used + optimization_iterations_used + non_implementation_iterations_used`。
 - `minimum_implementation_iterations` 只在用户明确说"最少/至少 N 轮"时启用；它是最小下限检查点，不得写入或等同于 `max_iterations` / `autopilot_max_iterations`。
 - 若存在 `minimum_implementation_iterations`，交付前必须确认 `implementation_iterations_used >= minimum_implementation_iterations`；未达到下限只能因 blocked、unsafe、需要用户决策、真实验证不可用或无安全有效工作提前停止，并记录证据。
@@ -96,7 +98,7 @@
 - `postChange.regressionDetected=true` 或 `deltaAssessment.status=regression` 时，`deltaAssessment.decision` 不得为 `keep`，`iterationPolicy.lastDecision` 不得为 `continue`。
 - `diffBudget.changedFiles` / `diffBudget.diffLines` 不得超过 `iterationPolicy.maxChangedFiles` / `iterationPolicy.maxDiffLines`；`diffBudget.status=over_budget` 或存在 `outOfScopeFiles` / `highRiskFiles` 时，`iterationPolicy.lastDecision` 不得为 `continue`。
 - `deliveryEvidence.status=ready / delivered` 时，关键 RCM 不得存在开放项，`validation.finalVerifiability` 不得为 `unknown`，且 `cleanup.status` 必须为 `completed`。
-- 实现需求的模式（strict、quick、diagnose、prototype）中，功能实现并通过验证后、`deliveryEvidence.status=ready / delivered` 前，必须完成 `styleConsolidation`：读取本项目 `.agents/skills` 和全局 skills 中相关代码风格、FastCar API 约束、TypeScript 规范、反模式和验证建议，按这些规则整理本次修改范围内代码，并重新运行相关验证。
+- 实现需求的模式（strict、quick、diagnose、prototype）中，功能实现并通过验证后、`deliveryEvidence.status=ready / delivered` 前，必须完成 `styleConsolidation`：读取本项目 `.agents/skills` 和全局 skills 中相关代码风格、框架/API/SDK 约束、TypeScript 规范、反模式和验证建议，按这些规则整理本次修改范围内代码，并重新运行相关验证。
 - `deliveryEvidence.status=ready / delivered` 且当前模式为实现需求模式时，`styleConsolidation.status` 不得为 `pending`；若整理不适用，必须标记 `not_applicable` 并记录 `skippedReasons`；若无法读取或写入 skills，必须标记 `not_available / blocked` 并说明原因。
 - `styleConsolidation.status=completed` 时，必须记录 `localSkillsReviewed` 或 `globalSkillsReviewed`、`appliedRules`、`changedFiles` 和整理后的 `verificationSummary`，不得用无关格式化、大范围重构或削弱测试代替风格整理。
 - 所有关键 REQ 均为 `passed` 后、`deliveryEvidence.status=ready / delivered` 前，必须完成 `contextResetReview`：清空对话实现细节，只依据 `state.json`、原始需求、当前代码/diff、真实验证结果、项目规范和相关 skills 执行 Standards / Spec 两轴复核。
@@ -104,7 +106,7 @@
 - `contextResetReview.status=passed` 时，`reviewCyclesUsed >= 1`、`decision=pass`，且 `standardsFindings`、`specFindings`、`reopenedRequirements` 必须为空。
 - `contextResetReview.status=failed` 时，必须记录 `reopenedRequirements`，新增或重开对应 REQ，回到实现循环，不得交付。
 - `skillCapture.root` 必须为 `.agents/skills`，`skillCapture.indexFile` 必须为 `.agents/skills/index.md`；每次交付、提前停止或阶段性验收后必须更新技能沉淀状态。
-- 技能沉淀只沉淀可复用、可验证、跨任务有价值的技能点；不得记录密钥、客户数据、一次性日志、大段源码或只对本次任务有效的流水账。
+- 技能沉淀只沉淀可迁移、可行动、可验证的技能点；保留候选应压缩为 Trigger / Signal、Do、Verify、Avoid、Boundary、Source Evidence 结构；不得记录密钥、客户数据、一次性日志、完整报错堆栈、大段源码或只对本次任务有效的流水账。
 - `deliveryEvidence.status=ready / delivered` 时，`skillCapture.status` 不得为 `pending`；如果没有高价值技能点，必须标记 `skipped_no_high_value` 并记录 `skippedReasons`，不得静默跳过。
 - `skillCapture.status=captured` 时，`capturedFiles` 必须列出本次写入或更新的 `.agents/skills` 文件，且 `.agents/skills/index.md` 必须同步维护为检索入口。
 - `postAgentValidationGate` 必须启用交付前 CLI 门禁，推荐命令为 `fastcar-cli auto-iterate --finalize <session> --yes`；旧格式 `--validate-state <session> --strict-state` 仅作为兼容路径。`deliveryEvidence.status=ready / delivered` 时 `lastResult` 必须为 `passed` 且 `nextAction` 必须为 `deliver`；失败时 `nextAction` 必须为 `context_reset_and_repair` 或 `stop`。

@@ -17,7 +17,7 @@ function test(name, fn) {
 
 function withTempCwd(fn) {
   const previous = process.cwd();
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fastcar-skill-capture-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "skill-capture-"));
   process.chdir(dir);
   return Promise.resolve()
     .then(() => fn(dir))
@@ -92,21 +92,21 @@ test("sanitizeSkillCaptureText redacts sensitive values and truncates", () => {
   assert(sanitized.length <= 220);
 });
 
-test("extractSkillCandidates maps requirements, validation history, and TypeScript changes", () => {
+test("extractSkillCandidates maps generic domains and validation history", () => {
   const candidates = extractSkillCandidates({
     session: { session: "demo" },
     language: { code: "zh" },
     requirements: [{
       id: "REQ-1",
       status: "passed",
-      summary: "FastCar Controller 使用 TypeScript DTO 重构",
-      evidence: "新增 @fastcar/koa Controller 测试并运行 npm run typecheck",
+      summary: "API 认证失败修复并补充 CLI smoke 验证",
+      evidence: "使用 curl 验证 Authorization header，并运行 node bin/cli.js --help 断言 exit code",
     }],
     validation: {
       commands: [{
-        command: "npm run typecheck",
+        command: "node bin/cli.js --help",
         result: "passed",
-        summary: "TS 严格检查通过",
+        summary: "CLI smoke test passed",
       }],
     },
     deliveryEvidence: {
@@ -114,11 +114,60 @@ test("extractSkillCandidates maps requirements, validation history, and TypeScri
     },
   });
 
-  assert(candidates.some((item) => item.name === "fastcar-framework"));
+  assert(candidates.some((item) => item.name === "api-integration"));
+  assert(candidates.some((item) => item.name === "cli-workflow"));
+  assert(!candidates.some((item) => item.name.startsWith("fastcar-")));
   const sessionCandidate = candidates.find((item) => item.name === "captured-demo");
   assert(sessionCandidate);
-  assert(sessionCandidate.approaches.some((item) => item.includes("TypeScript 文件修改")));
-  assert(sessionCandidate.verifications.some((item) => item.includes("npm run typecheck")));
+  assert(sessionCandidate.verifications.some((item) => item.includes("node bin/cli.js --help")));
+});
+
+test("extractSkillCandidates does not infer TypeScript skill from changed file extension only", () => {
+  const candidates = extractSkillCandidates({
+    session: { session: "ts-extension-only" },
+    language: { code: "zh" },
+    requirements: [{
+      id: "REQ-1",
+      status: "passed",
+      summary: "配置加载流程优化",
+      evidence: "运行最小 smoke 验证确认配置可加载",
+    }],
+    deliveryEvidence: {
+      changedFiles: ["src/config/load.ts"],
+    },
+  });
+
+  assert(!candidates.some((item) => item.name === "typescript-patterns"));
+});
+
+test("extractSkillCandidates maps explicit TypeScript evidence", () => {
+  const candidates = extractSkillCandidates({
+    session: { session: "typescript-evidence" },
+    language: { code: "zh" },
+    requirements: [{
+      id: "REQ-1",
+      status: "passed",
+      summary: "TypeScript 公共接口类型收敛",
+      evidence: "提取 interface 并运行 npm run typecheck 验证编译通过",
+    }],
+  });
+
+  assert(candidates.some((item) => item.name === "typescript-patterns"));
+});
+
+test("extractSkillCandidates maps FastCar only when explicit FastCar signal exists", () => {
+  const candidates = extractSkillCandidates({
+    session: { session: "fastcar-explicit" },
+    language: { code: "zh" },
+    requirements: [{
+      id: "REQ-1",
+      status: "passed",
+      summary: "FastCar Controller 参数规则整理",
+      evidence: "使用 @fastcar/koa/annotation 的 @GET() 写法并新增真实验证",
+    }],
+  });
+
+  assert(candidates.some((item) => item.name === "fastcar-framework"));
 });
 
 test("captureSkills marks session skipped when there are no high-value candidates", async () => {
@@ -146,8 +195,8 @@ test("captureSkills writes skills, index, and state capture status in yes mode",
       requirements: [{
         id: "REQ-1",
         status: "passed",
-        summary: "FastCar Koa Controller 迁移到 TypeScript",
-        evidence: "使用 @fastcar/koa/annotation 的 @GET() 写法并新增真实 CLI 验证",
+        summary: "API 认证失败修复并补充 CLI smoke 验证",
+        evidence: "使用 curl 验证 Authorization header，并运行 node bin/cli.js --help 断言 exit code",
       }],
       validation: {
         commands: [{
@@ -166,11 +215,21 @@ test("captureSkills writes skills, index, and state capture status in yes mode",
     const stateMd = fs.readFileSync(".agent-state/auto-iterate/demo/state.md", "utf8");
 
     assert.strictEqual(state.skillCapture.status, "captured");
-    assert(fs.existsSync(".agents/skills/fastcar-framework/SKILL.md"));
+    assert(fs.existsSync(".agents/skills/api-integration/SKILL.md"));
+    assert(fs.existsSync(".agents/skills/cli-workflow/SKILL.md"));
+    assert(!fs.existsSync(".agents/skills/fastcar-framework/SKILL.md"));
     assert(fs.existsSync(".agents/skills/captured-demo/SKILL.md"));
     assert(fs.existsSync(".agents/skills/index.md"));
+    const generatedSkill = fs.readFileSync(".agents/skills/captured-demo/SKILL.md", "utf8");
+    assert(generatedSkill.includes("## Trigger / Signal / 触发信号"));
+    assert(generatedSkill.includes("## Do / 做法"));
+    assert(generatedSkill.includes("## Verify / 验证"));
+    assert(generatedSkill.includes("## Boundary / 适用边界"));
+    assert(generatedSkill.includes("## Source Evidence / 来源证据"));
+    assert(generatedSkill.includes("证据来源：已清洗的 auto-iterate state"));
     assert(state.skillCapture.capturedFiles.includes(".agents/skills/index.md"));
     assert(stateMd.includes("status：captured"));
+    assert(stateMd.includes("Trigger / Signal、Do、Verify、Avoid、Boundary、Source Evidence"));
     assert(lines.some((line) => line.includes("技能沉淀完成")));
   });
 });
@@ -181,7 +240,7 @@ test("updateSkillsIndexFile appends missing entries to existing Chinese index ta
     fs.writeFileSync(".agents/skills/index.md", [
       "# Skills 索引",
       "",
-      "| 技能名称 | 标题 | 关键触发场景 | 来源 Session |",
+      "| 技能名称 | 标题 | 关键触发信号 | 来源 Session |",
       "|----------|------|-------------|-------------|",
       "| existing | Existing | old | demo |",
       "",
@@ -192,7 +251,7 @@ test("updateSkillsIndexFile appends missing entries to existing Chinese index ta
       name: "captured-demo",
       title: "Demo",
       description: "",
-      scenarios: ["FastCar Controller"],
+      scenarios: ["API auth debugging"],
       approaches: [],
       verifications: [],
       pitfalls: [],
@@ -202,7 +261,7 @@ test("updateSkillsIndexFile appends missing entries to existing Chinese index ta
     }], { code: "zh" });
 
     assert.strictEqual(result.changed, true);
-    assert(result.content.includes("| captured-demo | Demo | FastCar Controller | demo |"));
+    assert(result.content.includes("| captured-demo | Demo | API auth debugging | demo |"));
     assert(result.content.includes("\ntail"));
   });
 });

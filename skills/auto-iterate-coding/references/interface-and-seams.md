@@ -2,6 +2,16 @@
 
 用于设计可测试 interface、依赖注入、adapter、deep module seam 和 mock 边界。
 
+## 词汇
+
+- **module**：对调用方提供稳定能力的边界，不等于一个文件。
+- **interface**：调用方依赖的表面，也是优先测试面。
+- **implementation**：interface 背后的复杂度，越深越应该被隐藏。
+- **seam**：允许替换依赖或改变行为的位置。
+- **adapter**：把外部协议、SDK、存储或运行时能力适配成项目内 interface。
+- **leverage**：调用方知道更少，却能完成更多。
+- **locality**：一个行为变化集中在少数位置，而不是散落到多个调用方。
+
 ## 好 interface
 
 好 interface 让测试自然：
@@ -64,6 +74,18 @@ function applyDiscount(cart): void {
 - 参数和返回 shape 几乎复制底层依赖。
 - 调用方仍要知道底层顺序、错误码或配置。
 - 删除 module 后复杂度不变，只是少一层文件。
+
+删除测试：如果删除某个 module 后，调用方需要知道的概念、顺序、错误处理和测试 setup 几乎不变，这个 module 只是转发层，不是 deep module。优先合并、下沉复杂度或重新定义 interface。
+
+架构摩擦升级信号：
+
+- 为一个用户可见行为必须修改多个无关调用方。
+- 只能通过 mock 内部协作者才能测试关键行为。
+- 每次修复都要复制同一校验、转换、错误处理或状态机片段。
+- 新 seam 只有一个实现，且没有解决真实测试、部署或外部依赖问题。
+- public interface 改动会影响未知调用方，但缺少兼容策略。
+
+出现这些信号时，先记录候选重构和验证收益；涉及 public interface、数据模型、兼容性或新 adapter 时，进入用户决策，不要在自动修补中扩大范围。
 
 ---
 

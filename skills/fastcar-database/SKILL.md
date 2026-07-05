@@ -12,11 +12,13 @@ FastCar 数据库模块提供基于装饰器的 ORM 支持，涵盖 MySQL、Post
 使用本 skill 时：
 
 - 先遵守 `skills/AGENTS.md` 的共享规则。
+- 本 skill 只描述 FastCar 数据库模块和 FastCar 项目默认约束，不要泛化为所有 ORM、SQL 项目或 DBA 规范。
 - 适合处理实体模型、Mapper、CRUD、事务、Redis 缓存、逆向生成和 SQL 查询优化。
 - 分页、分组、聚合、排序和 JOIN 必须在数据库层完成。
 - 排序必须使用 `OrderEnum`，条件运算符必须使用 `OperatorEnum` / `JoinEnum`。
 - 状态、类型、模式等离散字段必须使用枚举，不要使用魔法字符串或裸数字。
 - `@fastcar/*` 数据库相关模块必须使用 TypeScript 静态 `import`，不要使用 CommonJS `require()`。
+- 示例中的 `localhost`、端口、账号和连接参数仅是本地占位；生产配置必须来自环境变量、配置中心或密钥管理系统。
 
 ## 模块速查
 
@@ -455,7 +457,7 @@ class EntityMapper extends PgsqlMapper<Entity> {}
 
 FastCar pgsql 项目默认采用 Bytebase 风格的外键策略：不创建数据库物理外键，避免大规模数据、分库分表、微服务拆库和生产迁移中的强耦合、锁表和发布风险。
 
-禁止在 DDL、迁移脚本或示例代码中生成以下写法：
+FastCar pgsql 项目默认禁止在 DDL、迁移脚本或示例代码中生成以下写法；若既有 schema、DBA 规范或外部系统明确要求物理外键，必须先取得项目决策，不要由 Agent 自行引入。
 
 ```sql
 -- 禁止：建表时声明物理外键
@@ -496,7 +498,7 @@ CREATE INDEX idx_orders_user_id ON orders(user_id);
 
 FastCar pgsql 项目默认不使用 PostgreSQL 原生 `ENUM TYPE`。状态、类型、模式等离散字段应在 TypeScript 侧定义字符串枚举，数据库侧使用 `varchar` / `text` 保存枚举值，保持 schema 易扩展、易回滚、易灰度发布。
 
-禁止在 DDL 或迁移脚本中优先生成以下写法：
+FastCar pgsql 项目默认禁止在 DDL 或迁移脚本中优先生成以下写法；若既有数据库已经使用原生 enum，应先评估迁移兼容性，不要自动改写。
 
 ```sql
 -- 禁止：默认使用 PostgreSQL 原生枚举类型
@@ -545,7 +547,7 @@ const list = await this.mapper.select({
 
 #### PostgreSQL 工程化规范
 
-以下规则参考 Bytebase、GitLab Database Guidelines、SQLFluff、Supabase SQL Style Guide 和 PostgreSQL 官方文档，按 FastCar pgsql 项目默认约束落地。
+以下规则参考 Bytebase、GitLab Database Guidelines、SQLFluff、Supabase SQL Style Guide 和 PostgreSQL 官方文档，按 FastCar pgsql 项目默认约束落地；如果项目已有更高优先级的 schema 规范、DBA 审核规则或历史迁移约束，以项目内已确认规则为准。
 
 命名规则：
 

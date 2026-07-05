@@ -52,6 +52,19 @@ export function mergeRequirement(
   if (patch.summary) {
     next.summary = patch.summary;
   }
+  for (const field of ["userVisibleBehavior", "expectedBehavior", "actualBehavior", "acceptanceImpact"]) {
+    if (patch[field]) {
+      next[field] = patch[field];
+    }
+  }
+  for (const field of ["reproSteps", "dependsOn", "blockedBy"]) {
+    if (Array.isArray(patch[field])) {
+      next[field] = patch[field];
+    }
+  }
+  if (typeof patch.canStartImmediately === "boolean") {
+    next.canStartImmediately = patch.canStartImmediately;
+  }
   if (patch.type) {
     next.type = patch.type;
   }
@@ -116,6 +129,14 @@ export function mergeRequirements(
       summary: patch.summary || patch.id,
       type: patch.type || "功能",
       status: "pending",
+      userVisibleBehavior: patch.userVisibleBehavior || patch.summary || patch.id,
+      expectedBehavior: patch.expectedBehavior || text.none,
+      actualBehavior: patch.actualBehavior || text.none,
+      reproSteps: Array.isArray(patch.reproSteps) ? patch.reproSteps : [],
+      acceptanceImpact: patch.acceptanceImpact || text.none,
+      dependsOn: Array.isArray(patch.dependsOn) ? patch.dependsOn : [],
+      blockedBy: Array.isArray(patch.blockedBy) ? patch.blockedBy : [],
+      canStartImmediately: typeof patch.canStartImmediately === "boolean" ? patch.canStartImmediately : true,
       relatedFiles: [],
       evidence: text.none,
       blockedReason: text.none,

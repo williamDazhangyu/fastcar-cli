@@ -73,6 +73,12 @@ export interface CaptureSkillsOptions {
   yes?: boolean;
 }
 
+interface SkillCaptureDomainMapping {
+  pattern: RegExp;
+  skill: string;
+  title: string;
+}
+
 function getIsoTimestamp(): string {
   return new Date().toISOString();
 }
@@ -129,7 +135,6 @@ export function extractSkillCandidates(stateJson: StateObject): SkillCandidate[]
   const isEnglish = languageCode(language) === "en";
   const requirements = Array.isArray(stateJson.requirements) ? stateJson.requirements : [];
   const decisions = stateJson.decisions || {};
-  const deliveryEvidence = stateJson.deliveryEvidence || {};
   const validation = stateJson.validation || {};
   const implementationContract = stateJson.implementationContract || {};
   const session = stateJson.session || {};
@@ -166,15 +171,18 @@ export function extractSkillCandidates(stateJson: StateObject): SkillCandidate[]
     if (data.sourceDecision) candidate.sourceDecisions.push(data.sourceDecision);
   }
 
-  const frameworkKeywords = [
-    { pattern: /fastcar|@fastcar|Koa|Controller|Component|Service|Autowired|Application/i, skill: "fastcar-framework", title: isEnglish ? "FastCar Framework Practice Notes" : "FastCar Framework 实践经验" },
-    { pattern: /数据库|database|mysql|postgresql|pgsql|MongoDB|Redis|ORM|mapper|entity|transaction|事务/i, skill: "fastcar-database", title: isEnglish ? "FastCar Database Practice Notes" : "FastCar 数据库实践经验" },
-    { pattern: /RPC|rpc|微服务|microservice|gRPC|WebSocket|Socket\.IO|MQTT|protobuf/i, skill: "fastcar-rpc-microservices", title: isEnglish ? "FastCar RPC/Microservices Practice Notes" : "FastCar RPC/微服务实践经验" },
-    { pattern: /serverless|Serverless|阿里云|腾讯云|AWS Lambda|FC|SCF|云函数/i, skill: "fastcar-serverless", title: isEnglish ? "FastCar Serverless Practice Notes" : "FastCar Serverless 实践经验" },
-    { pattern: /缓存|cache|定时任务|cron|时间轮|time.wheel|workerpool|文件监听|COS|对象存储/i, skill: "fastcar-toolkit", title: isEnglish ? "FastCar Toolkit Practice Notes" : "FastCar 工具集实践经验" },
-    { pattern: /队列|queue|pg.?boss|PgBoss|job|schedule|worker|dead.letter/i, skill: "fastcar-pgboss", title: isEnglish ? "FastCar PgBoss Queue Practice Notes" : "FastCar PgBoss 队列实践经验" },
-    { pattern: /TypeScript|类型|type|interface|enum|泛型|generic|类型安全/i, skill: "typescript-coding-style", title: isEnglish ? "TypeScript Coding Practice Notes" : "TypeScript 编码实践经验" },
+  const domainMappings: SkillCaptureDomainMapping[] = [
+    { pattern: /\bapi\b|http|rest|graphql|webhook|curl|request|response|认证|鉴权|请求|响应/i, skill: "api-integration", title: isEnglish ? "API Integration Practice Notes" : "API 集成实践经验" },
+    { pattern: /数据库|database|sql|mysql|postgresql|pgsql|sqlite|mongodb|redis|query|pagination|分页|join|聚合|索引|transaction|事务/i, skill: "database-querying", title: isEnglish ? "Database Querying Practice Notes" : "数据库查询实践经验" },
+    { pattern: /\bcli\b|command|命令|--help|exit code|stdout|stderr|smoke|脚手架/i, skill: "cli-workflow", title: isEnglish ? "CLI Workflow Practice Notes" : "CLI 工作流实践经验" },
+    { pattern: /frontend|前端|\bui\b|react|vue|dom|browser|e2e|playwright|cypress|交互|回归/i, skill: "frontend-validation", title: isEnglish ? "Frontend Validation Practice Notes" : "前端验证实践经验" },
+    { pattern: /typescript|\btsc\b|typecheck|类型|interface|enum|generic|泛型|import|类型安全|编译/i, skill: "typescript-patterns", title: isEnglish ? "TypeScript Practice Notes" : "TypeScript 实践经验" },
+    { pattern: /test|testing|unit test|integration test|regression|boundary|negative|验证|测试|单测|集成测试|边界|反例/i, skill: "testing-strategy", title: isEnglish ? "Testing Strategy Practice Notes" : "测试策略实践经验" },
   ];
+  const fastCarMappings: SkillCaptureDomainMapping[] = [
+    { pattern: /fastcar|@fastcar/i, skill: "fastcar-framework", title: isEnglish ? "FastCar Framework Practice Notes" : "FastCar Framework 实践经验" },
+  ];
+  const mappings = [...domainMappings, ...fastCarMappings];
 
   const sessionSkillName = slugifySessionName(`captured-${session.session || "session"}`);
   const sessionSkillTitle = isEnglish
@@ -190,7 +198,7 @@ export function extractSkillCandidates(stateJson: StateObject): SkillCandidate[]
     const combined = `${summary} ${evidence}`;
     const sanitizedEvidence = sanitizeSkillCaptureText(req.evidence || req.nextStep || "");
 
-    for (const item of frameworkKeywords) {
+    for (const item of mappings) {
       if (item.pattern.test(combined)) {
         addCandidate(item.skill, {
           title: item.title,
@@ -269,24 +277,6 @@ export function extractSkillCandidates(stateJson: StateObject): SkillCandidate[]
     }
   }
 
-  const changedFiles = Array.isArray(deliveryEvidence.changedFiles)
-    ? deliveryEvidence.changedFiles
-    : (Array.isArray(deliveryEvidence.changed_files) ? deliveryEvidence.changed_files : []);
-  const fileExtensions = new Set<string>();
-  for (const item of changedFiles) {
-    const file = typeof item === "string" ? item : (item.path || item.file || "");
-    const ext = path.extname(file).toLowerCase();
-    if (ext) fileExtensions.add(ext);
-  }
-  if (fileExtensions.has(".ts") || fileExtensions.has(".tsx")) {
-    addCandidate(sessionSkillName, {
-      title: sessionSkillTitle,
-      approach: isEnglish
-        ? "TypeScript files changed; pay attention to type safety and import conventions"
-        : "涉及 TypeScript 文件修改，注意类型安全和 import 规范",
-    });
-  }
-
   const result: SkillCandidate[] = [];
   for (const [, candidate] of candidateMap) {
     const scenarios = [...candidate.scenarios].filter(Boolean);
@@ -310,6 +300,12 @@ export function extractSkillCandidates(stateJson: StateObject): SkillCandidate[]
   }
 
   return result;
+}
+
+function buildDefaultBoundary(language: unknown): string {
+  return languageCode(language) === "en"
+    ? "Use when the trigger signal matches this project evidence and a comparable verification path is available; mark inferred or unavailable evidence as not_verified."
+    : "适用于触发信号与本项目证据相同、且存在可比验证路径的任务；推断或不可用证据必须标记为 not_verified。";
 }
 
 export function buildSkillMarkdown(candidate: SkillCandidate, language: unknown): string {
@@ -340,19 +336,26 @@ export function buildSkillMarkdown(candidate: SkillCandidate, language: unknown)
     }
   }
 
+  lines.push(`## ${text.skillSections.boundary}`, "");
+  lines.push(`- ${buildDefaultBoundary(language)}`);
+  lines.push("");
+
+  lines.push(`## ${text.skillSections.source}`, "");
+  lines.push(`- Session: ${candidate.session || "unknown"}`);
   if (candidate.sourceRequirements && candidate.sourceRequirements.length > 0) {
-    lines.push(`## ${text.skillSections.source}`, "");
-    lines.push(`- Session: ${candidate.session || "unknown"}`);
     lines.push(languageCode(language) === "en"
       ? `- Related requirements: ${candidate.sourceRequirements.join(", ")}`
       : `- 相关需求: ${candidate.sourceRequirements.join(", ")}`);
-    if (candidate.sourceDecisions && candidate.sourceDecisions.length > 0) {
-      lines.push(languageCode(language) === "en"
-        ? `- Related decisions: ${candidate.sourceDecisions.join(", ")}`
-        : `- 相关决策: ${candidate.sourceDecisions.join(", ")}`);
-    }
-    lines.push("");
   }
+  if (candidate.sourceDecisions && candidate.sourceDecisions.length > 0) {
+    lines.push(languageCode(language) === "en"
+      ? `- Related decisions: ${candidate.sourceDecisions.join(", ")}`
+      : `- 相关决策: ${candidate.sourceDecisions.join(", ")}`);
+  }
+  lines.push(languageCode(language) === "en"
+    ? "- Evidence source: sanitized auto-iterate state, requirements, decisions, and validation history."
+    : "- 证据来源：已清洗的 auto-iterate state、需求、决策和验证历史。");
+  lines.push("");
 
   lines.push(text.generatedByCapture);
   lines.push(text.generatedAt(getIsoTimestamp()));
@@ -463,7 +466,7 @@ index_file：${skillCapture.indexFile || ".agents/skills/index.md"}
 captured_files：${capturedFilesText}
 pending_candidates：${pendingText}
 skipped_reasons：${skippedReasonsText}
-selection_criteria：${skillCapture.selectionCriteria || "只沉淀可复用、可验证、跨任务有价值的技能点；不要记录密钥、客户数据、一次性日志或完整源码"}
+selection_criteria：${skillCapture.selectionCriteria || "只沉淀可迁移、可行动、可验证的技能点；按 Trigger / Signal、Do、Verify、Avoid、Boundary、Source Evidence 结构压缩；不要记录密钥、客户数据、一次性日志、完整报错堆栈或大段源码"}
 last_run_summary：${skillCapture.lastRunSummary || ""}
 执行时机：每次任务交付、提前停止或阶段性验收后，先提取高价值技能点，再更新 .agents/skills/index.md；没有高价值内容时写明 skipped_no_high_value 和原因`;
   const escapedHeading = "## Skill Capture / 技能沉淀".replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

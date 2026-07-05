@@ -1,6 +1,6 @@
 {
   "name": "@fastcar/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "homepage": "https://william_zhong.coding.net/public/fast-car/fastcar-cli/git/files",
   "description": "fastcar-cli 脚手架快速搭建",
   "bin": {
@@ -17,6 +17,78 @@
     "dist",
     "skills"
   ],
+  "agents": {
+    "skills": [
+      {
+        "name": "auto-iterate-coding",
+        "path": "./skills/auto-iterate-coding"
+      },
+      {
+        "name": "fastcar-database",
+        "path": "./skills/fastcar-database"
+      },
+      {
+        "name": "fastcar-framework",
+        "path": "./skills/fastcar-framework"
+      },
+      {
+        "name": "fastcar-pgboss",
+        "path": "./skills/fastcar-pgboss"
+      },
+      {
+        "name": "fastcar-rpc-microservices",
+        "path": "./skills/fastcar-rpc-microservices"
+      },
+      {
+        "name": "fastcar-serverless",
+        "path": "./skills/fastcar-serverless"
+      },
+      {
+        "name": "fastcar-toolkit",
+        "path": "./skills/fastcar-toolkit"
+      },
+      {
+        "name": "typescript-coding-style",
+        "path": "./skills/typescript-coding-style"
+      }
+    ]
+  },
+  "agentskills": {
+    "skills": [
+      {
+        "name": "auto-iterate-coding",
+        "path": "./skills/auto-iterate-coding"
+      },
+      {
+        "name": "fastcar-database",
+        "path": "./skills/fastcar-database"
+      },
+      {
+        "name": "fastcar-framework",
+        "path": "./skills/fastcar-framework"
+      },
+      {
+        "name": "fastcar-pgboss",
+        "path": "./skills/fastcar-pgboss"
+      },
+      {
+        "name": "fastcar-rpc-microservices",
+        "path": "./skills/fastcar-rpc-microservices"
+      },
+      {
+        "name": "fastcar-serverless",
+        "path": "./skills/fastcar-serverless"
+      },
+      {
+        "name": "fastcar-toolkit",
+        "path": "./skills/fastcar-toolkit"
+      },
+      {
+        "name": "typescript-coding-style",
+        "path": "./skills/typescript-coding-style"
+      }
+    ]
+  },
   "keywords": [
     "node",
     "fastcar-cli"

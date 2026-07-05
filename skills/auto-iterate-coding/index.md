@@ -16,6 +16,7 @@
 | **启动握手** | 创建 session、对齐目标、确认预算 | [SKILL.md](./SKILL.md) §启动握手，详细提问模板见 [references/grill-session.md](references/grill-session.md) |
 | **能力探测** | 确认当前环境能做什么、降级策略 | [SKILL.md](SKILL.md) §Agent 能力探测与降级 |
 | **需求提取** | PRD/文档→Requirement Coverage Matrix | [SKILL.md](SKILL.md) §需求覆盖矩阵 + [references/iteration-policy.md](references/iteration-policy.md) §需求到实现 |
+| **术语对齐** | 用户原话/文档/代码→共享领域语言 | [references/domain-language.md](references/domain-language.md) |
 | **每轮迭代** | 单轮实现、验证、状态更新 | [references/iteration-policy.md](references/iteration-policy.md)（单轮单目标、变更预算、停止条件） |
 | **诊断/Bug** | 复现→最小化→假设→探针→修复→回归 | [references/feedback-loop.md](references/feedback-loop.md) §Diagnose 六步循环 |
 | **Issue 分流** | 优先级排序、scope 评估、session 分配 | [references/feedback-loop.md](references/feedback-loop.md) §Triage |

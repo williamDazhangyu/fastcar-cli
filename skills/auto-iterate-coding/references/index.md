@@ -27,8 +27,9 @@
 | `test-quality.md` | 测试设计或评审、新功能 test-first | 按需 | 判断测试是否验证行为而非实现细节、Red-Green-Refactor TDD、垂直切片策略 |
 | `advanced-patterns.md` | GREEN 后重构、原型澄清、交付前两轴复核 | 按需 | 三合一进阶模式：Refactor Candidates、Prototype Clarification、Two-Axis Review |
 | `interface-and-seams.md` | 需要设计可测试接口、adapter、mock 边界 | 遇到时读 | interface、seam、adapter 设计、mock 原则和边界 |
+| `domain-language.md` | 启动握手、RCM 提取、Zoom Out、术语不一致 | 遇到时读 | 领域术语提取、术语表维护、命名和交付总结一致性 |
 | `skill-capture.md` | 任务交付、提前停止或阶段性验收后 | 必读 | 技能沉淀规则：正例、反例、`.agents/skills/index.md` 格式契约、与 `fastcar-cli skill install` 的关系 |
-| `quick-reference.md` | 首次使用、需要快速查阅 | 可选 | 一页纸快速参考卡：常见场景、核心概念、停止条件、预算默认值、领域语言术语表 |
+| `quick-reference.md` | 首次使用、需要快速查阅 | 可选 | 一页纸快速参考卡：常见场景、核心概念、停止条件、预算默认值 |
 | `progress-visualization.md` | 长任务、用户询问进度、最终图示 | 可选 | Mermaid 和纯文本进度图 |
 | `grill-session.md` | 启动握手、需求不明确、需要对齐 | 必读 | Agent 主动 interview 用户，9 步 Grill 流程 |
 
@@ -38,12 +39,12 @@
 
 ### 单一模式
 
-- Quick：`natural-language-routing.md`、`iteration-policy.md`、`feedback-loop.md`、`real-testing.md`、`iteration-policy.md`、`final-delivery.md`。适合目标明确的小中型改动、文档补丁、示例补全或轻量写作修订；Agent 先从仓库、文档和约定推断流程清单，并在任务后执行 `.agents/skills` 技能沉淀。
-- 严格实现 / Autopilot / Strict：`iteration-policy.md`、`feedback-loop.md`、`real-testing.md`、`iteration-policy.md`、`final-delivery.md`，交付前按需读取 `advanced-patterns.md` §Two-Axis Review。适合 PRD、issue、长清单、生产代码或正式文档的完整实现。
-- Autopilot：`iteration-policy.md`、`feedback-loop.md`、`real-testing.md`、`iteration-policy.md`、`final-delivery.md`，长任务配合 `progress-visualization.md`。适合"完整做完""一直修到通过""迭代 N 次以内"等有边界自动推进任务；预算是上限，不是必须消耗。
+- Quick：`natural-language-routing.md`、`iteration-policy.md`、`feedback-loop.md`、`real-testing.md`、`final-delivery.md`。适合目标明确的小中型改动、文档补丁、示例补全或轻量写作修订；Agent 先从仓库、文档和约定推断流程清单；术语不一致时追加 `domain-language.md`。
+- 严格实现 / Autopilot / Strict：`iteration-policy.md`、`feedback-loop.md`、`real-testing.md`、`final-delivery.md`，交付前按需读取 `advanced-patterns.md` §Two-Axis Review。适合 PRD、issue、长清单、生产代码或正式文档的完整实现。
+- Autopilot：`iteration-policy.md`、`feedback-loop.md`、`real-testing.md`、`final-delivery.md`，长任务配合 `progress-visualization.md`。适合"完整做完""一直修到通过""迭代 N 次以内"等有边界自动推进任务；预算是上限，不是必须消耗。
 - Diagnose：`feedback-loop.md`、`test-quality.md`、`real-testing.md`、`iteration-policy.md`、`final-delivery.md`。适合困难 bug、性能回归、flaky 测试，也适合定位文档生成失败、示例不可运行、发布说明与实际 diff 不一致等非代码问题。
 - Verify-only：`real-testing.md`、`advanced-patterns.md` §Two-Axis Review、`iteration-policy.md`、`final-delivery.md`。适合验收 PRD、检查实现完成度、审查文档是否覆盖原始需求、核对写作产物是否满足提纲和事实约束；默认不修改文件。
-- Plan-only：`iteration-policy.md`、`interface-and-seams.md`、`iteration-policy.md`、`final-delivery.md`。适合只规划、不写代码或不改文档的场景，例如模块重构方案、写作大纲、迁移计划、测试策略和调研路线。
+- Plan-only：`iteration-policy.md`、`interface-and-seams.md`、`final-delivery.md`。适合只规划、不写代码或不改文档的场景，例如模块重构方案、写作大纲、迁移计划、测试策略和调研路线；涉及术语或业务边界时追加 `domain-language.md`。
 - Prototype-only：`advanced-patterns.md`、必要时 `progress-visualization.md`。适合正式实现前澄清状态机、数据模型、交互方向、信息架构或文档结构；原型结论未吸收前不能声称生产或正式文档完成。
 - Optimization-only：`feedback-loop.md`（朴素优化和递归优化章节），再配合 `real-testing.md` 和 `iteration-policy.md`。适合性能、可维护性、类型、命名、结构和文档清晰度优化；必须保持外部行为或原始含义不变。
 - State / sub-agent 校验 / session / validate-state：`natural-language-routing.md`、`state-schema.md`、`state.schema.json`、`phase-gates.md`、`iteration-policy.md`、`final-delivery.md`、`judge-runbook.md`。适合 `--list`、`--switch`、`--resume`、`--validate-state`、state 校验、恢复一致性检查、交付前 strict 门禁和 session 状态审计。

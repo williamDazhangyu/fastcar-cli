@@ -42,7 +42,7 @@ fastcar-cli auto-iterate --verify --goal "验收 PRD 是否全部实现" --from 
 | **Skill Capture** | 任务后知识沉淀，将高价值经验写入 `.agents/skills/` | `references/skill-capture.md` |
 | **Style Consolidation** | 实现完成后按 skills 规范整理代码，重新验证 | `SKILL.md` §核心流程 |
 | **Grill Session** | Agent 主动 interview 用户，9 步确认目标、范围、术语和预算 | `references/grill-session.md` |
-| **Domain Glossary** | 项目共享术语表，让 Agent 用领域语言而非通用词汇思考和沟通 | 本文 §领域语言 |
+| **Domain Glossary** | 项目共享术语表，让 Agent 用领域语言而非通用词汇思考和沟通 | `references/domain-language.md` |
 | **Zoom Out** | 从系统高度理解代码，避免只见树木不见森林 | `references/feedback-loop.md` §Zoom Out |
 | **Diagnose 六步** | reproduce → minimise → hypothesise → instrument → fix → regression-test | `references/feedback-loop.md` §Diagnose 六步循环 |
 | **Triage** | Issue 优先级排序、scope 评估、session 分配 | `references/feedback-loop.md` §Triage |
@@ -155,29 +155,4 @@ fastcar-cli auto-iterate --check-bloat
 
 ## 领域语言 / Domain Glossary
 
-让 Agent 用领域语言而非通用词汇思考和沟通，保持变量、函数、文件命名一致，减少 token 消耗。
-
-### 术语表格式
-
-每个术语条目至少包含：
-
-| 术语 | 英文 | 定义 | 来源 | 备注 |
-|------|------|------|------|------|
-| 物化 | materialization | 将课程章节从逻辑结构写入文件系统的过程 | docs/adr/003.md | 触发时机见 adr |
-| 纵切 | vertical slice | 从 Controller → Service → Model → 测试一条龙打通 | AGENTS.md | 区别于横切（按层） |
-
-术语表应写入 `state.json` 的 `domainGlossary` 字段，并渲染到 `state.md`。
-
-### 何时提取
-
-- 启动握手时：从 `AGENTS.md`、`README.md`、`docs/` 中提取已有术语
-- Grill Session 时：用户描述需求时主动识别术语并确认定义
-- 探索代码库时：发现目录名、文件名、类名中反复出现的领域词汇
-- 实现过程中：发现新术语或术语歧义时先确认再记录
-
-### 使用规则
-
-- Agent 在 commit message、PR 描述、命名、需求描述和验证结果中必须使用术语表中的词汇
-- 禁止用通用词汇替代术语表中的精确术语
-- 同一概念在同一 session 内使用不同叫法
-- 交付前确认术语表与实际代码命名一致
+详细规则见 `references/domain-language.md`。速记：只记录影响需求、验收、状态机、权限、数据生命周期或命名一致性的领域词；不要把文件名、函数名、通用工程词或一次性实现细节写成术语。

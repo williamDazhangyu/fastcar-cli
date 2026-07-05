@@ -50,6 +50,10 @@ test("buildStateModel creates the authoritative initial state shape", () => {
   assert.strictEqual(state.currentState.overallStatus, "in_progress");
   assert.strictEqual(state.watchdog.deliveryVerifiability, "unknown");
   assert.strictEqual(state.requirements[0].id, "REQ-BOOTSTRAP");
+  assert.strictEqual(state.requirements[0].canStartImmediately, true);
+  assert.deepStrictEqual(state.requirements[0].dependsOn, []);
+  assert(state.requirements[0].userVisibleBehavior.includes("用户目标"));
+  assert(state.requirements[0].reproSteps.includes("只读探索现有行为和领域语言"));
   assert.strictEqual(state.validation.commands.length, 2);
   assert.strictEqual(state.postChange.command, "npm test");
 });

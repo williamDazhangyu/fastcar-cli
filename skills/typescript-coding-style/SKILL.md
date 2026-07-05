@@ -1,6 +1,6 @@
 ---
 name: typescript-coding-style
-description: TypeScript 编码规范与最佳实践。Use when writing or reviewing TypeScript types, interfaces, enums, reusable aliases, status fields, naming conventions, async waiting, polling loops, timers, cancellation, maintainability, or FastCar example code.
+description: TypeScript 编码规范与最佳实践。Use when writing or reviewing TypeScript types, interfaces, enums, reusable aliases, status fields, naming conventions, async waiting, polling loops, timers, cancellation, maintainability, or TypeScript example code.
 ---
 
 # TypeScript 编码规范
@@ -9,7 +9,7 @@ description: TypeScript 编码规范与最佳实践。Use when writing or review
 
 使用本 skill 时：
 
-- 先遵守 `skills/AGENTS.md` 的共享规则。
+- 本 skill 是通用 TypeScript 规则；在 FastCar 仓库或安装了项目级 `AGENTS.md` 时，再同时遵守对应项目规则。
 - 适合处理 TypeScript 类型设计、枚举、命名、复杂类型复用和示例代码可维护性。
 - 复杂交叉类型在 2 处及以上使用时，应提取类型别名或接口。
 - 状态、类型、模式等离散字段优先使用字符串枚举。

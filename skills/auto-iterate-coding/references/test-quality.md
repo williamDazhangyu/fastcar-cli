@@ -81,6 +81,17 @@ expect(retrieved.name).toBe("Alice");
 
 用于新功能、修 bug 的 test-first 循环，以及防止横向切片导致测试质量下降。
 
+### Seam-first 判断
+
+写 RED 测试前先确认测试 seam：
+
+- 测试能否从调用方使用的 public interface 进入？
+- 断言是否是用户、调用方或外部系统可观察的结果？
+- 当前失败是否会在目标行为修好后变绿？
+- 如果必须 mock 自己的内部 module，是否说明 interface 太浅或 seam 不对？
+
+没有正确 seam 时，不要为了 TDD 去测 private helper。先记录架构摩擦，选择更高层行为测试、引入最小可替身边界，或把该 REQ 标为 `not_verified / blocked`。
+
 ### 核心循环
 
 新功能优先使用 Red-Green-Refactor TDD：
@@ -92,6 +103,15 @@ REFACTOR: 在 GREEN 状态下做低风险整理 → 确认测试仍然通过
 ```
 
 规则：一次只写一个行为测试和一个最小实现；测试 public interface 和可观察行为；不预先实现未来需求；RED 状态下不要重构；REFACTOR 只做低风险整理。
+
+RED 合格条件：失败必须由目标行为缺失导致，错误消息、输出、状态或返回值应与本轮 REQ 对齐。编译失败、fixture 错误、测试环境缺依赖或断言写错不是有效 RED，先修测试或反馈循环。
+
+无效 RED：
+
+- 断言当前实现已经写死的常量或 shape，修不修行为都不会改变结果。
+- 只验证 mock 被调用，而不验证可观察输出。
+- 为未来需求批量写测试，当前轮次无法独立变绿。
+- 测试失败原因和用户报告的 expected / actual 不一致。
 
 ### 禁止横向切片
 

@@ -10,9 +10,44 @@ Grill Session 是自动迭代启动握手的新标准流程。Agent 不再要求
 
 - Agent 是 interviewer，用户是 domain expert。
 - 每次只问一个关键决策，最多两个强相关决策。
+- 每轮轻量澄清最多问 2-3 个短问题；描述已经足够形成可验证需求时，不继续过度 interview。
 - 每个问题必须完整描述背景、影响和默认推荐选项。
 - 能从代码、文档、项目约定推断的事实不问用户。
 - 用户回答后立即记录，再进入下一个问题。
+
+## QA-style 轻量澄清门禁
+
+Grill Session 首轮先按 QA triage 的方式保留用户原话，再改写为可验证需求。目标是收敛信息缺口，不是在澄清阶段提前设计修复方案。
+
+执行规则：
+
+- 先保存用户原始描述，再提炼 `expectedBehavior`、`actualBehavior`、`reproSteps` 和 `acceptanceImpact`。
+- 优先问缺失的 expected vs actual、最小复现步骤/输入、稳定复现还是偶发、影响哪个验收标准。
+- 每轮最多问 2-3 个短问题；如果已有信息足以提取 RCM，先记录假设并推进，不要继续追问。
+- 澄清阶段可以只读探索代码库，但用途仅限领域语言、现有用户可见行为和边界确认；不要把探索变成修复设计。
+- 提问和 RCM 摘要优先使用用户能识别的领域语言；文件路径、函数名和实现细节放入证据或相关文件，不作为需求摘要主体。
+
+## RCM 拆分与依赖规则
+
+把用户描述拆成薄的 Requirement Coverage Matrix 条目，而不是按文件或实现层拆分。
+
+拆分 REQ：
+
+- 独立失败模式：一个问题修好不必然修好另一个问题。
+- 独立验收路径：可以用不同输入、命令、测试或人工检查分别证明。
+- 可并行关注点：权限、数据、UI、兼容性、性能、文档等关注点互不依赖。
+- 明确依赖边界：某条需求必须等另一条完成、用户决策或外部资源可用。
+
+合并 REQ：
+
+- 多个症状指向同一个用户可见行为，且共享同一验收路径。
+- 拆开后只能形成文件级待办，无法独立验证或独立标记状态。
+
+记录要求：
+
+- `summary` 先写用户可见行为；内部文件、函数、类名写入 `relatedFiles` 或验证证据。
+- 每条 REQ 应可独立推进、独立验证、独立标记 `pending / implemented / passed / blocked / not_verified`。
+- 需要依赖信息时写入 `dependsOn`、`blockedBy`、`canStartImmediately`；无法新增字段的环境至少写入 `blockedReason` 和 `nextStep`。
 
 ## Grilling 步骤
 
@@ -114,7 +149,7 @@ Agent 提问：
 请确认这些定义是否正确，有没有遗漏的关键术语？"
 ```
 
-**记录**：写入 `state.json` 的 `domainGlossary`，详见 [quick-reference.md](quick-reference.md) §领域语言。
+**记录**：写入 `state.json` 的 `domainGlossary`，详见 [domain-language.md](domain-language.md)。
 
 ### 步骤 8：架构决策
 

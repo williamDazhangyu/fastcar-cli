@@ -203,16 +203,41 @@ function buildRequirementCoverageSection(state: PipelineStateLike): string {
   }
   return requirements.map((item) => {
     const req = asRecord(item);
-    return [
+    const lines = [
       `${stringValue(req.id, "REQ-UNKNOWN")}：`,
       `原文摘要：${stringValue(req.summary, "未指定")}`,
-      `类型：${stringValue(req.type, "验证")}`,
-      `状态：${stringValue(req.status, "unknown")}`,
-      `相关文件：${listValue(req.relatedFiles)}`,
-      `验证证据：${stringValue(req.evidence, "无")}`,
-      `阻塞原因：${stringValue(req.blockedReason, "无")}`,
-      `下一步：${stringValue(req.nextStep, "无")}`,
-    ].join("\n");
+    ];
+    if (req.userVisibleBehavior) {
+      lines.push(`用户可见行为：${stringValue(req.userVisibleBehavior, "未指定")}`);
+    }
+    if (req.expectedBehavior) {
+      lines.push(`预期行为：${stringValue(req.expectedBehavior, "待确认")}`);
+    }
+    if (req.actualBehavior) {
+      lines.push(`实际行为：${stringValue(req.actualBehavior, "待确认")}`);
+    }
+    if (Array.isArray(req.reproSteps) && req.reproSteps.length > 0) {
+      lines.push(`复现步骤：${listValue(req.reproSteps)}`);
+    }
+    if (req.acceptanceImpact) {
+      lines.push(`验收影响：${stringValue(req.acceptanceImpact, "待确认")}`);
+    }
+    lines.push(`类型：${stringValue(req.type, "验证")}`);
+    lines.push(`状态：${stringValue(req.status, "unknown")}`);
+    if (Array.isArray(req.dependsOn) && req.dependsOn.length > 0) {
+      lines.push(`依赖：${listValue(req.dependsOn)}`);
+    }
+    if (Array.isArray(req.blockedBy) && req.blockedBy.length > 0) {
+      lines.push(`被阻塞于：${listValue(req.blockedBy)}`);
+    }
+    if (typeof req.canStartImmediately === "boolean") {
+      lines.push(`可立即开始：${req.canStartImmediately ? "true" : "false"}`);
+    }
+    lines.push(`相关文件：${listValue(req.relatedFiles)}`);
+    lines.push(`验证证据：${stringValue(req.evidence, "无")}`);
+    lines.push(`阻塞原因：${stringValue(req.blockedReason, "无")}`);
+    lines.push(`下一步：${stringValue(req.nextStep, "无")}`);
+    return lines.join("\n");
   }).join("\n\n");
 }
 

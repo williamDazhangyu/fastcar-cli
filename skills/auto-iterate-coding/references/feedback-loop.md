@@ -42,6 +42,15 @@ feedback loop 应满足：
 - 锐利：断言具体症状，不要只检查"没有崩溃"。
 - 自动化：避免人工观察，除非用户明确提供人工验证结果。
 
+闭环合格条件：
+
+- `red-capable`：修改前能失败，且失败原因对齐目标行为或用户报告。
+- `deterministic`：相同输入重复运行能稳定得到同一结论；非确定性问题至少记录复现率。
+- `fast`：足够快到每轮都能运行；慢套件只作为交付门禁或高风险验证。
+- `agent-runnable`：当前 Agent 能用明确命令、脚本或结构化人工步骤重复执行。
+
+不满足上述条件时，先修 feedback loop，不要进入猜测式实现。
+
 如果无法建立可信 feedback loop，停止并说明尝试过什么、还需要什么 artifact 或环境。
 
 无法建立循环时，不要继续猜修复。向用户请求最小缺口：
@@ -84,7 +93,7 @@ feedback loop 应满足：
 
 ### Diagnose 六步循环
 
-当诊断 bug、性能回归或 flaky 测试时，使用以下六步循环：
+当诊断 bug、性能回归或 flaky 测试时，使用以下六步循环。先最小化，再列假设；不要在尚未复现或范围过大的情况下直接修复。
 
 ```text
 1. REPRODUCE（复现）
@@ -141,6 +150,15 @@ feedback loop 应满足：
 - 如果为真会看到什么。
 - 本轮如何验证或证伪。
 - 如果为假如何排除。
+
+推荐格式：
+
+```text
+H1: <可能原因>
+Prediction: 如果 H1 为真，<命令/探针> 会看到 <具体信号>
+Falsify: 如果看到 <相反信号>，排除 H1
+Next: 本轮只执行 <一个探针或最小修改>
+```
 
 每轮只测试一个主要假设。没有可证伪预测的假设只是猜测。
 
@@ -375,4 +393,4 @@ Triage 完成后，按顺序启动自动迭代：选择第一个 accepted issue 
 
 Zoom Out 是 Context Reset Review 的前置步骤：Zoom Out 从系统视角俯瞰，Context Reset Review 以新人视角从零开始。两者互补：Zoom Out 防止只见树木，Context Reset Review 防止思维惯性。
 
-Zoom Out 时必须使用领域语言（Domain Glossary 中的术语），而不是通用描述。
+Zoom Out 时必须使用领域语言（见 [domain-language.md](domain-language.md)），而不是通用描述。

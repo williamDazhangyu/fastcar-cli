@@ -114,6 +114,62 @@ test("mergeState preserves deterministic validation executable and args evidence
   assert.deepStrictEqual(merged.state.postChange.perCommand[0].args, ["scripts/validate.js", "--ci"]);
 });
 
+test("mergeState preserves QA clarification and dependency fields on requirements", () => {
+  const base = {
+    mode: { mode: "quick" },
+    budgets: { remainingImplementationIterations: 2, implementationIterationsUsed: 0, totalCycles: 0 },
+    requirements: [
+      {
+        id: "REQ-1",
+        status: "pending",
+        summary: "用户看不到错误提示",
+        userVisibleBehavior: "登录失败时用户应看到可理解错误",
+      },
+    ],
+    traceability: { iterations: [] },
+  };
+  const report = {
+    status: "completed",
+    summary: "clarified req",
+    files_changed: ["src/auth.ts"],
+    requirements: [
+      {
+        id: "REQ-1",
+        status: "implemented",
+        expectedBehavior: "登录失败显示明确错误提示",
+        actualBehavior: "登录失败时页面无反馈",
+        reproSteps: ["打开登录页", "输入错误密码", "提交表单"],
+        acceptanceImpact: "错误提示正确这一验收标准无法通过",
+        dependsOn: ["REQ-AUTH-FORM"],
+        blockedBy: [],
+        canStartImmediately: false,
+        evidence: "已补错误提示路径",
+      },
+    ],
+    state_patch: {},
+    validation: null,
+    risks: "",
+    blocked_reason: "",
+    decision_request: null,
+    trace: { rationaleSummary: "updated requirement evidence", decisions: [], evidence: [] },
+    documentation: { apiChanges: [], architectureNotes: [], implementationNotes: [], changelogEntries: [] },
+    raw: {},
+  };
+
+  const merged = mergeIterationIntoState(base, report, { status: "passed", command: "npm test", exitCode: 0 }, {
+    iteration: 1,
+    focus: { type: "implement_req", req_id: "REQ-1", summary: "用户看不到错误提示" },
+  });
+
+  const req = merged.state.requirements[0];
+  assert.strictEqual(req.status, "passed");
+  assert.strictEqual(req.expectedBehavior, "登录失败显示明确错误提示");
+  assert.strictEqual(req.actualBehavior, "登录失败时页面无反馈");
+  assert.deepStrictEqual(req.reproSteps, ["打开登录页", "输入错误密码", "提交表单"]);
+  assert.deepStrictEqual(req.dependsOn, ["REQ-AUTH-FORM"]);
+  assert.strictEqual(req.canStartImmediately, false);
+});
+
 test("mergeState writes failure reason and actionable watchdog state consistently", () => {
   const base = {
     mode: { mode: "quick" },

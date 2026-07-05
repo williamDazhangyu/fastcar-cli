@@ -12,6 +12,7 @@ FastCar 是基于 TypeScript 的 Node.js 企业级应用开发框架，采用 Io
 使用本 skill 时：
 
 - 先遵守 `skills/AGENTS.md` 的共享规则。
+- 本 skill 只描述 FastCar Framework 项目/API 约束，不要泛化到 NestJS、Express、Spring 或其他 TypeScript 框架。
 - 适合处理 IoC、`@Component`、`@Service`、`@Controller`、`@Autowired`、Koa Web、配置、生命周期和项目模板。
 - 生成 Koa Controller 时，不要使用 `@Body`、`@Param`、`@Query`。
 - 路由装饰器必须写成 `@GET()` / `@POST()`，不能省略括号。
@@ -19,6 +20,7 @@ FastCar 是基于 TypeScript 的 Node.js 企业级应用开发框架，采用 Io
 - 使用 `@ValidForm` + `@Rule()` 后，Controller 参数已经被 FastCar 按规则校验并格式化，不要再写 `DTO.from(body).toInput()` 之类的二次转换。
 - 示例代码必须保留关键 import，尤其是 `Context` 从 `koa` 导入。
 - `@fastcar/*` 模块必须使用 TypeScript 静态 `import`，不要使用 CommonJS `require()`。
+- 示例中的 `localhost`、端口、token、数据库或 Redis 连接参数仅是本地占位；生产配置必须来自环境变量、配置中心或密钥管理系统。
 - 静态权限门禁（如角色、系统管理员、固定 permission）应优先在 Controller 方法上通过装饰器声明；不要把 `requireRole`、`requireSystemAdmin` 等入口级权限 guard 写在 Service 中。
 
 ## 核心概念
@@ -419,6 +421,8 @@ class ComputeService {
   }
 }
 ```
+
+上述 `.reduce()` 仅适用于已在内存中的纯计算输入；数据库分页、聚合、排序和关联统计仍必须下推到数据库层完成。
 
 ## 项目模板速查
 
